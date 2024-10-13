@@ -62,6 +62,8 @@ vh.video_converter(video_file, output_video)
 for frame in vh.extract_frames(video_file, start_instant=5, end_instant=10, frame_step=5):
     process_frame(frame)  # Replace with your frame processing logic
 
+# Each frame is a numpy array with shape (height, width, channels) with pixel values between 0 and 255.
+
 ```
 
 Another example is about subtitles
