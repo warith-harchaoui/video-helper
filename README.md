@@ -48,18 +48,29 @@ import video_helper as vh
 
 # Check if the video file is valid
 video_file = "example.mp4"
-valid = vh.is_valid_video_file(video_file)
+valid = vh.is_valid_video_file(video_file) # True or False
 
 # Get video dimensions and details
 details = vh.video_dimensions(video_file)
 print(details)
+# {'width': 1920, 'height': 1080, 'duration': 10.0, 'frame_rate': 30.0, 'has_sound': True}
 
 # Convert the video file to a different format
 output_video = "video_tests/example_converted.mp4"
 vh.video_converter(video_file, output_video)
 
+start_instant=5 # seconds
+
+end_instant=10 # seconds
+
+frame_step=5 # take one frame every 5
+
 # Extract frames from the video
-for frame in vh.extract_frames(video_file, start_instant=5, end_instant=10, frame_step=5):
+for frame in vh.extract_frames(
+    video_file,
+    start_instant=start_instant,
+    end_instant=end_instant,
+    frame_step=end_instant):
     process_frame(frame)  # Replace with your frame processing logic
 
 # Each frame is a numpy array with shape (height, width, channels) with pixel values between 0 and 255.
