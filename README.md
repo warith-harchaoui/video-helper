@@ -59,11 +59,11 @@ print(details)
 output_video = "video_tests/example_converted.mp4"
 vh.video_converter(video_file, output_video)
 
-start_instant=5 # seconds
+start_instant=5 # seconds, it corresponds to start_index = start_instant / frame_rate = 5 / 30 = 0.17 second
 
-end_instant=10 # seconds
+end_instant=10 # seconds, it corresponds to end_index = end_instant / frame_rate = 10 / 30 = 0.33 second
 
-frame_step=5 # take one frame every 5
+frame_step=5 # take one frame every 5 which corresponds to 1 frame every 5 / frame_rate = 5 / 30 = 0.17 second
 
 # Extract frames from the video
 for frame in vh.extract_frames(
