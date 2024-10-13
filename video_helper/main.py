@@ -198,13 +198,14 @@ def video_dimensions(video_file: str) -> dict:
         - height: int, height of the video in pixels
         - duration: float, duration of the video in seconds
         - frame_rate: float, frame rate of the video in frames per second
+        - has_sound: bool, whether the video has sound or not
 
     Usage
     -----
     >>> video_file = "video.mp4"
     >>> d = video_dimensions(video_file)
     >>> print(d)
-    {'width': 1920, 'height': 1080, 'duration': 10.0, 'frame_rate': 30.0}
+    {'width': 1920, 'height': 1080, 'duration': 10.0, 'frame_rate': 30.0, 'has_sound': True}
 
     Notes
     -----
