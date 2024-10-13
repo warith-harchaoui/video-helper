@@ -83,7 +83,6 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 - Video Validation: Check if video files are valid using ffmpeg.
 - Video Conversion: Convert videos to different formats, adjust frame rates, and resize while - maintaining aspect ratios.
 - Frame Extraction: Extract frames from video files with optional frame skipping and time range selection.
-- Video Stabilization: Stabilize shaky video files before extracting frames.
 - Subtitle Conversion: Convert SRT subtitles to WebVTT with support for preserving and styling font colors using CSS.
 - Frame Processing: Iterate through video frames for custom processing (e.g., image analysis or machine learning).
 
