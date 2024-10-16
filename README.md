@@ -101,7 +101,7 @@ import video_helper as vh
 
 srt_file = "subtitles.srt"
 vtt_file = "subtitles.vtt"
-css_file = "styles.css"
+css_file = "subtitles.css"
 
 vh.srt2vtt(srt_file, vtt_file, css_file)
 ```
