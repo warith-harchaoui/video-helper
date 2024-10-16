@@ -60,6 +60,8 @@ output_video = "video_tests/example_converted.mp4"
 vh.video_converter(video_file, output_video,
                    frame_rate=30, width=640, height=480, without_sound = True)
 
+# The images will never be distorted: aspect ratios are kept thanks to black padding if necessary
+
 # Extract frames from the video
 
 start_instant=5 # seconds
