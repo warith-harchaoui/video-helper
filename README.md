@@ -57,7 +57,7 @@ print(details)
 
 # Convert the video file to a different format
 output_video = "video_tests/example_converted.mp4"
-vh.video_converter(video_file, output_video)
+vh.video_converter(video_file, output_video, frame_rate=30, width=640, height=480, without_sound = True)
 
 start_instant=5 # seconds
 # it corresponds to start_index = start_instant * frame_rate = 5 * 30 = 150th frame
@@ -78,7 +78,8 @@ for frame in vh.extract_frames(
     frame_step=end_instant):
     process_frame(frame)  # Replace with your frame processing logic
 
-# Each frame is a numpy array with shape (height, width, channels) with pixel values between 0 and 255.
+# Each frame is a numpy array with shape (height, width, channels)
+# with pixel values between 0 and 255.
 
 ```
 
