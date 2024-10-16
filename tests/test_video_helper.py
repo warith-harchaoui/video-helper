@@ -15,8 +15,8 @@ from video_helper import (
 
 
 # Define a test video URL
-video_url = "https://harchaoui.org/warith/shaky.mp4"
-video_filename = "shaky.mp4"
+video_url = "https://harchaoui.org/warith/jfk-inauguration.mkv"
+video_filename = "jfk-inauguration.mkv"
 
 osh.verbosity(0)
 
