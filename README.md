@@ -87,7 +87,7 @@ for frame in vh.extract_frames(
     start_instant=start_instant,
     end_instant=end_instant,
     frame_step=frame_step):
-    process_frame(frame)  # Replace with your frame processing logic
+    pass # Replace with your frame processing logic
 
 # Each frame is a numpy array with shape (height, width, channels)
 # with pixel values between 0 and 255.
