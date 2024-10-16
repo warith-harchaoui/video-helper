@@ -6,6 +6,28 @@ from PIL import Image
 import re
 from typing import Iterator, List, Set
 
+video_extensions = [
+    "mp4",
+    "avi",
+    "mov",
+    "wmv",
+    "flv",
+    "mkv",
+    "webm",
+    "mpeg",
+    "mpg",
+    "m4v",
+    "3gp",
+    "ogv",
+    "mxf",
+    "ts",
+    "vob",
+    "m2ts",
+    "mts",
+    "rm",
+    "asf"
+]
+
 def extract_unique_colors(srt_file_path: str) -> Set[str]:
     """
     Extract all unique hex color codes from an SRT file.
@@ -157,6 +179,7 @@ def is_valid_video_file(video_file: str) -> bool:
     bool
         True if the video file is valid, False otherwise.
     """
+    global video_extensions
     valid = False
     # Check if the file exists
     if not os_helper.file_exists(video_file):
@@ -169,6 +192,10 @@ def is_valid_video_file(video_file: str) -> bool:
         video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
         valid = True
     except Exception as e:
+        valid = False
+
+    _, _, ext = os_helper.folder_name_ext(video_file)
+    if ext.lower() not in video_extensions:
         valid = False
 
     os_helper.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
