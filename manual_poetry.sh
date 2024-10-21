@@ -10,7 +10,7 @@ set -e  # Exit the script immediately on any command failure
 
 # Configurations
 PROJECT_NAME="video-helper"
-PYTHON_VERSION="3.13"
+PYTHON_VERSION="3.12"
 ENV="env4vh"
 
 DEPENDENCIES="pillow ffmpeg-python opencv-python numpy vidgear git+https://github.com/warith-harchaoui/os-helper.git@main"

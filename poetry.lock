@@ -356,7 +356,7 @@ name = "os-helper"
 version = "0.1.0"
 description = "This module provides a collection of utility functions aimed at simplifying various common programming tasks, including file handling, system operations, string manipulation, folder management, and more. The functions are optimized for cross-platform compatibility and robust error handling."
 optional = false
-python-versions = "^3.13"
+python-versions = "^3.12"
 files = []
 develop = false
 
@@ -372,7 +372,7 @@ validators = "^0.34.0"
 type = "git"
 url = "https://github.com/warith-harchaoui/os-helper.git"
 reference = "main"
-resolved_reference = "3d093fe8c90ef21c67bccdc1e6a41bfc8537842f"
+resolved_reference = "f66f8e75c36b27f6c59adcca6abdf2811a793ee1"
 
 [[package]]
 name = "pandas"
@@ -767,5 +767,5 @@ core = ["Pillow", "mss (>=9.0.1)", "pyscreenshot (>=3.1)", "pyzmq (>=26.0.3)", "
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.13"
-content-hash = "4fdf59c99c5e6d4f3517933db3624d0edb19478559cfceb9971424845f01d841"
+python-versions = "^3.12"
+content-hash = "8b90e440a8fa916bf913e5470d41db2c82c130e2fd6797fcc6ee2a38eb7fc33a"
