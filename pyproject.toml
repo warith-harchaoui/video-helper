@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "video-helper"
+version = "0.1.0"
+description = "Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats."
+authors = ["Warith Harchaoui <warith.harchaoui@gmail.com>, Mohamed Chelali <mohamed.t.chelali@gmail.com>, Bachir Zerroug <bzerroug@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+pillow = "^11.0.0"
+ffmpeg-python = "^0.2.0"
+opencv-python = "^4.10.0.84"
+numpy = "^2.1.2"
+vidgear = "^0.3.3"
+os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "main"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
