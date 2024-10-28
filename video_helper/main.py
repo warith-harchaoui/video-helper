@@ -4,7 +4,7 @@ import numpy as np
 from vidgear.gears import VideoGear
 import re
 from typing import Iterator, List, Set
-from skimage import io  # Import skimage's io module for image saving
+import cv2
 
 video_extensions = [
     "mp4",
@@ -569,7 +569,8 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
             frame_pattern = osh.os_path_constructor([temp_folder, "frame_%09d.png"])
             for i, frame in enumerate(frames_list):
                 frame_path = frame_pattern % i
-                io.imsave(frame_path, frame)  # Use skimage's imsave for saving frames
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # BGR convention of opencv
+                cv2.imwrite(frame_path, frame_bgr)
 
             temp_movie = osh.os_path_constructor([temp_folder, "temp_movie.mp4"])
             ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(overwrite_output=True, quiet=quiet)
