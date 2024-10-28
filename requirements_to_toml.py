@@ -1,11 +1,3 @@
-# python requirements_to_toml.py \
-#     --project_name "awesome_project" \
-#     --description "An awesome project!" \
-#     --authors "Jane Doe <jane.doe@example.com>" \
-#     --python_version "^3.9" \
-#     --requirements_file "requirements.txt" \
-#     --output_file "pyproject.toml"
-
 import os
 import argparse
 
@@ -45,9 +37,16 @@ build-backend = "poetry.core.masonry.api"
 def format_dependencies(requirements):
     dependencies = ""
     for requirement in requirements:
-        if '==' in requirement:  # Standard versioned dependencies
+        # Handle specific version constraints
+        if '==' in requirement:
             package, version = requirement.split('==')
             dependencies += f'    {package.strip()} = "{version.strip()}"\n'
+        elif '>=' in requirement:
+            package, version = requirement.split('>=')
+            dependencies += f'    {package.strip()} = ">={version.strip()}"\n'
+        elif '<=' in requirement:
+            package, version = requirement.split('<=')
+            dependencies += f'    {package.strip()} = "<={version.strip()}"\n'
         elif '@ git+' in requirement:  # Handling Git URL dependencies            
             package, u = requirement.split('@ git+')
             u = u.replace("git@github.com:", "https://github.com/")
@@ -58,7 +57,6 @@ def format_dependencies(requirements):
         else:  # Default to wildcard for unversioned or unspecified dependencies
             dependencies += f'    {requirement.strip()} = "*"\n'
     return dependencies
-
 
 def write_pyproject_toml(content, file_path='pyproject.toml'):
     with open(file_path, 'w') as f:
