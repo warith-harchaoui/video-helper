@@ -36,7 +36,7 @@ conda install -y pip
 
 
 # Poetry setup
-pip install --upgrade poetry poetry2setup setuptools
+pip install --upgrade poetry poetry2setup 
 
 
 # Convert the dependencies string into an array (compatible with zsh/bash)
@@ -48,10 +48,10 @@ for dep in "${DEP_ARRAY[@]}"; do
     pip install "$dep"
 done
 
-pip uninstall jaraco.classes
+yes | pip uninstall jaraco.classes
 pip freeze > requirements.txt
 
-# replace git commit hash with @main
+# # replace git commit hash with @main
 sed -i '' 's/@[a-f0-9]\{7,40\}/@main/g' requirements.txt
 
 rm -f pyproject.toml poetry.lock
@@ -75,10 +75,11 @@ poetry install
 poetry2setup > setup.py
 poetry export -f requirements.txt --output requirements.txt --without-hashes
 
+# # replace git commit hash with @main
+sed -i '' 's/@[a-f0-9]\{7,40\}/@main/g' requirements.txt
 
 
-
-# Create environment.yml for conda users (optional)
+# Create environment.yml for conda users
 cat <<EOL > environment.yml
 name: $ENV
 channels:
@@ -89,5 +90,6 @@ dependencies:
   - pip:
       - -r file:requirements.txt
 EOL
+
 
 echo "Project setup completed successfully!"
