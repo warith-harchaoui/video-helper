@@ -934,7 +934,6 @@ pandas = "^2.2.3"
 python-dotenv = "^1.0.1"
 pyyaml = "^6.0.2"
 requests = "^2.32.3"
-setuptools = "^75.2.0"
 tqdm = "^4.66.5"
 validators = "^0.34.0"
 
@@ -942,7 +941,7 @@ validators = "^0.34.0"
 type = "git"
 url = "https://github.com/warith-harchaoui/os-helper.git"
 reference = "main"
-resolved_reference = "dd0d47788d1cd0d027660bda8390b6a8d797ec9a"
+resolved_reference = "109d9d70ee9e519bc784672b210cd95e95d1c8b7"
 
 [[package]]
 name = "packaging"
@@ -1693,13 +1692,13 @@ jeepney = ">=0.6"
 
 [[package]]
 name = "setuptools"
-version = "75.2.0"
+version = "75.1.0"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "setuptools-75.2.0-py3-none-any.whl", hash = "sha256:a7fcb66f68b4d9e8e66b42f9876150a3371558f98fa32222ffaa5bced76406f8"},
-    {file = "setuptools-75.2.0.tar.gz", hash = "sha256:753bb6ebf1f465a1912e19ed1d41f403a79173a9acf66a42e7e6aec45c3c16ec"},
+    {file = "setuptools-75.1.0-py3-none-any.whl", hash = "sha256:35ab7fd3bcd95e6b7fd704e4a1539513edad446c097797f2985e0e4b960772f2"},
+    {file = "setuptools-75.1.0.tar.gz", hash = "sha256:d59a21b17a275fb872a9c3dae73963160ae079f1049ed956880cd7c09b120538"},
 ]
 
 [package.extras]
@@ -1982,4 +1981,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "cf9f67da576ceae453c7eec152976e77af7dd499611e5962dc11c7f020cf217d"
+content-hash = "3d8282835eb56d25993ec40312d9de8a6a0267a70eb7ce54177071b4c2034c6b"

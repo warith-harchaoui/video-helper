@@ -55,7 +55,7 @@ install_requires = \
  'requests==2.32.3',
  'scikit-image==0.24.0',
  'scipy==1.14.1',
- 'setuptools==75.2.0',
+ 'setuptools==75.1.0',
  'shellingham==1.5.4',
  'six==1.16.0',
  'tifffile==2024.9.20',
