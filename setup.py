@@ -26,6 +26,7 @@ install_requires = \
  'filelock==3.16.1',
  'future==1.0.0',
  'idna==3.10',
+ 'importlib_metadata==8.5.0',
  'installer==0.7.0',
  'keyring==24.3.1',
  'more-itertools==10.5.0',
@@ -50,19 +51,19 @@ install_requires = \
  'pytz==2024.2',
  'requests-toolbelt==1.0.0',
  'requests==2.32.3',
- 'setuptools==75.1.0',
  'shellingham==1.5.4',
  'six==1.16.0',
+ 'tomli==2.0.2',
  'tomlkit==0.13.2',
- 'tqdm==4.66.5',
+ 'tqdm==4.66.6',
  'trove-classifiers==2024.10.21.16',
  'tzdata==2024.2',
  'urllib3==2.2.3',
  'validators==0.34.0',
  'vidgear==0.3.3',
  'virtualenv==20.27.0',
- 'wheel==0.44.0',
- 'xattr==1.1.0']
+ 'xattr==1.1.0',
+ 'zipp==3.20.2']
 
 setup_kwargs = {
     'name': 'video-helper',
@@ -77,7 +78,7 @@ setup_kwargs = {
     'packages': packages,
     'package_data': package_data,
     'install_requires': install_requires,
-    'python_requires': '>=3.12,<4.0',
+    'python_requires': '>=3.10,<4.0',
 }
 
 
