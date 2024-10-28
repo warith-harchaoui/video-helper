@@ -13,7 +13,7 @@ PROJECT_NAME="video-helper"
 PYTHON_VERSION="3.12"
 ENV="env4vh"
 
-DEPENDENCIES="pillow ffmpeg-python opencv-python numpy vidgear git+https://github.com/warith-harchaoui/os-helper.git@main"
+DEPENDENCIES="scikit-image ffmpeg-python opencv-python numpy vidgear git+https://github.com/warith-harchaoui/os-helper.git@main"
 DESCRIPTION="Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats."
 AUTHORS="Warith Harchaoui <warith.harchaoui@gmail.com>, Mohamed Chelali <mohamed.t.chelali@gmail.com>, Bachir Zerroug <bzerroug@gmail.com>"
 
