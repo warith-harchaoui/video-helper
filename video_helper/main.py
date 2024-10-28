@@ -1,10 +1,10 @@
-import os_helper
+import os_helper as osh
 import ffmpeg
 import numpy as np
 from vidgear.gears import VideoGear
-from PIL import Image 
 import re
 from typing import Iterator, List, Set
+from skimage import io  # Import skimage's io module for image saving
 
 video_extensions = [
     "mp4",
@@ -110,13 +110,13 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str=None, css_file_path: str=None
     # Extract all unique hex colors from the .srt file
     unique_colors = extract_unique_colors(srt_file_path)
 
-    f,b,e = os_helper.folder_name_ext(srt_file_path)
+    f,b,e = osh.folder_name_ext(srt_file_path)
 
     if not vtt_file_path:
-        vtt_file_path = os_helper.os_path_constructor([f,b+".vtt"])
+        vtt_file_path = osh.os_path_constructor([f,b+".vtt"])
     
     if not css_file_path:
-        css_file_path = os_helper.os_path_constructor([f,b+".css"])
+        css_file_path = osh.os_path_constructor([f,b+".css"])
     
     # Generate the CSS file for these colors
     _generate_css_from_colors(unique_colors, css_file_path)
@@ -182,9 +182,9 @@ def is_valid_video_file(video_file: str) -> bool:
     global video_extensions
     valid = False
     # Check if the file exists
-    if not os_helper.file_exists(video_file):
+    if not osh.file_exists(video_file):
         valid = False
-        os_helper.info(f"Video file not found: {video_file}")
+        osh.info(f"Video file not found: {video_file}")
         return valid
 
     try:
@@ -194,11 +194,11 @@ def is_valid_video_file(video_file: str) -> bool:
     except Exception as e:
         valid = False
 
-    _, _, ext = os_helper.folder_name_ext(video_file)
+    _, _, ext = osh.folder_name_ext(video_file)
     if ext.lower() not in video_extensions:
         valid = False
 
-    os_helper.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
+    osh.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
 
     return valid
 
@@ -238,7 +238,7 @@ def video_dimensions(video_file: str) -> dict:
     -----
     The function uses ffmpeg to probe the video file and extract the video stream information to get the dimensions, duration, and frame rate.
     """
-    os_helper.checkfile(video_file, msg=f"Video file not found: {video_file}")
+    osh.checkfile(video_file, msg=f"Video file not found: {video_file}")
 
     probe = ffmpeg.probe(video_file)
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
@@ -295,31 +295,31 @@ def video_converter(
     >>> video_converter("input.mp4", "output.mp4", frame_rate=30, width=640, height=480)
     >>> video_converter("input.mp4", "output.mp4", without_sound=True)
     """
-    os_helper.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
+    osh.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
 
     # Check if the input video file exists and is valid
-    os_helper.check(
+    osh.check(
         is_valid_video_file(input_video),
         msg=f"Input video file not okay:\n\t{input_video}"
     )
 
-    quiet = os_helper.verbosity() <= 0  # Determine verbosity level
+    quiet = osh.verbosity() <= 0  # Determine verbosity level
 
     # Extract folder and file extension details
-    fi, bi, input_ext = os_helper.folder_name_ext(input_video)
-    if os_helper.emptystring(output_video):
-        output_video = os_helper.join(fi, bi + "-converted" + "." + input_ext)
+    fi, bi, input_ext = osh.folder_name_ext(input_video)
+    if osh.emptystring(output_video):
+        output_video = osh.join(fi, bi + "-converted" + "." + input_ext)
 
-    fo, bo, output_ext = os_helper.folder_name_ext(output_video)
+    fo, bo, output_ext = osh.folder_name_ext(output_video)
 
     # If no conversion is required, just copy the streams
     if not frame_rate and not width and not height and not without_sound:
         ffmpeg.input(input_video).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
-        os_helper.check(
+        osh.check(
             is_valid_video_file(output_video),
             msg=f"Failed to convert video file:\n\t{output_video}"
         )
-        os_helper.info(f"Video file converted successfully:\n{output_video}")
+        osh.info(f"Video file converted successfully:\n{output_video}")
         return
 
     # Ensure width and height are even
@@ -329,14 +329,14 @@ def video_converter(
         height -= 1
 
     # Use temporary files for conversion if needed
-    with os_helper.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
-         os_helper.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
+    with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
+         osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
 
         # Convert to MP4 if the input video is not already in MP4 format
         if input_ext.lower() != "mp4":
             ffmpeg.input(input_video).output(temp_input, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
         else:
-            os_helper.copyfile(input_video, temp_input)  # Direct copy if already MP4
+            osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
 
         stream = ffmpeg.input(temp_input)
 
@@ -367,10 +367,10 @@ def video_converter(
         if output_ext.lower() != "mp4":
             ffmpeg.input(temp_output).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
         else:
-            os_helper.copyfile(temp_output, output_video)  # Copy to final output if MP4
+            osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
 
     # Validate the final output video
-    os_helper.check(
+    osh.check(
         is_valid_video_file(output_video),
         msg=f"Failed to convert video file:\n\t{input_video}\ninto\n\t{output_video}"
     )
@@ -381,31 +381,31 @@ def video_converter(
     # Validate frame rate
     if frame_rate:
         error = round(100 * np.abs(d["frame_rate"] - frame_rate) / frame_rate)
-        os_helper.check(
+        osh.check(
             error < 2,  # Allow slight floating-point variations
             msg=f"Failed to set frame rate for video file ({d['frame_rate']} vs {frame_rate}, error = {error}%):\n\t{output_video}"
         )
 
     # Validate width and height
     if width:
-        os_helper.check(
+        osh.check(
             d["width"] == width,
             msg=f"Failed to set width for video file:\n\t{output_video}"
         )
     if height:
-        os_helper.check(
+        osh.check(
             d["height"] == height,
             msg=f"Failed to set height for video file:\n\t{output_video}"
         )
 
     # Validate sound removal
     if without_sound:
-        os_helper.check(
+        osh.check(
             not d["has_sound"],
             msg=f"Failed to remove audio from video file:\n\t{output_video}"
         )
 
-    os_helper.info(f"Video file converted successfully:\n\t{output_video}")
+    osh.info(f"Video file converted successfully:\n\t{output_video}")
 
 
 
@@ -460,7 +460,7 @@ def extract_frames(
     >>>     process_frame(frame)
     """
     # Check if the video file is valid
-    os_helper.check(
+    osh.check(
         is_valid_video_file(video_path),
         msg=f"Video file not okay:\n\t{video_path}",
     )
@@ -491,10 +491,10 @@ def extract_frames(
         frame_step = int(frame_interval * frame_rate)
 
     # Check if start_index and end_index are within the valid frame range
-    os_helper.check(
+    osh.check(
         0 <= start_index <= end_index <= int(duration * frame_rate),
-        msg=f"Invalid frame range:\n\t{start_index} ({os_helper.time2str(1.0 * start_index / frame_rate)}) to {end_index} ({os_helper.time2str(1.0 * end_index / frame_rate)}).\n"
-        f"It should be within 0 to {int(duration * frame_rate)} (for {os_helper.time2str(duration)} at {frame_rate} fps)",
+        msg=f"Invalid frame range:\n\t{start_index} ({osh.time2str(1.0 * start_index / frame_rate)}) to {end_index} ({osh.time2str(1.0 * end_index / frame_rate)}).\n"
+        f"It should be within 0 to {int(duration * frame_rate)} (for {osh.time2str(duration)} at {frame_rate} fps)",
     )
 
     # Initialize video stream
@@ -530,6 +530,7 @@ def extract_frames(
 
 
 
+# Replace in dump_frames function
 def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None:
     """
     Save frames to a video file.
@@ -552,44 +553,34 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
     >>> frames = [frame1, frame2, frame3]
     >>> dump_frames(frames, "output.mp4")
     """
-    # Check if the frames list is not empty
-    os_helper.check(len(frames_list) > 0, msg="No frames to dump!")
+    osh.check(len(frames_list) > 0, msg="No frames to dump!")
 
-    # Get the dimensions of the first frame
     height, width, channels = frames_list[0].shape
-
-    # Check if the dimensions of all frames are consistent
-    os_helper.check(
+    osh.check(
         all(frame.shape == (height, width, channels) for frame in frames_list),
         msg="Frames do not have consistent dimensions!",
     )
 
-    # Extract output file extension
-    _, _, output_ext = os_helper.folder_name_ext(output_movie)
+    _, _, output_ext = osh.folder_name_ext(output_movie)
+    quiet = osh.verbosity() <= 0
 
-    # Determine verbosity level
-    quiet = os_helper.verbosity() <= 0
-
-    # Create temp folder with os_helper
-    with os_helper.temporary_folder() as temp_folder:
+    with osh.temporary_folder() as temp_folder:
         try:
-            # Save each frame as an image in the temp folder
-            frame_pattern = os_helper.os_path_constructor([temp_folder, "frame_%09d.png"])
+            frame_pattern = osh.os_path_constructor([temp_folder, "frame_%09d.png"])
             for i, frame in enumerate(frames_list):
                 frame_path = frame_pattern % i
-                Image.fromarray(frame).save(frame_path)
+                io.imsave(frame_path, frame)  # Use skimage's imsave for saving frames
 
-            # Generate the video from saved images using ffmpeg
-            temp_movie = os_helper.os_path_constructor([temp_folder, "temp_movie.mp4"])
+            temp_movie = osh.os_path_constructor([temp_folder, "temp_movie.mp4"])
             ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(overwrite_output=True, quiet=quiet)
 
-            # Convert the video format if necessary
             if output_ext.lower() != "mp4":
                 ffmpeg.input(temp_movie).output(output_movie, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
             else:
-                os_helper.copyfile(temp_movie, output_movie)
+                osh.copyfile(temp_movie, output_movie)
 
         except Exception as e:
-            raise RuntimeError(f"Error occurred while dumping frames to video: {e}")
+            osh.error(f"Error occurred while dumping frames to video: {e}")
 
-    os_helper.info(f"Video saved successfully: {output_movie}")
+    osh.info(f"Video saved successfully: {output_movie}")
+
