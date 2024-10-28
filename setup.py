@@ -31,7 +31,7 @@ install_requires = \
  'keyring==24.3.1',
  'more-itertools==10.5.0',
  'msgpack==1.1.0',
- 'numpy==2.1.2',
+ 'numpy==2.0.2',
  'opencv-python==4.10.0.84',
  'os-helper @ git+https://github.com/warith-harchaoui/os-helper.git@main',
  'packaging==24.1',
