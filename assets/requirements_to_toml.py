@@ -16,7 +16,7 @@ def generate_pyproject_toml(requirements, project_name, description, authors, py
     return f"""
 [tool.poetry]
 name = "{project_name}"
-version = "0.1.0"
+version = "1.0.0"
 description = "{description}"
 authors = {authors}
 license = "{license}"
