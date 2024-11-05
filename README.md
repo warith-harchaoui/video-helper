@@ -4,7 +4,7 @@
 
 [🕸️ AI Helpers](https://harchaoui.org/warith/ai-helpers)
 
-[![logo](logo.png)](https://harchaoui.org/warith/ai-helpers)
+[![logo](assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
 
 Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats.
 
