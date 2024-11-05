@@ -1,7 +1,7 @@
 
 [tool.poetry]
 name = "video-helper"
-version = "0.1.0"
+version = "1.0.0"
 description = "Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats."
 authors = ['Warith Harchaoui <warith.harchaoui@gmail.com>', 'Mohamed Chelali <mohamed.t.chelali@gmail.com>', 'Bachir Zerroug <bzerroug@gmail.com>']
 license = ""

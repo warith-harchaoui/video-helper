@@ -33,10 +33,11 @@ To use Video Helper, you must install `ffmpeg`:
   Go to the [FFmpeg website](https://ffmpeg.org/download.html) and follow the instructions for downloading FFmpeg. You'll need to manually add FFmpeg to your system PATH.
   
 
-and finally:
+finally we still discuss between different python package managers and try to support as much as possible
+
 
 ```bash
-pip install --force-reinstall --no-cache-dir git+https://github.com/warith-harchaoui/video-helper.git@main
+pip install --force-reinstall --no-cache-dir git+https://github.com/warith-harchaoui/video-helper.gitv1.0.0
 ```
 
 # Usage

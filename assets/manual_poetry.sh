@@ -13,7 +13,7 @@ PROJECT_NAME="video-helper"
 PYTHON_VERSION="3.10"
 ENV="env4vh"
 
-DEPENDENCIES="opencv-python ffmpeg-python vidgear git+https://github.com/warith-harchaoui/os-helper.git@main"
+DEPENDENCIES="opencv-python ffmpeg-python vidgear git+https://github.com/warith-harchaoui/os-helper.gitv1.0.0"
 DESCRIPTION="Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats."
 AUTHORS="Warith Harchaoui <warith.harchaoui@gmail.com>, Mohamed Chelali <mohamed.t.chelali@gmail.com>, Bachir Zerroug <bzerroug@gmail.com>"
 
@@ -51,8 +51,8 @@ done
 yes | pip uninstall jaraco.classes
 pip freeze > requirements.txt
 
-# # replace git commit hash with @main
-sed -i '' 's/@[a-f0-9]\{7,40\}/@main/g' requirements.txt
+# # replace git commit hash with v1.0.0
+sed -i '' 's/@[a-f0-9]\{7,40\}/v1.0.0/g' requirements.txt
 
 rm -f pyproject.toml poetry.lock
 
@@ -75,8 +75,8 @@ poetry install
 poetry2setup > setup.py
 poetry export -f requirements.txt --output requirements.txt --without-hashes
 
-# # replace git commit hash with @main
-sed -i '' 's/@[a-f0-9]\{7,40\}/@main/g' requirements.txt
+# # replace git commit hash with v1.0.0
+sed -i '' 's/@[a-f0-9]\{7,40\}/v1.0.0/g' requirements.txt
 
 
 # Create environment.yml for conda users
