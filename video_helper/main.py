@@ -585,3 +585,58 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
 
     osh.info(f"Video saved successfully: {output_movie}")
 
+
+
+def extract_video_chunk(input_video: str, sample_start: float, sample_end: float, output_video: str) -> None:
+    """
+    Extract a chunk of video from the specified start to end time and save it to a new file.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the input video file.
+    sample_start : float
+        Start time in seconds for the extraction.
+    sample_end : float
+        End time in seconds for the extraction.
+    output_video : str
+        Path to save the extracted video chunk.
+
+    Usage
+    -----
+    >>> extract_video_chunk("input.mp4", 10.0, 20.0, "output_chunk.mp4")
+    """
+    osh.check(
+        is_valid_video_file(input_video),
+        msg=f"Video file not okay:\n\t{input_video}",
+    )
+    metadata = video_dimensions(input_video)
+    duration = metadata["duration"]
+    osh.check(sample_end>sample_start and duration >= sample_end and duration > sample_start, msg=f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})")
+
+    _, _, input_ext = osh.folder_name_ext(input_video)
+    _, _, output_ext = osh.folder_name_ext(output_video)
+
+    quiet = True
+
+
+    with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
+         osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
+
+        # Convert to MP4 if the input video is not already in MP4 format
+        if input_ext.lower() != "mp4":
+            ffmpeg.input(input_video).output(temp_input, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+        else:
+            osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
+
+        # Actually do the temporal selection
+        ffmpeg.input(temp_input, ss=sample_start, to=sample_end).output(temp_output).run(overwrite_output=True)
+
+        # If the output format is not MP4, perform final conversion
+        if output_ext.lower() != "mp4":
+            ffmpeg.input(temp_output).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+        else:
+            osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
+
+    if is_valid_video_file(output_video):
+        osh.info(f"Video chunk extracted successfully:\n\t{output_video}")
