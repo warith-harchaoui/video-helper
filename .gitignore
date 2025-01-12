@@ -1,6 +1,7 @@
 # Video tests
 video_tests/
 yt_tests/
+m.sh
 
 # Video files
 *.mp4
