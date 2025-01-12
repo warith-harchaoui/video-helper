@@ -6,6 +6,9 @@ import re
 from typing import Iterator, List, Set
 import cv2
 
+import logging
+
+
 video_extensions = [
     "mp4",
     "avi",
@@ -184,7 +187,7 @@ def is_valid_video_file(video_file: str) -> bool:
     # Check if the file exists
     if not osh.file_exists(video_file):
         valid = False
-        osh.info(f"Video file not found: {video_file}")
+        logging.info(f"Video file not found: {video_file}")
         return valid
 
     try:
@@ -198,7 +201,7 @@ def is_valid_video_file(video_file: str) -> bool:
     if ext.lower() not in video_extensions:
         valid = False
 
-    osh.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
+    logging.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
 
     return valid
 
@@ -295,13 +298,10 @@ def video_converter(
     >>> video_converter("input.mp4", "output.mp4", frame_rate=30, width=640, height=480)
     >>> video_converter("input.mp4", "output.mp4", without_sound=True)
     """
-    osh.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
+    logging.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
 
     # Check if the input video file exists and is valid
-    osh.check(
-        is_valid_video_file(input_video),
-        msg=f"Input video file not okay:\n\t{input_video}"
-    )
+    assert is_valid_video_file(input_video), f"Input video file not okay:\n\t{input_video}"
 
     quiet = osh.verbosity() <= 0  # Determine verbosity level
 
@@ -315,11 +315,8 @@ def video_converter(
     # If no conversion is required, just copy the streams
     if not frame_rate and not width and not height and not without_sound:
         ffmpeg.input(input_video).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
-        osh.check(
-            is_valid_video_file(output_video),
-            msg=f"Failed to convert video file:\n\t{output_video}"
-        )
-        osh.info(f"Video file converted successfully:\n{output_video}")
+        assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
+        logging.info(f"Video file converted successfully:\n{output_video}")
         return
 
     # Ensure width and height are even
@@ -370,10 +367,7 @@ def video_converter(
             osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
 
     # Validate the final output video
-    osh.check(
-        is_valid_video_file(output_video),
-        msg=f"Failed to convert video file:\n\t{input_video}\ninto\n\t{output_video}"
-    )
+    assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{input_video}\ninto\n\t{output_video}"
 
     # Retrieve video properties for validation
     d = video_dimensions(output_video)
@@ -381,31 +375,19 @@ def video_converter(
     # Validate frame rate
     if frame_rate:
         error = round(100 * np.abs(d["frame_rate"] - frame_rate) / frame_rate)
-        osh.check(
-            error < 2,  # Allow slight floating-point variations
-            msg=f"Failed to set frame rate for video file ({d['frame_rate']} vs {frame_rate}, error = {error}%):\n\t{output_video}"
-        )
+        assert error < 2, f"Failed to set frame rate for video file ({d['frame_rate']} vs {frame_rate}, error = {error}%):\n\t{output_video}"
 
     # Validate width and height
     if width:
-        osh.check(
-            d["width"] == width,
-            msg=f"Failed to set width for video file:\n\t{output_video}"
-        )
+        assert d["width"] == width, f"Failed to set width for video file:\n\t{output_video}"
     if height:
-        osh.check(
-            d["height"] == height,
-            msg=f"Failed to set height for video file:\n\t{output_video}"
-        )
+        assert d["height"] == height, f"Failed to set height for video file:\n\t{output_video}"
 
     # Validate sound removal
     if without_sound:
-        osh.check(
-            not d["has_sound"],
-            msg=f"Failed to remove audio from video file:\n\t{output_video}"
-        )
+        assert not d["has_sound"], f"Failed to remove audio from video file:\n\t{output_video}"
 
-    osh.info(f"Video file converted successfully:\n\t{output_video}")
+    logging.info(f"Video file converted successfully:\n\t{output_video}")
 
 
 
@@ -460,10 +442,7 @@ def extract_frames(
     >>>     process_frame(frame)
     """
     # Check if the video file is valid
-    osh.check(
-        is_valid_video_file(video_path),
-        msg=f"Video file not okay:\n\t{video_path}",
-    )
+    assert is_valid_video_file(video_path), f"Video file not okay:\n\t{video_path}"
 
     # Get video details (dimensions, duration, frame_rate)
     d = video_dimensions(video_path)
@@ -491,11 +470,8 @@ def extract_frames(
         frame_step = int(frame_interval * frame_rate)
 
     # Check if start_index and end_index are within the valid frame range
-    osh.check(
-        0 <= start_index <= end_index <= int(duration * frame_rate),
-        msg=f"Invalid frame range:\n\t{start_index} ({osh.time2str(1.0 * start_index / frame_rate)}) to {end_index} ({osh.time2str(1.0 * end_index / frame_rate)}).\n"
-        f"It should be within 0 to {int(duration * frame_rate)} (for {osh.time2str(duration)} at {frame_rate} fps)",
-    )
+    assert 0 <= start_index <= end_index <= int(duration * frame_rate), f"Invalid frame range:\n\t{start_index} ({osh.time2str(1.0 * start_index / frame_rate)}) to {end_index} ({osh.time2str(1.0 * end_index / frame_rate)}).\n" \
+        f"It should be within 0 to {int(duration * frame_rate)} (for {osh.time2str(duration)} at {frame_rate} fps)"
 
     # Initialize video stream
     stream = VideoGear(source=video_path, stabilize=stabilize).start()
@@ -553,13 +529,10 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
     >>> frames = [frame1, frame2, frame3]
     >>> dump_frames(frames, "output.mp4")
     """
-    osh.check(len(frames_list) > 0, msg="No frames to dump!")
+    assert len(frames_list) > 0, "No frames to dump!"
 
     height, width, channels = frames_list[0].shape
-    osh.check(
-        all(frame.shape == (height, width, channels) for frame in frames_list),
-        msg="Frames do not have consistent dimensions!",
-    )
+    assert all(frame.shape == (height, width, channels) for frame in frames_list), "Frames do not have consistent dimensions!"
 
     _, _, output_ext = osh.folder_name_ext(output_movie)
     quiet = osh.verbosity() <= 0
@@ -581,9 +554,9 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
                 osh.copyfile(temp_movie, output_movie)
 
         except Exception as e:
-            osh.error(f"Error occurred while dumping frames to video: {e}")
+            raise Exception(f"Error occurred while dumping frames to video: {e}")
 
-    osh.info(f"Video saved successfully: {output_movie}")
+    logging.info(f"Video saved successfully: {output_movie}")
 
 
 
@@ -606,13 +579,10 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
     -----
     >>> extract_video_chunk("input.mp4", 10.0, 20.0, "output_chunk.mp4")
     """
-    osh.check(
-        is_valid_video_file(input_video),
-        msg=f"Video file not okay:\n\t{input_video}",
-    )
+    assert is_valid_video_file(input_video), f"Video file not okay:\n\t{input_video}"
     metadata = video_dimensions(input_video)
     duration = metadata["duration"]
-    osh.check(sample_end>sample_start and duration >= sample_end and duration > sample_start, msg=f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})")
+    assert sample_end>sample_start and duration >= sample_end and duration > sample_start, f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})"
 
     _, _, input_ext = osh.folder_name_ext(input_video)
     _, _, output_ext = osh.folder_name_ext(output_video)
@@ -639,4 +609,6 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
             osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
 
     if is_valid_video_file(output_video):
-        osh.info(f"Video chunk extracted successfully:\n\t{output_video}")
+        logging.info(f"Video chunk extracted successfully:\n\t{output_video}")
+    else:
+        raise Exception(f"Video could not be cropped (original: {input_video}, start: {sample_start}, end: {sample_end}, duration: {duration})")
