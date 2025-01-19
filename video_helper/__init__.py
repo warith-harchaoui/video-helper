@@ -6,7 +6,8 @@ from .main import (
     video_dimensions,
     video_converter,
     extract_frames,
-    dump_frames
+    dump_frames,
+    extract_video_chunk,
 )
 
 # Define the public API for the library
@@ -18,4 +19,5 @@ __all__ = [
     'video_converter',
     'extract_frames',
     'dump_frames',
+    'extract_video_chunk',
 ]
