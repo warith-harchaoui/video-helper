@@ -116,10 +116,10 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str=None, css_file_path: str=None
     f,b,e = osh.folder_name_ext(srt_file_path)
 
     if not vtt_file_path:
-        vtt_file_path = osh.os_path_constructor([f,b+".vtt"])
+        vtt_file_path = osh.join([f,b+".vtt"])
     
     if not css_file_path:
-        css_file_path = osh.os_path_constructor([f,b+".css"])
+        css_file_path = osh.join([f,b+".css"])
     
     # Generate the CSS file for these colors
     _generate_css_from_colors(unique_colors, css_file_path)
@@ -539,13 +539,13 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
 
     with osh.temporary_folder() as temp_folder:
         try:
-            frame_pattern = osh.os_path_constructor([temp_folder, "frame_%09d.png"])
+            frame_pattern = osh.join([temp_folder, "frame_%09d.png"])
             for i, frame in enumerate(frames_list):
                 frame_path = frame_pattern % i
                 frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # BGR convention of opencv
                 cv2.imwrite(frame_path, frame_bgr)
 
-            temp_movie = osh.os_path_constructor([temp_folder, "temp_movie.mp4"])
+            temp_movie = osh.join([temp_folder, "temp_movie.mp4"])
             ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(overwrite_output=True, quiet=quiet)
 
             if output_ext.lower() != "mp4":
