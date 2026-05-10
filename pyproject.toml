@@ -6,7 +6,7 @@ authors = ["Warith Harchaoui <warith.harchaoui@gmail.com>, Mohamed Chelali <moha
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.10,<3.14"
 opencv-python = "^4.10.0.84"
 ffmpeg-python = "^0.2.0"
 vidgear = "^0.3.3"
