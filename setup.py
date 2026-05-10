@@ -10,7 +10,7 @@ package_data = \
 install_requires = \
 ['ffmpeg-python>=0.2.0,<0.3.0',
  'opencv-python>=4.10.0.84,<5.0.0.0',
- 'os-helper @ git+https://github.com/warith-harchaoui/os-helper.git@v1.0.0',
+ 'os-helper @ git+https://github.com/warith-harchaoui/os-helper.git@v1.1.0',
  'vidgear>=0.3.3,<0.4.0']
 
 setup_kwargs = {

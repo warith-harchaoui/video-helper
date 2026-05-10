@@ -10,7 +10,7 @@ python = ">=3.10,<3.14"
 opencv-python = "^4.10.0.84"
 ffmpeg-python = "^0.2.0"
 vidgear = "^0.3.3"
-os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v1.0.0"}
+os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v1.1.0"}
 
 
 [build-system]
