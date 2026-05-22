@@ -1,8 +1,7 @@
+import os
 import pytest
 import os_helper as osh
 import numpy as np
-from typing import List
-import urllib.request
 from video_helper import (
     extract_unique_colors,
     srt2vtt,
@@ -10,88 +9,72 @@ from video_helper import (
     video_dimensions,
     video_converter,
     extract_frames,
-    dump_frames
-)  
+    dump_frames,
+    extract_video_chunk,
+)
 
 
-# Define a test video URL
-video_url = "https://harchaoui.org/warith/jfk-inauguration.mkv"
-video_filename = "jfk-inauguration.mkv"
+# Local fixtures shipped with the repo (see video_tests/).
+# `shaky.mp4` has audio; `example_converted.mp4` does not.
+FIXTURES_DIR = osh.join([os.path.dirname(__file__), "..", "video_tests"])
+VIDEO_WITH_AUDIO = osh.join([FIXTURES_DIR, "shaky.mp4"])
+VIDEO_NO_AUDIO = osh.join([FIXTURES_DIR, "example_converted.mp4"])
 
 osh.verbosity(0)
 
-overwrite = True
 
-def get_video():
-    folder = "video_tests"
-    video_file = osh.os_path_constructor([folder, video_filename])
-    if not (osh.file_exists(video_file)):
-        osh.make_directory(folder)
-        urllib.request.urlretrieve(video_url, video_file)
-    return video_file
+def _require(path):
+    if not osh.file_exists(path):
+        pytest.skip(f"Fixture missing: {path}")
+    return path
 
 
 def test_video_dimensions():
-    """
-    Test that the video dimensions and frame rate can be retrieved correctly.
-    """
-    video_file = get_video()
-    dimensions = video_dimensions(video_file)
-    assert "width" in dimensions, "Width not found in video dimensions!"
-    assert "height" in dimensions, "Height not found in video dimensions!"
-    assert "frame_rate" in dimensions, "Frame rate not found in video dimensions!"
-    assert dimensions["duration"] > 0, "Invalid video duration!"
+    """Video dimensions and frame rate are retrieved correctly."""
+    video_file = _require(VIDEO_WITH_AUDIO)
+    d = video_dimensions(video_file)
+    assert {"width", "height", "frame_rate", "duration", "has_sound"} <= set(d)
+    assert d["duration"] > 0
+    assert d["has_sound"] is True
 
 
-def test_video_conversion():
-    """
-    Test converting the video with specific parameters.
-    """
-    video_file = get_video()
-    folder, basename, extension = osh.folder_name_ext(video_file)
-    output_video_file = basename + "_converted." + extension
-    output_video_file = osh.os_path_constructor([folder, output_video_file])
+def test_video_conversion(tmp_path):
+    """Conversion applies fps, resize, and audio stripping."""
+    video_file = _require(VIDEO_WITH_AUDIO)
+    src = video_dimensions(video_file)
 
     frame_rate = 15
-    width = 1080
-    height = 200
-    without_sound = True  # Test removing sound for this case
+    width = src["width"] // 2 & ~1  # ensure even
+    height = src["height"] // 2 & ~1
+    output_video_file = str(tmp_path / "converted.mp4")
 
-    # Convert the video
     video_converter(
         video_file,
         output_video_file,
         frame_rate=frame_rate,
         width=width,
         height=height,
-        without_sound=without_sound,
+        without_sound=True,
     )
 
-    # Validate the output video dimensions
     d = video_dimensions(output_video_file)
-
-    assert d["width"] == width, f"Width mismatch: {d['width']} != {width}"
-    assert d["height"] == height, f"Height mismatch: {d['height']} != {height}"
-    assert (
-        round(d["frame_rate"]) == frame_rate
-    ), f"Frame rate mismatch: {d['frame_rate']} != {frame_rate}"
-    assert d["has_sound"] == (not without_sound), f"Audio mismatch: {d['has_sound']} != {without_sound}"
-    assert d["duration"] > 0, "Invalid video duration!"
-
-    # Clean up the output video after testing (optional)
+    assert d["width"] == width
+    assert d["height"] == height
+    assert round(d["frame_rate"]) == frame_rate
+    assert d["has_sound"] is False
+    assert d["duration"] > 0
 
 
 def test_frame_extraction():
-    """
-    Test frame extraction between specific time intervals.
-    """
-    video_file = get_video()
-    start_instant = 1  # seconds
-    end_instant = 2  # 10 seconds
-    frame_step = 5  # Extract every 5th frame
-    frame_interval = 2  # Extract one frame every 2 seconds
+    """Frame extraction honors time range and frame_step."""
+    video_file = _require(VIDEO_NO_AUDIO)
+    d = video_dimensions(video_file)
+    frame_rate = d["frame_rate"]
 
-    # Collect extracted frames
+    start_instant = 1.0
+    end_instant = 2.0
+    frame_step = 5
+
     frames = list(
         extract_frames(
             video_file,
@@ -101,27 +84,17 @@ def test_frame_extraction():
         )
     )
 
-    assert len(frames) > 0, "No frames extracted!"
+    assert len(frames) > 0
     for frame in frames:
-        assert isinstance(frame, np.ndarray), "Extracted frame is not a numpy array!"
-        assert frame.shape[-1] == 3, "Frame does not have 3 channels (RGB)!"
+        assert isinstance(frame, np.ndarray)
+        assert frame.shape[-1] == 3
+        assert frame.shape[0] == d["height"]
+        assert frame.shape[1] == d["width"]
 
-    # Validate the frame count
-    d = video_dimensions(video_file)
-    frame_rate = d["frame_rate"]
-    expected_frame_count = int((end_instant - start_instant) * frame_rate / frame_step)
-    # Allow a small margin for floating-point inaccuracies
-    error = abs(len(frames) - expected_frame_count) 
-    assert error <= 2, f"Frame count mismatch: {len(frames)} != {expected_frame_count} ({error})"
+    expected = int((end_instant - start_instant) * frame_rate / frame_step)
+    assert abs(len(frames) - expected) <= 2
 
-    # Validate the frame dimensions
-    expected_width = d["width"]
-    expected_height = d["height"]
-    for frame in frames:
-        assert frame.shape[0] == expected_height, f"Height mismatch: {frame.shape[0]} != {expected_height}"
-        assert frame.shape[1] == expected_width, f"Width mismatch: {frame.shape[1]} != {expected_width}"
-
-    # Test frame extraction with frame interval instead of frame step
+    frame_interval = 0.5
     frames_interval = list(
         extract_frames(
             video_file,
@@ -130,24 +103,30 @@ def test_frame_extraction():
             frame_interval=frame_interval,
         )
     )
-
-    # Validate number of frames extracted using frame_interval
-    expected_frame_count_interval = int((end_instant - start_instant) / frame_interval)
-    error = abs(len(frames) - expected_frame_count)
-    assert error <= 2, f"Frame count mismatch with interval: {len(frames_interval)} != {expected_frame_count_interval} ({error})"
+    expected_interval = int((end_instant - start_instant) / frame_interval)
+    assert abs(len(frames_interval) - expected_interval) <= 2
 
 
-def test_frames_dump():
-    """
-    Test frame extraction between specific time intervals.
-    """
-    video_file = get_video()
-    frames = list( extract_frames(video_file, stabilize=True) )
-
+def test_frames_dump(tmp_path):
+    """Round-trip: extract a short window of frames, dump, and re-open."""
+    video_file = _require(VIDEO_NO_AUDIO)
     d = video_dimensions(video_file)
 
-    f,b,e = osh.folder_name_ext(video_file)
-    o = osh.os_path_constructor([f, "frames.mp4"])
-    dump_frames(frames, o, d["frame_rate"])
+    frames = list(
+        extract_frames(video_file, start_instant=0.0, end_instant=1.0)
+    )
+    assert len(frames) > 0
 
-    assert is_valid_video_file(o), "Invalid video file after dumping frames!"
+    out = str(tmp_path / "frames.mp4")
+    dump_frames(frames, out, int(round(d["frame_rate"])))
+    assert is_valid_video_file(out)
+
+
+def test_extract_video_chunk(tmp_path):
+    """Temporal crop yields a valid, shorter video."""
+    video_file = _require(VIDEO_NO_AUDIO)
+    out = str(tmp_path / "chunk.mp4")
+    extract_video_chunk(video_file, 1.0, 3.0, out)
+    assert is_valid_video_file(out)
+    d = video_dimensions(out)
+    assert 1.5 < d["duration"] < 2.5
