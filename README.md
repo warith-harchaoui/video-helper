@@ -37,8 +37,10 @@ finally we still discuss between different python package managers and try to su
 
 
 ```bash
-pip install --force-reinstall --no-cache-dir git+https://github.com/warith-harchaoui/video-helper.gitv1.0.0
+pip install --force-reinstall --no-cache-dir git+https://github.com/warith-harchaoui/video-helper.git@main
 ```
+
+(Once a release is tagged, pin to a tag, e.g. `git+https://github.com/warith-harchaoui/video-helper.git@v1.0.0`.)
 
 # Usage
 Here’s an example of how to use Video Helper to load, convert, and extract frames from a video file:
@@ -116,6 +118,21 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 - Frame Extraction: Extract frames from video files with optional frame skipping and time range selection.
 - Subtitle Conversion: Convert SRT subtitles to WebVTT with support for preserving and styling font colors using CSS.
 - Frame Processing: Iterate through video frames for custom processing (e.g., image analysis or machine learning).
+
+# API Reference
+
+| Function | Signature | Description |
+| --- | --- | --- |
+| `is_valid_video_file` | `(video_file: str) -> bool` | Returns `True` if the file exists, has a known video extension, and `ffmpeg.probe` finds a video stream. |
+| `video_dimensions` | `(video_file: str) -> dict` | Returns `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
+| `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encodes a video with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. Output format follows the output extension. |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None) -> Iterator[np.ndarray]` | Generator yielding frames in the given range. `start_instant`/`end_instant` (seconds) override the index form; `frame_interval` (seconds) overrides `frame_step`. Uses VidGear, with optional video stabilization. |
+| `dump_frames` | `(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None` | Writes a list of RGB frames to a video file (writes PNGs to a temp folder then encodes with ffmpeg). |
+| `extract_video_chunk` | `(input_video, sample_start: float, sample_end: float, output_video: str) -> None` | Temporal crop from `sample_start` to `sample_end` (seconds). |
+| `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None) -> None` | Converts SRT to WebVTT. Extracts `<font color="#RRGGBB">` tags into a sidecar CSS file using `::cue(.rrggbb)` rules. |
+| `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Returns the set of unique hex color codes found in `<font color="...">` tags of an SRT file. |
+
+All frames are numpy arrays of shape `(height, width, 3)` with pixel values in `[0, 255]`.
 
 # Authors
  - [Warith Harchaoui](https://harchaoui.org/warith)
