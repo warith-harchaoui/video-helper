@@ -930,6 +930,66 @@ def overlay_image(
         f"Failed to write overlay_image:\n\t{output_video}"
 
 
+def extract_audio_track(
+    input_video: str,
+    output_audio: str,
+    sample_rate: int = 44100,
+    channels: int = 2,
+    encoding: str = "pcm_s16le",
+) -> None:
+    """
+    Extract the audio track of a video file into a standalone audio file.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the input video file (any container ffmpeg can read).
+    output_audio : str
+        Path to the output audio file. The extension picks the container;
+        ``.wav`` pairs naturally with ``encoding="pcm_s16le"`` for a
+        lossless extract.
+    sample_rate : int, optional
+        Output sample rate in Hz (default 44100).
+    channels : int, optional
+        Output channel count (default 2 — stereo). Use ``1`` for mono.
+    encoding : str, optional
+        Audio codec (default ``"pcm_s16le"``). For non-WAV outputs use
+        a codec compatible with the container (e.g. ``"aac"`` for .m4a,
+        ``"libmp3lame"`` for .mp3).
+
+    Notes
+    -----
+    Source-of-truth companion to ``audio_helper.sound_converter`` for the
+    case where the *input* is a video — ``sound_converter`` rejects
+    video extensions in its input-validation pass, hence the dedicated
+    function here. Drops the video stream (``-vn``) and re-encodes only
+    the audio.
+
+    Examples
+    --------
+    >>> extract_audio_track("interview.mp4", "interview.wav")
+    >>> extract_audio_track("clip.mov", "clip.mp3",
+    ...                     encoding="libmp3lame", sample_rate=22050)
+    """
+    osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
+    assert is_valid_video_file(input_video), \
+        f"Invalid input video file: {input_video}"
+    quiet = osh.verbosity() <= 0
+
+    ffmpeg.input(input_video).output(
+        output_audio,
+        vn=None,                # drop the video stream
+        ac=channels,
+        ar=sample_rate,
+        acodec=encoding,
+    ).run(overwrite_output=True, quiet=quiet)
+
+    osh.checkfile(
+        output_audio,
+        msg=f"Failed to extract audio: {output_audio}",
+    )
+
+
 def mux_audio_video(
     input_video: str,
     input_audio: str,
