@@ -13,6 +13,7 @@ from .main import (
     image_loop_to_video,
     concat_videos,
     overlay_image,
+    extract_audio_track,
     mux_audio_video,
     burn_subtitles,
 )
@@ -32,6 +33,7 @@ __all__ = [
     'image_loop_to_video',
     'concat_videos',
     'overlay_image',
+    'extract_audio_track',
     'mux_audio_video',
     'burn_subtitles',
 ]
