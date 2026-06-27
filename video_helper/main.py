@@ -312,9 +312,19 @@ def video_converter(
 
     fo, bo, output_ext = osh.folder_name_ext(output_video)
 
-    # If no conversion is required, just copy the streams
+    # If no conversion is required, just copy the streams — but only when
+    # the container does not change. Cross-container stream copy (e.g.
+    # WebM/VP8 into .mp4) is rejected by ffmpeg because most codecs are
+    # not muxable in every container. In that case we transcode to
+    # H.264/AAC, which is the lingua franca every MP4-class container
+    # accepts.
     if not frame_rate and not width and not height and not without_sound:
-        ffmpeg.input(input_video).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+        if input_ext.lower() == output_ext.lower():
+            ffmpeg.input(input_video).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+        else:
+            ffmpeg.input(input_video).output(
+                output_video, vcodec='libx264', acodec='aac', pix_fmt='yuv420p',
+            ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
         logging.info(f"Video file converted successfully:\n{output_video}")
         return
@@ -329,9 +339,17 @@ def video_converter(
     with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
          osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
 
-        # Convert to MP4 if the input video is not already in MP4 format
+        # Normalize the input into an .mp4 container before the filter
+        # pass. Codec-copy only works when source codecs are already
+        # MP4-compatible (h264 + aac); for VP8/VP9/Opus/etc. we must
+        # transcode, otherwise ffmpeg refuses the cross-container mux.
         if input_ext.lower() != "mp4":
-            ffmpeg.input(input_video).output(temp_input, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+            transcode_kwargs = {'vcodec': 'libx264', 'pix_fmt': 'yuv420p'}
+            if without_sound:
+                transcode_kwargs['an'] = None
+            else:
+                transcode_kwargs['acodec'] = 'aac'
+            ffmpeg.input(input_video).output(temp_input, **transcode_kwargs).run(overwrite_output=True, quiet=quiet)
         else:
             osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
 
@@ -593,9 +611,14 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
     with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
          osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
 
-        # Convert to MP4 if the input video is not already in MP4 format
+        # Normalize the input into an .mp4 container before the temporal
+        # cut. Codec-copy only works when source codecs are already
+        # MP4-compatible (h264 + aac); for arbitrary inputs we transcode
+        # to H.264/AAC, which every MP4-class container accepts.
         if input_ext.lower() != "mp4":
-            ffmpeg.input(input_video).output(temp_input, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+            ffmpeg.input(input_video).output(
+                temp_input, vcodec='libx264', acodec='aac', pix_fmt='yuv420p',
+            ).run(overwrite_output=True, quiet=quiet)
         else:
             osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
 
