@@ -1,3 +1,4 @@
+import os
 import os_helper as osh
 import ffmpeg
 import numpy as np
@@ -635,3 +636,532 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
         logging.info(f"Video chunk extracted successfully:\n\t{output_video}")
     else:
         raise Exception(f"Video could not be cropped (original: {input_video}, start: {sample_start}, end: {sample_end}, duration: {duration})")
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Pipeline helpers — composition primitives shared by video editors that
+#  need to glue clips, generate stand-ins (solid color, looped still),
+#  overlay graphics with time-varying expressions, burn subtitles, mux a
+#  voice track, or read a duration without re-implementing ffprobe glue.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def video_duration(input_video: str) -> float:
+    """
+    Return the duration (seconds) of a video file.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the input video file.
+
+    Returns
+    -------
+    float
+        Duration in seconds.
+
+    Notes
+    -----
+    Mirror of ``audio_helper.get_audio_duration`` for the video side.
+    Uses ``video_dimensions`` under the hood, which already calls
+    ``ffmpeg.probe`` — kept as a top-level convenience so callers don't
+    have to remember the dict key.
+
+    Examples
+    --------
+    >>> video_duration("clip.mp4")
+    12.34
+    """
+    osh.checkfile(input_video, msg=f"Video file not found: {input_video}")
+    return float(video_dimensions(input_video)["duration"])
+
+
+def black_video(
+    duration: float,
+    width: int,
+    height: int,
+    output_video: str,
+    frame_rate: int = 30,
+) -> None:
+    """
+    Generate a silent solid-black video of ``duration`` seconds.
+
+    Parameters
+    ----------
+    duration : float
+        Output duration in seconds.
+    width : int
+        Output frame width in pixels (rounded down to even — H.264 yuv420p
+        requires even dimensions).
+    height : int
+        Output frame height in pixels (rounded down to even).
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    frame_rate : int, optional
+        Output frame rate (default 30).
+
+    Notes
+    -----
+    Useful as a "buffer" / breathing clip between two visuals in a montage,
+    or as a placeholder when an asset is missing. Encoded as H.264 yuv420p
+    with no audio track.
+
+    Examples
+    --------
+    >>> black_video(0.5, 1920, 1080, "buffer.mp4")
+    """
+    assert duration > 0, f"black_video duration must be > 0, got {duration}"
+    assert width > 0 and height > 0, f"black_video needs positive dims, got {width}x{height}"
+    if width % 2: width -= 1
+    if height % 2: height -= 1
+    quiet = osh.verbosity() <= 0
+
+    (
+        ffmpeg
+        .input(f"color=c=black:s={width}x{height}:r={frame_rate}",
+               f="lavfi", t=duration)
+        .output(output_video, vcodec="libx264", pix_fmt="yuv420p",
+                preset="medium", crf=20, an=None)
+        .run(overwrite_output=True, quiet=quiet)
+    )
+    assert is_valid_video_file(output_video), \
+        f"Failed to write black_video:\n\t{output_video}"
+
+
+def image_loop_to_video(
+    image: str,
+    duration: float,
+    output_video: str,
+    frame_rate: int = 30,
+    width: int = None,
+    height: int = None,
+) -> None:
+    """
+    Loop a still image for ``duration`` seconds into a silent video.
+
+    Parameters
+    ----------
+    image : str
+        Path to the input still (PNG, JPG, …).
+    duration : float
+        Output duration in seconds.
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    frame_rate : int, optional
+        Output frame rate (default 30).
+    width, height : int, optional
+        If both provided, the image is letterboxed (scale + pad with black)
+        to the target viewport. Width and height are rounded down to even.
+
+    Notes
+    -----
+    Common in title cards, screenshot scenes, slide-style montages.
+    Encoded as H.264 yuv420p with no audio track.
+
+    Examples
+    --------
+    >>> image_loop_to_video("title.png", 3.0, "title.mp4",
+    ...                     width=1920, height=1080)
+    """
+    osh.checkfile(image, msg=f"Image not found: {image}")
+    assert duration > 0, f"image_loop_to_video duration must be > 0, got {duration}"
+    quiet = osh.verbosity() <= 0
+
+    stream = ffmpeg.input(image, loop=1, framerate=frame_rate, t=duration)
+    out_kwargs = {
+        "vcodec": "libx264", "pix_fmt": "yuv420p",
+        "preset": "medium", "crf": 20, "an": None,
+        "t": duration,
+    }
+    if width and height:
+        if width % 2: width -= 1
+        if height % 2: height -= 1
+        out_kwargs["vf"] = (
+            f"scale='min({width},iw*{height}/ih):min({height},ih*{width}/iw)',"
+            f"pad='{width}:{height}:(ow-iw)/2:(oh-ih)/2:black',"
+            f"format=yuv420p,fps={frame_rate}"
+        )
+    elif width:
+        if width % 2: width -= 1
+        out_kwargs["vf"] = f"scale={width}:-1,format=yuv420p,fps={frame_rate}"
+    elif height:
+        if height % 2: height -= 1
+        out_kwargs["vf"] = f"scale=-1:{height},format=yuv420p,fps={frame_rate}"
+    else:
+        out_kwargs["vf"] = f"format=yuv420p,fps={frame_rate}"
+
+    stream.output(output_video, **out_kwargs).run(overwrite_output=True, quiet=quiet)
+    assert is_valid_video_file(output_video), \
+        f"Failed to write image_loop_to_video:\n\t{output_video}"
+
+
+def concat_videos(
+    input_videos: List[str],
+    output_video: str,
+    reencode: bool = True,
+    frame_rate: int = None,
+) -> None:
+    """
+    Concatenate ``input_videos`` end-to-end into ``output_video``.
+
+    Parameters
+    ----------
+    input_videos : List[str]
+        Ordered list of input video paths.
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    reencode : bool, optional
+        Whether to re-encode (libx264). Default ``True`` — strongly
+        recommended when the inputs come from different sources, since
+        the concat demuxer's stream-copy path requires identical codec,
+        timebase, frame rate and resolution; mismatched inputs produce
+        audio/video drift or hard ffmpeg errors. Set ``False`` only when
+        the inputs are guaranteed bit-identical containers.
+    frame_rate : int, optional
+        Force this output frame rate (only used when ``reencode=True``).
+
+    Notes
+    -----
+    Uses the ffmpeg ``concat`` *demuxer* (text manifest) which is the
+    only correct way to concatenate variable-length clips end-to-end
+    without re-timing artefacts. The temporary manifest is written to a
+    process-temp file and removed automatically.
+
+    Examples
+    --------
+    >>> concat_videos(["intro.mp4", "body.mp4", "outro.mp4"], "final.mp4")
+    """
+    assert len(input_videos) > 0, "concat_videos: empty input list"
+    for v in input_videos:
+        osh.checkfile(v, msg=f"Input video not found: {v}")
+    quiet = osh.verbosity() <= 0
+
+    with osh.temporary_filename(suffix=".txt", mode="w") as manifest:
+        with open(manifest, "w") as fh:
+            for v in input_videos:
+                # ffmpeg concat demuxer: single-quote the path, escape inner quotes
+                p = os.path.abspath(v).replace("'", r"'\''")
+                fh.write(f"file '{p}'\n")
+
+        stream = ffmpeg.input(manifest, format="concat", safe=0)
+        out_kwargs = {}
+        if reencode:
+            out_kwargs.update({
+                "vcodec": "libx264", "pix_fmt": "yuv420p",
+                "preset": "medium", "crf": 20, "an": None,
+            })
+            if frame_rate:
+                out_kwargs["r"] = frame_rate
+        else:
+            out_kwargs.update({"vcodec": "copy", "acodec": "copy"})
+
+        stream.output(output_video, **out_kwargs).run(
+            overwrite_output=True, quiet=quiet,
+        )
+
+    assert is_valid_video_file(output_video), \
+        f"Failed to write concat_videos:\n\t{output_video}"
+
+
+def overlay_image(
+    input_video: str,
+    image: str,
+    output_video: str,
+    x: str = "0",
+    y: str = "0",
+    scale_width: int = None,
+) -> None:
+    """
+    Overlay a still image (PNG with alpha works) on top of a video.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the base video.
+    image : str
+        Path to the overlay image (PNG with alpha is the typical case —
+        cursors, watermarks, logos).
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    x, y : str, optional
+        Overlay positions. Plain integers (``"10"``) place the image
+        statically; ffmpeg overlay expressions (``"if(lt(t,1.0),0,100)"``,
+        ``"W/2-w/2"``, …) move the overlay over time. Default ``"0"``,
+        ``"0"`` (top-left).
+    scale_width : int, optional
+        If provided, scale the overlay to this width keeping aspect ratio
+        — useful for cursor PNGs that come at a different size than the
+        target frame.
+
+    Notes
+    -----
+    Time-varying expressions are evaluated per-frame
+    (``eval=frame``) so animations stay smooth at any framerate. The
+    underlying video stream is re-encoded (libx264) and the original
+    audio track, if any, is preserved.
+
+    Examples
+    --------
+    >>> overlay_image("clip.mp4", "cursor.png", "out.mp4",
+    ...               x="if(lt(t,2),100,400)", y="200",
+    ...               scale_width=24)
+    """
+    osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
+    osh.checkfile(image, msg=f"Overlay image not found: {image}")
+    quiet = osh.verbosity() <= 0
+
+    in_v = ffmpeg.input(input_video)
+    in_img = ffmpeg.input(image)
+    if scale_width:
+        in_img = in_img.filter("scale", scale_width, -1)
+    overlaid = ffmpeg.overlay(in_v.video, in_img,
+                              x=x, y=y, eval="frame", format="auto")
+
+    out_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p",
+                  "preset": "medium", "crf": 20}
+    # Preserve the original audio stream if present (probe lazily).
+    has_audio = video_dimensions(input_video).get("has_sound", False)
+    if has_audio:
+        out = ffmpeg.output(overlaid, in_v.audio, output_video,
+                            acodec="copy", **out_kwargs)
+    else:
+        out = ffmpeg.output(overlaid, output_video, an=None, **out_kwargs)
+    out.run(overwrite_output=True, quiet=quiet)
+    assert is_valid_video_file(output_video), \
+        f"Failed to write overlay_image:\n\t{output_video}"
+
+
+def extract_audio_track(
+    input_video: str,
+    output_audio: str,
+    sample_rate: int = 44100,
+    channels: int = 2,
+    encoding: str = "pcm_s16le",
+) -> None:
+    """
+    Extract the audio track of a video file into a standalone audio file.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the input video file (any container ffmpeg can read).
+    output_audio : str
+        Path to the output audio file. The extension picks the container;
+        ``.wav`` pairs naturally with ``encoding="pcm_s16le"`` for a
+        lossless extract.
+    sample_rate : int, optional
+        Output sample rate in Hz (default 44100).
+    channels : int, optional
+        Output channel count (default 2 — stereo). Use ``1`` for mono.
+    encoding : str, optional
+        Audio codec (default ``"pcm_s16le"``). For non-WAV outputs use
+        a codec compatible with the container (e.g. ``"aac"`` for .m4a,
+        ``"libmp3lame"`` for .mp3).
+
+    Notes
+    -----
+    Source-of-truth companion to ``audio_helper.sound_converter`` for the
+    case where the *input* is a video — ``sound_converter`` rejects
+    video extensions in its input-validation pass, hence the dedicated
+    function here. Drops the video stream (``-vn``) and re-encodes only
+    the audio.
+
+    Examples
+    --------
+    >>> extract_audio_track("interview.mp4", "interview.wav")
+    >>> extract_audio_track("clip.mov", "clip.mp3",
+    ...                     encoding="libmp3lame", sample_rate=22050)
+    """
+    osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
+    assert is_valid_video_file(input_video), \
+        f"Invalid input video file: {input_video}"
+    quiet = osh.verbosity() <= 0
+
+    ffmpeg.input(input_video).output(
+        output_audio,
+        vn=None,                # drop the video stream
+        ac=channels,
+        ar=sample_rate,
+        acodec=encoding,
+    ).run(overwrite_output=True, quiet=quiet)
+
+    osh.checkfile(
+        output_audio,
+        msg=f"Failed to extract audio: {output_audio}",
+    )
+
+
+def mux_audio_video(
+    input_video: str,
+    input_audio: str,
+    output_video: str,
+    audio_codec: str = "aac",
+    audio_bitrate: str = "192k",
+    shortest: bool = False,
+) -> None:
+    """
+    Mux a separate audio track onto a (typically silent) video.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the video file. Any existing audio track is replaced.
+    input_audio : str
+        Path to the audio file (WAV, MP3, AAC, …).
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    audio_codec : str, optional
+        Audio codec for the output stream (default ``"aac"``). Use
+        ``"copy"`` if the input audio is already in a container-compatible
+        codec.
+    audio_bitrate : str, optional
+        Audio bitrate when re-encoding (default ``"192k"``); ignored when
+        ``audio_codec="copy"``.
+    shortest : bool, optional
+        If ``True``, the output stops when the shorter of the two streams
+        ends. If ``False`` (default), the output keeps the video length and
+        the audio is padded with silence (or truncated) by the muxer.
+
+    Notes
+    -----
+    Video stream is copied — no re-encoding — so the muxing is fast and
+    lossless on the video side. Use this after assembling a silent
+    ``visuals.mp4`` and a separate ``narration.wav`` track.
+
+    Examples
+    --------
+    >>> mux_audio_video("silent.mp4", "voice.wav", "final.mp4")
+    """
+    osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
+    osh.checkfile(input_audio, msg=f"Input audio not found: {input_audio}")
+    quiet = osh.verbosity() <= 0
+
+    in_v = ffmpeg.input(input_video)
+    in_a = ffmpeg.input(input_audio)
+    out_kwargs = {"vcodec": "copy", "acodec": audio_codec}
+    if audio_codec != "copy":
+        out_kwargs["audio_bitrate"] = audio_bitrate
+    if shortest:
+        out_kwargs["shortest"] = None
+    ffmpeg.output(in_v.video, in_a.audio, output_video, **out_kwargs).run(
+        overwrite_output=True, quiet=quiet,
+    )
+    assert is_valid_video_file(output_video), \
+        f"Failed to write mux_audio_video:\n\t{output_video}"
+
+
+def burn_subtitles(
+    input_video: str,
+    subtitles_file: str,
+    output_video: str,
+    force_style: str = None,
+) -> None:
+    """
+    Burn subtitles from an .srt / .vtt / .ass file into the video frames.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the input video file.
+    subtitles_file : str
+        Path to a subtitles file in one of the formats libass understands:
+
+        * **.srt** — plain SubRip. Renders in the libass default style;
+          ``<font color="…">`` tags are honored.
+        * **.vtt** — WebVTT. Cue-class colors (``<c.red>…</c>``) and any
+          inline ``::cue`` rules from a ``STYLE`` block are honored.
+          The companion ``srt2vtt()`` writes both pieces in one shot.
+        * **.ass** / **.ssa** — Advanced SubStation Alpha. All
+          per-cue formatting (font, color, outline, position) is
+          honored as authored.
+
+    output_video : str
+        Path to the output video file (.mp4 recommended).
+    force_style : str, optional
+        ASS-style override forwarded to the ``subtitles`` filter's
+        ``force_style`` argument — e.g.
+        ``"FontName=Helvetica,FontSize=24,PrimaryColour=&H00FFFFFF&"``.
+        Useful for SRT (which has no native styling) or to override a
+        global property of a VTT/ASS file without editing it. Per-cue
+        colors from VTT/ASS still win against ``force_style`` keys they
+        explicitly set.
+
+    Notes
+    -----
+    A single backend (libass through ffmpeg's ``subtitles`` filter)
+    handles all three formats, so there is no need for separate
+    ``burn_srt`` / ``burn_vtt`` / ``burn_ass`` functions. The filter
+    mounts the file by path; we escape ``:`` to ``\\:`` and ``'`` to
+    ``\\'`` so absolute paths on macOS / Windows behave. Video is
+    re-encoded (the filter rewrites every frame), audio is copied if
+    present.
+
+    Examples
+    --------
+    Plain SRT, default style:
+
+    >>> burn_subtitles("clip.mp4", "subs.srt", "captioned.mp4")
+
+    Colored WebVTT (cue classes carry their own colors):
+
+    >>> burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4")
+
+    Force a font + size on top of any source format:
+
+    >>> burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4",
+    ...                force_style="FontName=Helvetica,FontSize=28,Outline=2")
+    """
+    osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
+    osh.checkfile(subtitles_file,
+                  msg=f"Subtitles file not found: {subtitles_file}")
+    quiet = osh.verbosity() <= 0
+
+    # The `subtitles` filter is provided by libass — ffmpeg builds without
+    # `--enable-libass` (some Homebrew formulae, minimal docker images, …)
+    # silently lack it and produce a cryptic "Error parsing filterchain".
+    # Fail fast with an actionable error instead.
+    import subprocess as _sp
+    _filters = _sp.run(["ffmpeg", "-hide_banner", "-filters"],
+                       capture_output=True, text=True, check=False).stdout
+    if "subtitles" not in _filters:
+        raise RuntimeError(
+            "ffmpeg has no `subtitles` filter (libass missing). Rebuild "
+            "ffmpeg with `--enable-libass`, or on macOS: "
+            "`brew uninstall ffmpeg && brew install ffmpeg --HEAD` "
+            "(homebrew-core's bottle ships without libass on some archs)."
+        )
+
+    # Sanity-check the extension so we fail with a friendly message rather
+    # than the AVFilterGraph's generic "Error parsing filterchain".
+    _, _, ext = osh.folder_name_ext(subtitles_file)
+    if ext.lower() not in {"srt", "vtt", "ass", "ssa"}:
+        raise ValueError(
+            f"burn_subtitles only accepts .srt / .vtt / .ass / .ssa "
+            f"(got .{ext}). For other formats, convert first — e.g. "
+            f"srt2vtt() in this same module."
+        )
+
+    # Escape special chars for the subtitles filter — colons mainly, also
+    # backslashes and single quotes. Order matters: backslash first.
+    subs_abs = os.path.abspath(subtitles_file)
+    subs_esc = (subs_abs
+                .replace("\\", "\\\\")
+                .replace(":", r"\:")
+                .replace("'", r"\'"))
+
+    vf = f"subtitles='{subs_esc}'"
+    if force_style:
+        vf += f":force_style='{force_style}'"
+
+    in_stream = ffmpeg.input(input_video)
+    has_audio = video_dimensions(input_video).get("has_sound", False)
+    out_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p",
+                  "preset": "medium", "crf": 20, "vf": vf}
+    if has_audio:
+        out_kwargs["acodec"] = "copy"
+    else:
+        out_kwargs["an"] = None
+    in_stream.output(output_video, **out_kwargs).run(
+        overwrite_output=True, quiet=quiet,
+    )
+    assert is_valid_video_file(output_video), \
+        f"Failed to write burn_subtitles:\n\t{output_video}"
