@@ -991,43 +991,68 @@ def mux_audio_video(
 
 def burn_subtitles(
     input_video: str,
-    srt_file: str,
+    subtitles_file: str,
     output_video: str,
     force_style: str = None,
 ) -> None:
     """
-    Burn subtitles from an .srt file into the video frames (hard-coded).
+    Burn subtitles from an .srt / .vtt / .ass file into the video frames.
 
     Parameters
     ----------
     input_video : str
         Path to the input video file.
-    srt_file : str
-        Path to the .srt subtitles file.
+    subtitles_file : str
+        Path to a subtitles file in one of the formats libass understands:
+
+        * **.srt** — plain SubRip. Renders in the libass default style;
+          ``<font color="…">`` tags are honored.
+        * **.vtt** — WebVTT. Cue-class colors (``<c.red>…</c>``) and any
+          inline ``::cue`` rules from a ``STYLE`` block are honored.
+          The companion ``srt2vtt()`` writes both pieces in one shot.
+        * **.ass** / **.ssa** — Advanced SubStation Alpha. All
+          per-cue formatting (font, color, outline, position) is
+          honored as authored.
+
     output_video : str
         Path to the output video file (.mp4 recommended).
     force_style : str, optional
         ASS-style override forwarded to the ``subtitles`` filter's
         ``force_style`` argument — e.g.
         ``"FontName=Helvetica,FontSize=24,PrimaryColour=&H00FFFFFF&"``.
-        Lets the caller override font, size, color, outline, margins
-        without writing an .ass file.
+        Useful for SRT (which has no native styling) or to override a
+        global property of a VTT/ASS file without editing it. Per-cue
+        colors from VTT/ASS still win against ``force_style`` keys they
+        explicitly set.
 
     Notes
     -----
-    The ``subtitles`` filter mounts the .srt by path, which means the
-    path is interpreted by libavfilter — colons (``:``) and special
-    characters must be escaped. We escape ``:`` to ``\\:`` so absolute
-    paths on macOS / Windows behave. Video is re-encoded (the filter
-    rewrites every frame), audio is copied if present.
+    A single backend (libass through ffmpeg's ``subtitles`` filter)
+    handles all three formats, so there is no need for separate
+    ``burn_srt`` / ``burn_vtt`` / ``burn_ass`` functions. The filter
+    mounts the file by path; we escape ``:`` to ``\\:`` and ``'`` to
+    ``\\'`` so absolute paths on macOS / Windows behave. Video is
+    re-encoded (the filter rewrites every frame), audio is copied if
+    present.
 
     Examples
     --------
-    >>> burn_subtitles("clip.mp4", "subs.srt", "captioned.mp4",
-    ...                force_style="FontSize=28,Outline=2")
+    Plain SRT, default style:
+
+    >>> burn_subtitles("clip.mp4", "subs.srt", "captioned.mp4")
+
+    Colored WebVTT (cue classes carry their own colors):
+
+    >>> burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4")
+
+    Force a font + size on top of any source format:
+
+    >>> burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4",
+    ...                force_style="FontName=Helvetica,FontSize=28,Outline=2")
     """
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
-    osh.checkfile(srt_file, msg=f"SRT file not found: {srt_file}")
+    osh.checkfile(subtitles_file,
+                  msg=f"Subtitles file not found: {subtitles_file}")
     quiet = osh.verbosity() <= 0
 
     # The `subtitles` filter is provided by libass — ffmpeg builds without
@@ -1045,12 +1070,25 @@ def burn_subtitles(
             "(homebrew-core's bottle ships without libass on some archs)."
         )
 
+    # Sanity-check the extension so we fail with a friendly message rather
+    # than the AVFilterGraph's generic "Error parsing filterchain".
+    _, _, ext = osh.folder_name_ext(subtitles_file)
+    if ext.lower() not in {"srt", "vtt", "ass", "ssa"}:
+        raise ValueError(
+            f"burn_subtitles only accepts .srt / .vtt / .ass / .ssa "
+            f"(got .{ext}). For other formats, convert first — e.g. "
+            f"srt2vtt() in this same module."
+        )
+
     # Escape special chars for the subtitles filter — colons mainly, also
     # backslashes and single quotes. Order matters: backslash first.
-    srt_abs = os.path.abspath(srt_file)
-    srt_esc = srt_abs.replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")
+    subs_abs = os.path.abspath(subtitles_file)
+    subs_esc = (subs_abs
+                .replace("\\", "\\\\")
+                .replace(":", r"\:")
+                .replace("'", r"\'"))
 
-    vf = f"subtitles='{srt_esc}'"
+    vf = f"subtitles='{subs_esc}'"
     if force_style:
         vf += f":force_style='{force_style}'"
 
