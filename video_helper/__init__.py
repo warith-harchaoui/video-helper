@@ -8,6 +8,13 @@ from .main import (
     extract_frames,
     dump_frames,
     extract_video_chunk,
+    video_duration,
+    black_video,
+    image_loop_to_video,
+    concat_videos,
+    overlay_image,
+    mux_audio_video,
+    burn_subtitles,
 )
 
 # Define the public API for the library
@@ -20,4 +27,11 @@ __all__ = [
     'extract_frames',
     'dump_frames',
     'extract_video_chunk',
+    'video_duration',
+    'black_video',
+    'image_loop_to_video',
+    'concat_videos',
+    'overlay_image',
+    'mux_audio_video',
+    'burn_subtitles',
 ]
