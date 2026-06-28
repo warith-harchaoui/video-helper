@@ -1,32 +1,54 @@
-[tool.poetry]
-name = "video-helper"
-version = "1.5.0"
-description = "Video Helper is a Python library that provides utility functions for processing video files: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
-authors = ["Warith HARCHAOUI <warithmetics@deraison.ai>"]
-readme = "README.md"
-
-[tool.poetry.dependencies]
-python = ">=3.10,<3.14"
-opencv-python = "^4.10.0.84"
-ffmpeg-python = "^0.2.0"
-vidgear = "^0.3.3"
-os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v1.3.0"}
-# Optional: PyAV unlocks the windowed-sequential + sparse PyAV backend
-# (best default for those access patterns — see SPEED_ANALYSIS.md).
-# Without it, the dispatcher falls back to vidgear / ffmpeg-pipe.
-av = {version = ">=12,<18", optional = true}
-# Optional: torch unlocks destination="torch" (NCHW/CTHW RGB on cpu/mps/cuda).
-torch = {version = ">=2.0,<3", optional = true}
-# Optional: Pillow unlocks destination="pil" (PIL.Image RGB, size=(W, H)).
-pillow = {version = ">=10,<12", optional = true}
-
-[tool.poetry.extras]
-pyav = ["av"]
-torch = ["torch"]
-pil = ["pillow"]
-all = ["av", "torch", "pillow"]
-
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-helper"
+version = "1.5.1"
+description = "Video Helper — utility functions for video processing: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = {text = "BSD-3-Clause"}
+authors = [
+    {name = "Warith HARCHAOUI", email = "warithmetics@deraison.ai"},
+]
+keywords = ["video", "ffmpeg", "opencv", "pyav", "vidgear", "frames", "subtitles", "extraction"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Conversion",
+]
+dependencies = [
+    "os-helper @ git+https://github.com/warith-harchaoui/os-helper.git@v1.3.0",
+    "opencv-python>=4.10.0.84,<5",
+    "ffmpeg-python>=0.2.0,<0.3",
+    "vidgear>=0.3.3,<1",
+]
+
+[project.optional-dependencies]
+# PyAV unlocks the windowed-sequential + sparse PyAV backend (best default
+# for those access patterns — see SPEED_ANALYSIS.md). Without it the
+# dispatcher falls back to VidGear / ffmpeg-pipe.
+pyav = ["av>=12,<18"]
+# Torch unlocks destination="torch" (NCHW/CTHW RGB on cpu/mps/cuda).
+torch = ["torch>=2.0,<3"]
+# Pillow unlocks destination="pil" (PIL.Image RGB, size=(W, H)).
+pil = ["pillow>=10,<12"]
+all = ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12"]
+dev = ["pytest>=8", "av>=12,<18"]
+
+[project.urls]
+Homepage = "https://github.com/warith-harchaoui/video-helper"
+Issues = "https://github.com/warith-harchaoui/video-helper/issues"
+
+[tool.setuptools.packages.find]
+include = ["video_helper*"]
+exclude = ["tests*"]
