@@ -80,98 +80,85 @@ def _generate_css_from_colors(color_codes: Set[str], css_file_path: str) -> None
     -----
     >>> unique_colors = {'#FF0000', '#00FF00', '#0000FF'}
     >>> css_file = "styles.css"
-    >>> generate_css_from_colors(unique_colors, css_file)
-    
+    >>> _generate_css_from_colors(unique_colors, css_file)
     """
     with open(css_file_path, 'w', encoding='utf-8') as css_file:
         for color in color_codes:
             # Strip the '#' from the color code for the class name and use the hex code for styling
             class_name = color.replace('#', '').lower()
             css_file.write(f"::cue(.{class_name}) {{ color: {color}; }}\n")
-    
-    print(f"CSS file generated: {css_file_path}")
 
-def srt2vtt(srt_file_path: str, vtt_file_path: str=None, css_file_path: str=None) -> None:
+    logging.info(f"CSS file generated: {css_file_path}")
+
+def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = None) -> None:
     """
-    Converts an SRT subtitle file to a WebVTT file, preserving font colors and generating a CSS file.
-    
+    Convert an SRT subtitle file to WebVTT, preserving font colors and emitting a companion CSS file.
+
+    Any ``<font color="#RRGGBB">…</font>`` tag in the SRT is rewritten as a
+    WebVTT ``<c.<hex_lowercase>>…</c>`` cue class, and a stylesheet binding
+    each class to its color is written next to the VTT.
+
     Parameters
     ----------
     srt_file_path : str
         Path to the input .srt file.
     vtt_file_path : str, optional
-        Path to the output .vtt file.
-    css_file_path : str,  optional
-        Path to the output CSS file that will be generated. This file will contain styles for each unique color code.
+        Path to the output .vtt file. Defaults to ``<srt_stem>.vtt`` next
+        to the input.
+    css_file_path : str, optional
+        Path to the output .css file. Defaults to ``<srt_stem>.css`` next
+        to the input.
 
-    Usage
-    -----
-    >>> srt_file = "subtitles.srt"
-    >>> vtt_file = "subtitles.vtt"
-    >>> css_file = "styles.css"
-    >>> convert_srt_to_vtt_with_colors_and_css(srt_file, vtt_file, css_file)
+    Examples
+    --------
+    >>> srt2vtt("subtitles.srt")
+    >>> srt2vtt("subtitles.srt", "out.vtt", "out.css")
     """
-    # Extract all unique hex colors from the .srt file
     unique_colors = extract_unique_colors(srt_file_path)
 
-    f,b,e = osh.folder_name_ext(srt_file_path)
+    folder, stem, _ = osh.folder_name_ext(srt_file_path)
+    if osh.emptystring(vtt_file_path):
+        vtt_file_path = osh.join([folder, stem + ".vtt"])
+    if osh.emptystring(css_file_path):
+        css_file_path = osh.join([folder, stem + ".css"])
 
-    if not vtt_file_path:
-        vtt_file_path = osh.join([f,b+".vtt"])
-    
-    if not css_file_path:
-        css_file_path = osh.join([f,b+".css"])
-    
-    # Generate the CSS file for these colors
     _generate_css_from_colors(unique_colors, css_file_path)
-    
+
     def convert_color_tags(line: str) -> str:
-        """
-        Convert HTML <font color> tags to WebVTT-compatible <c.classname> tags.
-        
-        Parameters
-        ----------
-        line : str
-            The line of subtitle text containing potential <font> tags.
-        
-        Returns
-        -------
-        str
-            The line with converted WebVTT <c> tags.
-        """
-        # Regular expression to match <font color="#RRGGBB">...</font>
-        color_tag_pattern = re.compile(r'<font color="(#\w{6})">(.*?)<\/font>', re.IGNORECASE)
-        
+        """Rewrite ``<font color="#RRGGBB">…</font>`` as ``<c.rrggbb>…</c>``."""
+        color_tag_pattern = re.compile(
+            r'<font color="(#\w{6})">(.*?)<\/font>', re.IGNORECASE
+        )
+
         def replace_color(match: re.Match) -> str:
-            color_code = match.group(1).upper()  # Extract color code and convert to uppercase
-            text = match.group(2)  # Extract the text inside the font tag
-            # Create a WebVTT <c.classname> tag where classname is based on the hex code
-            class_name = color_code.replace('#', '').lower()
-            return f'<c.{class_name}>{text}</c>'
-        
+            color_code = match.group(1).upper()
+            text = match.group(2)
+            class_name = color_code.replace("#", "").lower()
+            return f"<c.{class_name}>{text}</c>"
+
         return color_tag_pattern.sub(replace_color, line)
 
-    # Read the .srt file and convert it to .vtt
-    with open(srt_file_path, 'r', encoding='utf-8') as srt_file:
+    with open(srt_file_path, "r", encoding="utf-8") as srt_file:
         lines = srt_file.readlines()
 
-    with open(vtt_file_path, 'w', encoding='utf-8') as vtt_file:
-        # Write the WebVTT header
+    with open(vtt_file_path, "w", encoding="utf-8") as vtt_file:
         vtt_file.write("WEBVTT\n\n")
-        
         for line in lines:
-            # Convert <font color> tags to WebVTT <c.classname> tags
             line = convert_color_tags(line)
-            # Replace commas with periods in the timecodes
-            if '-->' in line:
-                line = line.replace(',', '.')
+            # WebVTT uses '.' for the fractional separator in timecodes; SRT uses ','.
+            if "-->" in line:
+                line = line.replace(",", ".")
             vtt_file.write(line)
 
-    print(f"Conversion complete! WebVTT saved as: {vtt_file_path}")
+    logging.info(f"WebVTT saved: {vtt_file_path}")
 
 def is_valid_video_file(video_file: str) -> bool:
     """
-    Check if the input video file is valid.
+    Check that ``video_file`` exists, has a known video extension, and contains a video stream.
+
+    Combines an extension check (against :data:`video_extensions`) with an
+    ``ffprobe`` invocation so both a fake ``.mp4`` (no video stream) and a
+    real video renamed to ``.xyz`` are rejected.
 
     Parameters
     ----------
@@ -181,21 +168,19 @@ def is_valid_video_file(video_file: str) -> bool:
     Returns
     -------
     bool
-        True if the video file is valid, False otherwise.
+        True iff the file exists, ffprobe finds at least one video stream,
+        and the extension is in :data:`video_extensions`.
     """
-    global video_extensions
-    valid = False
-    # Check if the file exists
     if not osh.file_exists(video_file):
-        valid = False
         logging.info(f"Video file not found: {video_file}")
-        return valid
+        return False
 
+    valid = False
     try:
         probe = ffmpeg.probe(video_file)
-        video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
+        next(s for s in probe["streams"] if s["codec_type"] == "video")
         valid = True
-    except Exception as e:
+    except Exception:
         valid = False
 
     _, _, ext = osh.folder_name_ext(video_file)
@@ -203,7 +188,6 @@ def is_valid_video_file(video_file: str) -> bool:
         valid = False
 
     logging.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
-
     return valid
 
 
@@ -524,8 +508,6 @@ def extract_frames(
         stream.stop()  # Ensure the video stream is properly closed
 
 
-
-# Replace in dump_frames function
 def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None:
     """
     Save frames to a video file.
@@ -635,7 +617,10 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
     if is_valid_video_file(output_video):
         logging.info(f"Video chunk extracted successfully:\n\t{output_video}")
     else:
-        raise Exception(f"Video could not be cropped (original: {input_video}, start: {sample_start}, end: {sample_end}, duration: {duration})")
+        raise RuntimeError(
+            f"Video could not be cropped (original: {input_video}, "
+            f"start: {sample_start}, end: {sample_end}, duration: {duration})"
+        )
 
 # ──────────────────────────────────────────────────────────────────────────
 #  Pipeline helpers — composition primitives shared by video editors that
@@ -1115,6 +1100,17 @@ def burn_subtitles(
                   msg=f"Subtitles file not found: {subtitles_file}")
     quiet = osh.verbosity() <= 0
 
+    # Check the obvious user error first (wrong file format) so callers on a
+    # libass-less ffmpeg still get a clear ValueError on a bogus path instead
+    # of the generic "libass missing" RuntimeError.
+    _, _, ext = osh.folder_name_ext(subtitles_file)
+    if ext.lower() not in {"srt", "vtt", "ass", "ssa"}:
+        raise ValueError(
+            f"burn_subtitles only accepts .srt / .vtt / .ass / .ssa "
+            f"(got .{ext}). For other formats, convert first — e.g. "
+            f"srt2vtt() in this same module."
+        )
+
     # The `subtitles` filter is provided by libass — ffmpeg builds without
     # `--enable-libass` (some Homebrew formulae, minimal docker images, …)
     # silently lack it and produce a cryptic "Error parsing filterchain".
@@ -1130,16 +1126,6 @@ def burn_subtitles(
             "(homebrew-core's bottle ships without libass on some archs)."
         )
 
-    # Sanity-check the extension so we fail with a friendly message rather
-    # than the AVFilterGraph's generic "Error parsing filterchain".
-    _, _, ext = osh.folder_name_ext(subtitles_file)
-    if ext.lower() not in {"srt", "vtt", "ass", "ssa"}:
-        raise ValueError(
-            f"burn_subtitles only accepts .srt / .vtt / .ass / .ssa "
-            f"(got .{ext}). For other formats, convert first — e.g. "
-            f"srt2vtt() in this same module."
-        )
-
     # Escape special chars for the subtitles filter — colons mainly, also
     # backslashes and single quotes. Order matters: backslash first.
     subs_abs = os.path.abspath(subtitles_file)
@@ -1149,7 +1135,7 @@ def burn_subtitles(
                 .replace("'", r"\'"))
 
     vf = f"subtitles='{subs_esc}'"
-    if force_style:
+    if not osh.emptystring(force_style):
         vf += f":force_style='{force_style}'"
 
     in_stream = ffmpeg.input(input_video)
