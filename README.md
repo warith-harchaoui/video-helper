@@ -37,12 +37,14 @@ finally we still discuss between different python package managers and try to su
 
 
 ```bash
-pip install --force-reinstall --no-cache-dir git+https://github.com/warith-harchaoui/video-helper.git@main
+pip install --force-reinstall --no-cache-dir \
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.3.0
 ```
 
-(Once a release is tagged, pin to a tag, e.g. `git+https://github.com/warith-harchaoui/video-helper.git@v1.0.0`.)
-
 # Usage
+
+For the full catalog of recipes, see [📋 EXAMPLES.md](EXAMPLES.md).
+
 Here’s an example of how to use Video Helper to load, convert, and extract frames from a video file:
 
 
@@ -113,24 +115,33 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 ```
 
 # Features
-- Video Validation: Check if video files are valid using ffmpeg.
-- Video Conversion: Convert videos to different formats, adjust frame rates, and resize while - maintaining aspect ratios.
-- Frame Extraction: Extract frames from video files with optional frame skipping and time range selection.
-- Subtitle Conversion: Convert SRT subtitles to WebVTT with support for preserving and styling font colors using CSS.
-- Frame Processing: Iterate through video frames for custom processing (e.g., image analysis or machine learning).
+- **Video validation**: `is_valid_video_file` — extension + `ffmpeg.probe` round-trip.
+- **Conversion**: `video_converter` — re-encode, resample fps, resize (aspect-preserving), strip audio.
+- **Frame access**: `extract_frames` (generator with time/index range, stabilization, sampling) and `dump_frames` (list → video).
+- **Temporal crop**: `extract_video_chunk`, `video_duration`.
+- **Pipeline primitives**: `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
 
 # API Reference
 
 | Function | Signature | Description |
 | --- | --- | --- |
-| `is_valid_video_file` | `(video_file: str) -> bool` | Returns `True` if the file exists, has a known video extension, and `ffmpeg.probe` finds a video stream. |
+| `is_valid_video_file` | `(video_file: str) -> bool` | True iff the file exists, has a known video extension, and `ffmpeg.probe` finds a video stream. |
 | `video_dimensions` | `(video_file: str) -> dict` | Returns `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
-| `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encodes a video with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. Output format follows the output extension. |
-| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None) -> Iterator[np.ndarray]` | Generator yielding frames in the given range. `start_instant`/`end_instant` (seconds) override the index form; `frame_interval` (seconds) overrides `frame_step`. Uses VidGear, with optional video stabilization. |
-| `dump_frames` | `(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None` | Writes a list of RGB frames to a video file (writes PNGs to a temp folder then encodes with ffmpeg). |
-| `extract_video_chunk` | `(input_video, sample_start: float, sample_end: float, output_video: str) -> None` | Temporal crop from `sample_start` to `sample_end` (seconds). |
-| `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None) -> None` | Converts SRT to WebVTT. Extracts `<font color="#RRGGBB">` tags into a sidecar CSS file using `::cue(.rrggbb)` rules. |
-| `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Returns the set of unique hex color codes found in `<font color="...">` tags of an SRT file. |
+| `video_duration` | `(input_video: str) -> float` | Duration in seconds (thin wrapper over `video_dimensions`). |
+| `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encode with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None) -> Iterator[np.ndarray]` | Generator yielding RGB frames in the given range. `start_instant`/`end_instant` (seconds) override the index form; `frame_interval` (seconds) overrides `frame_step`. |
+| `dump_frames` | `(frames_list, output_movie, fps=30)` | Write a list of RGB frames to a video file. |
+| `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video)` | Temporal crop from `sample_start` to `sample_end` (seconds). |
+| `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Generate a silent solid-black video. Odd dimensions are rounded down. |
+| `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Loop a still image into a silent video; optional letterboxing. |
+| `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatenate clips end-to-end via the ffmpeg concat demuxer. |
+| `overlay_image` | `(input_video, image, output_video, x="0", y="0", scale_width=None)` | Overlay a PNG/JPG (alpha supported); `x` / `y` accept ffmpeg expressions for time-varying motion. |
+| `extract_audio_track` | `(input_video, output_audio, sample_rate=44100, channels=2, encoding="pcm_s16le")` | Pull the audio stream out of a video file. |
+| `mux_audio_video` | `(input_video, input_audio, output_video, audio_codec="aac", audio_bitrate="192k", shortest=False)` | Replace the audio track of a (typically silent) video. |
+| `burn_subtitles` | `(input_video, subtitles_file, output_video, force_style=None)` | Burn `.srt` / `.vtt` / `.ass` / `.ssa` into the video frames (requires ffmpeg built with libass). |
+| `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None)` | Convert SRT → WebVTT, lifting `<font color>` tags into a sidecar CSS file. |
+| `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Set of unique hex colors found in `<font color>` tags of an SRT. |
 
 All frames are numpy arrays of shape `(height, width, 3)` with pixel values in `[0, 255]`.
 
