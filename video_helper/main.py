@@ -741,18 +741,65 @@ def _extract_via_ffmpeg_pipe(
 
 # ──────────────────────────────────────────────────────────────────────────
 #  Destination converter — yields frames in the user's preferred form
-#  (numpy ndarray or torch tensor on a chosen device), optionally batched
-#  to amortize the host→device transfer.
+#  with the **conventional** colorspace and axis layout for that framework.
 #
-#  When ``destination="torch"``, torch is imported lazily — the helper
-#  itself does NOT take torch as a dependency. Install with the
-#  ``[torch]`` extra or BYO torch.
+#  Shapes & colorspaces (the cheat sheet)
+#  ----------------------------------------
+#  Notation: N = batch size, T = time (frames in a video), C = channels
+#  (always 3), H = height, W = width.
+#
+#  destination="numpy"  (OpenCV-compatible: BGR uint8, channels last)
+#  ┌──────────┬─────────────┬────────────────────────┐
+#  │ layout   │ batch_size  │ shape (BGR uint8)      │
+#  ├──────────┼─────────────┼────────────────────────┤
+#  │  any     │   None      │ (H, W, 3)       HWC    │
+#  │  image   │   N         │ (N, H, W, 3)    NHWC   │
+#  │  video   │   N         │ (N, H, W, 3)    THWC   │  (same memory as NHWC; T == N)
+#  └──────────┴─────────────┴────────────────────────┘
+#
+#  destination="torch"  (PyTorch-conventional: RGB uint8, channels first)
+#  ┌──────────┬─────────────┬────────────────────────┐
+#  │ layout   │ batch_size  │ shape (RGB uint8)      │
+#  ├──────────┼─────────────┼────────────────────────┤
+#  │  any     │   None      │ (3, H, W)       CHW    │
+#  │  image   │   N         │ (N, 3, H, W)    NCHW   │  (batch of independent images)
+#  │  video   │   N         │ (3, N, H, W)    CTHW   │  (single video clip, T == N)
+#  └──────────┴─────────────┴────────────────────────┘
+#
+#  destination="pil"  (PIL/Pillow convention: RGB, size = (W, H), no batch)
+#  Each yield is a single ``PIL.Image.Image`` with ``mode="RGB"`` and
+#  ``size = (W, H)``. ``batch_size`` is not supported (Pillow has no
+#  batched image type); ``layout`` is ignored. Pillow is imported lazily.
+#  Use this destination for code that calls PIL/Pillow methods (filters,
+#  paste, draw, …); otherwise numpy or torch are cheaper.
+#
+#  Notes:
+#  - ``layout`` only matters when ``batch_size`` is set (for numpy/torch).
+#    Without batching, each yield is a single frame (HWC numpy / CHW
+#    torch / PIL image) regardless.
+#  - For numpy the layout choice is purely *semantic* (NHWC and THWC
+#    share the same memory). For torch it's a real permutation
+#    (NCHW vs CTHW differ in axis order).
+#  - The BGR→RGB conversion for torch happens via ``tensor.flip(-1)``
+#    on the channel axis (cheap, view-style until ``.contiguous()``).
+#  - When ``destination`` is ``"torch"`` / ``"pil"``, the corresponding
+#    library is imported lazily — video-helper itself does NOT take torch
+#    or Pillow as a dependency. Install via the ``[torch]`` / ``[pil]``
+#    extras (or bring your own).
 # ──────────────────────────────────────────────────────────────────────────
 
 
 def _have_torch() -> bool:
     try:
         import torch  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _have_pil() -> bool:
+    try:
+        import PIL.Image  # noqa: F401
         return True
     except ImportError:
         return False
@@ -774,33 +821,78 @@ def _resolve_torch_device(device: str):
     return torch.device(device)
 
 
+def _bgr_hwc_to_torch_chw_rgb(np_frame: np.ndarray, device):
+    """Convert one numpy HWC BGR uint8 frame to a torch CHW RGB uint8 tensor."""
+    import torch  # lazy
+    # flip(-1): reverse the channel axis (BGR → RGB).
+    # permute(2, 0, 1): HWC → CHW.
+    # contiguous(): force a single copy so downstream ops don't trip on a
+    # non-contiguous tensor; the .to(device) call below would do its own
+    # copy anyway, so this is essentially free.
+    return torch.from_numpy(np_frame).flip(-1).permute(2, 0, 1).contiguous().to(device)
+
+
+def _bgr_to_torch_image_batch(np_batch_nhwc: np.ndarray, device):
+    """Convert numpy NHWC BGR uint8 batch → torch NCHW RGB uint8 on device."""
+    import torch
+    return (
+        torch.from_numpy(np_batch_nhwc)
+        .flip(-1)                  # NHWC BGR → NHWC RGB
+        .permute(0, 3, 1, 2)       # NHWC → NCHW
+        .contiguous()
+        .to(device)
+    )
+
+
+def _bgr_to_torch_video_clip(np_clip_thwc: np.ndarray, device):
+    """Convert numpy THWC BGR uint8 clip → torch CTHW RGB uint8 on device."""
+    import torch
+    return (
+        torch.from_numpy(np_clip_thwc)
+        .flip(-1)                  # THWC BGR → THWC RGB
+        .permute(3, 0, 1, 2)       # THWC → CTHW
+        .contiguous()
+        .to(device)
+    )
+
+
 def _to_destination(
     np_frames: Iterator[np.ndarray],
     destination: str,
     device: str,
     batch_size: Optional[int],
+    layout: str,
 ):
     """Convert/batch the upstream numpy-frame iterator into the requested destination.
 
-    - ``destination="numpy"`` + no batch  → yields ``np.ndarray`` (H, W, 3) (no-op pass-through)
-    - ``destination="numpy"`` + batch     → yields ``np.ndarray`` (N, H, W, 3)
-    - ``destination="torch"`` + no batch  → yields ``torch.Tensor`` (H, W, 3) on device
-    - ``destination="torch"`` + batch     → yields ``torch.Tensor`` (N, H, W, 3) on device
-                                            (single host→device transfer per batch)
-
-    Frames stay in BGR uint8 — same convention as the backends.
+    See the cheat-sheet at the top of this section for shapes / colorspaces.
     """
-    if destination not in ("numpy", "torch"):
+    if destination not in ("numpy", "torch", "pil"):
         raise ValueError(
-            f"Unknown destination {destination!r}; expected 'numpy' or 'torch'"
+            f"Unknown destination {destination!r}; "
+            "expected 'numpy', 'torch', or 'pil'"
+        )
+    if destination == "pil" and batch_size is not None:
+        raise ValueError(
+            "destination='pil' does not support batch_size — Pillow has no "
+            "batched image type. Iterate per-frame, or use destination='numpy' "
+            "/ 'torch' for batched tensors."
+        )
+    if layout not in ("image", "video"):
+        raise ValueError(
+            f"Unknown layout {layout!r}; expected 'image' or 'video'"
         )
     if batch_size is not None and batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
 
+    # ------------ destination="numpy" -----------------------------------
     if destination == "numpy":
         if batch_size is None:
+            # HWC BGR uint8 — pass-through, no copy.
             yield from np_frames
             return
+        # NHWC == THWC for numpy (only the semantic name differs); we stack
+        # along axis 0 regardless of layout.
         batch: list = []
         for frame in np_frames:
             batch.append(frame)
@@ -811,33 +903,52 @@ def _to_destination(
             yield np.stack(batch, axis=0)
         return
 
-    # destination == "torch"
+    # ------------ destination="pil" -------------------------------------
+    if destination == "pil":
+        if not _have_pil():
+            raise ImportError(
+                "destination='pil' requires Pillow. Install with: "
+                "pip install 'video-helper[pil]' (or bring your own PIL)"
+            )
+        from PIL import Image  # lazy
+        for frame in np_frames:
+            # Flip BGR → RGB before handing to PIL (which is RGB-native).
+            yield Image.fromarray(frame[:, :, ::-1])
+        return
+
+    # ------------ destination="torch" -----------------------------------
     if not _have_torch():
         raise ImportError(
             "destination='torch' requires PyTorch. Install with: pip install 'video-helper[torch]' "
             "(or bring your own torch)"
         )
-    import torch  # lazy
 
     dev = _resolve_torch_device(device)
+
     if batch_size is None:
+        # CHW RGB uint8 per yielded frame. layout is irrelevant here
+        # (each yield is a single frame, no time / batch axis).
         for frame in np_frames:
-            # torch.from_numpy shares memory with the ndarray; .to(device)
-            # always copies. For per-frame yield the host→device transfer
-            # happens N times — pass batch_size to amortize.
-            yield torch.from_numpy(frame).to(dev)
+            yield _bgr_hwc_to_torch_chw_rgb(frame, dev)
         return
 
+    # Batched: layout chooses the axis convention.
     batch = []
     for frame in np_frames:
         batch.append(frame)
         if len(batch) == batch_size:
-            # Stack on CPU first (avoids per-frame transfer), then ship the
-            # whole batch to device in one call.
-            yield torch.from_numpy(np.stack(batch, axis=0)).to(dev)
+            stacked = np.stack(batch, axis=0)        # NHWC == THWC, BGR
+            if layout == "image":
+                yield _bgr_to_torch_image_batch(stacked, dev)    # NCHW RGB
+            else:  # "video"
+                yield _bgr_to_torch_video_clip(stacked, dev)     # CTHW RGB
             batch = []
     if batch:
-        yield torch.from_numpy(np.stack(batch, axis=0)).to(dev)
+        stacked = np.stack(batch, axis=0)
+        if layout == "image":
+            yield _bgr_to_torch_image_batch(stacked, dev)
+        else:
+            yield _bgr_to_torch_video_clip(stacked, dev)
 
 
 def extract_frames(
@@ -856,6 +967,7 @@ def extract_frames(
     destination: str = "numpy",
     device: str = "cpu",
     batch_size: Optional[int] = None,
+    layout: str = "image",
 ) -> Iterator:
     """
     Extract frames from a video, dispatching to the best available backend.
@@ -911,21 +1023,47 @@ def extract_frames(
         apply (the frames go through one numpy stack and then host→device
         in one shot — see SPEED_ANALYSIS.md).
     destination : str, optional
-        Where frames land. ``"numpy"`` (default) yields ``np.ndarray``
-        (H, W, 3) BGR uint8 — backward-compatible behavior.
-        ``"torch"`` yields ``torch.Tensor`` (H, W, 3) BGR uint8 on
-        ``device`` (PyTorch is imported lazily; raises ImportError if
-        absent).
+        Where frames land. Default ``"numpy"``.
+
+        - ``"numpy"`` — **BGR uint8** ``np.ndarray`` in OpenCV's
+          channels-last layout.
+        - ``"torch"`` — **RGB uint8** ``torch.Tensor`` in PyTorch's
+          channels-first layout. PyTorch imported lazily.
+        - ``"pil"`` — ``PIL.Image.Image`` (mode ``"RGB"``, ``size=(W, H)``
+          per Pillow convention). Pillow imported lazily.
+          ``batch_size`` not supported (Pillow has no batched type).
+
+        See the layout table for exact shapes.
     device : str, optional
         Target device when ``destination="torch"``. ``"cpu"`` (default),
         ``"mps"`` (Apple Silicon), ``"cuda"`` (NVIDIA), or ``"auto"``
         (cuda > mps > cpu). Ignored when ``destination="numpy"``.
     batch_size : int, optional
-        If provided, yield a batched tensor / array of shape
-        ``(N, H, W, 3)`` per batch instead of one frame at a time. The
-        last batch may be smaller. Strongly recommended with
-        ``destination="torch"`` + GPU device: one host→device transfer
-        per batch instead of one per frame (typical 5-20× win).
+        If provided, yield a batched tensor / array per batch instead of
+        one frame at a time. The last batch may be smaller. Strongly
+        recommended with ``destination="torch"`` + GPU device: one
+        host→device transfer per batch instead of one per frame
+        (typical 5-20× win).
+    layout : str, optional
+        Axis convention for **batched** yields (ignored when
+        ``batch_size`` is None and for ``destination="pil"``).
+        ``"image"`` (default) — each batch is a stack of independent
+        images; ``"video"`` — each batch is a video clip with a time
+        axis.
+
+        Concrete shapes per (destination, layout, batch_size):
+
+        ============ ============== ============= ===========================================
+        destination  layout         batch_size    yield
+        ============ ============== ============= ===========================================
+        ``"numpy"``  any            None          ``(H, W, 3)``      HWC, BGR uint8
+        ``"numpy"``  ``"image"``    N             ``(N, H, W, 3)``   NHWC, BGR uint8
+        ``"numpy"``  ``"video"``    N             ``(N, H, W, 3)``   THWC, BGR uint8 (same mem; T == N)
+        ``"torch"``  any            None          ``(3, H, W)``      CHW, RGB uint8
+        ``"torch"``  ``"image"``    N             ``(N, 3, H, W)``   NCHW, RGB uint8 (batch of images)
+        ``"torch"``  ``"video"``    N             ``(3, N, H, W)``   CTHW, RGB uint8 (video clip; T == N)
+        ``"pil"``    n/a            **forbidden** ``PIL.Image``      mode=``"RGB"``, size=``(W, H)``
+        ============ ============== ============= ===========================================
 
     Yields
     ------
@@ -1032,7 +1170,7 @@ def extract_frames(
     # Final stage: convert/batch into the requested destination form.
     # The fast-path destination="numpy" + batch_size=None is a no-op
     # pass-through (no extra copy, no stacking).
-    yield from _to_destination(np_iter, destination, device, batch_size)
+    yield from _to_destination(np_iter, destination, device, batch_size, layout)
 
 
 def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None:

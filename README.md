@@ -38,7 +38,7 @@ finally we still discuss between different python package managers and try to su
 
 ```bash
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.0
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1
 ```
 
 # Usage

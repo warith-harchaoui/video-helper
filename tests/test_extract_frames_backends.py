@@ -326,7 +326,8 @@ def test_batch_size_rejects_zero(clip):
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_cpu_unbatched(clip):
+def test_torch_destination_cpu_unbatched_chw_rgb(clip):
+    """Unbatched torch yields CHW RGB uint8 (PyTorch convention)."""
     import torch
     frames = list(extract_frames(
         clip, start_instant=0.0, end_instant=0.5,
@@ -336,22 +337,25 @@ def test_torch_destination_cpu_unbatched(clip):
     for t in frames:
         assert isinstance(t, torch.Tensor)
         assert t.dtype == torch.uint8
-        assert tuple(t.shape) == (64, 64, 3)
+        # CHW (channels-first), NOT HWC.
+        assert tuple(t.shape) == (3, 64, 64)
         assert t.device.type == "cpu"
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_batched(clip):
+def test_torch_destination_image_batch_nchw(clip):
+    """layout='image' + batch yields NCHW RGB (PyTorch batch-of-images)."""
     import torch
     batches = list(extract_frames(
         clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-        destination="torch", device="cpu", batch_size=4,
+        destination="torch", device="cpu", batch_size=4, layout="image",
     ))
     assert len(batches) > 0
     total = 0
     for b in batches:
         assert isinstance(b, torch.Tensor)
-        assert b.ndim == 4 and tuple(b.shape[1:]) == (64, 64, 3)
+        # NCHW: (N, 3, H, W).
+        assert b.ndim == 4 and b.shape[1] == 3 and tuple(b.shape[2:]) == (64, 64)
         assert b.shape[0] <= 4
         total += b.shape[0]
     unbatched = list(extract_frames(
@@ -360,19 +364,54 @@ def test_torch_destination_batched(clip):
     assert total == len(unbatched)
 
 
-@pytest.mark.skipif(
-    not _have_torch(),
-    reason="torch not installed",
-)
+@pytest.mark.skipif(not _have_torch(), reason="torch not installed")
+def test_torch_destination_video_batch_cthw(clip):
+    """layout='video' + batch yields CTHW RGB (PyTorch video clip)."""
+    import torch
+    batches = list(extract_frames(
+        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
+        destination="torch", device="cpu", batch_size=4, layout="video",
+    ))
+    assert len(batches) > 0
+    total_T = 0
+    for b in batches:
+        # CTHW: (3, T, H, W).
+        assert b.ndim == 4 and b.shape[0] == 3 and tuple(b.shape[2:]) == (64, 64)
+        assert b.shape[1] <= 4
+        total_T += b.shape[1]
+    unbatched = list(extract_frames(
+        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
+    ))
+    assert total_T == len(unbatched)
+
+
+@pytest.mark.skipif(not _have_torch(), reason="torch not installed")
+def test_torch_destination_bgr_to_rgb_conversion(clip):
+    """The channel flip BGR→RGB must actually happen."""
+    import torch
+    # Take one frame as numpy (BGR) and as torch (RGB), verify the channel
+    # values are reversed.
+    np_frame = next(iter(extract_frames(clip, frame_indices=[0])))
+    th_frame = next(iter(extract_frames(
+        clip, frame_indices=[0], destination="torch", device="cpu",
+    )))
+    # numpy: (H, W, 3) BGR; torch: (3, H, W) RGB.
+    # Pixel (0, 0): numpy[0,0] == [B,G,R]; torch[:,0,0] == [R,G,B] — reversed.
+    np_pixel = np_frame[0, 0]            # (3,) [B, G, R]
+    th_pixel = th_frame[:, 0, 0]         # (3,) [R, G, B]
+    assert int(np_pixel[0]) == int(th_pixel[2])  # B in numpy == B (idx 2) in torch
+    assert int(np_pixel[1]) == int(th_pixel[1])  # G unchanged
+    assert int(np_pixel[2]) == int(th_pixel[0])  # R in numpy (idx 2) == R (idx 0) in torch
+
+
+@pytest.mark.skipif(not _have_torch(), reason="torch not installed")
 def test_torch_destination_auto_device_resolves(clip):
     """device='auto' must resolve to a real torch device."""
-    import torch
     frames = list(extract_frames(
         clip, start_instant=0.0, end_instant=0.2,
         destination="torch", device="auto",
     ))
     assert len(frames) > 0
-    # The device picked depends on the box (cuda > mps > cpu); just verify it's one of these.
     assert frames[0].device.type in {"cpu", "mps", "cuda"}
 
 
@@ -381,14 +420,72 @@ def test_torch_destination_auto_device_resolves(clip):
                               and __import__("torch").backends.mps.is_available()),
     reason="torch + MPS required",
 )
-def test_torch_destination_mps_batched(clip):
-    """On Apple Silicon: tensors land on MPS, batched transfer is the right pattern."""
-    import torch
+def test_torch_destination_mps_image_batched(clip):
+    """On Apple Silicon: NCHW tensors land on MPS."""
     batches = list(extract_frames(
         clip, start_instant=0.0, end_instant=1.0,
-        destination="torch", device="mps", batch_size=8,
+        destination="torch", device="mps", batch_size=8, layout="image",
     ))
     assert len(batches) > 0
     for b in batches:
         assert b.device.type == "mps"
-        assert b.ndim == 4
+        # NCHW
+        assert b.shape[1] == 3
+
+
+# ---------------------------------------------------------------------------
+# destination="pil"
+# ---------------------------------------------------------------------------
+
+
+def _have_pil() -> bool:
+    try:
+        import PIL.Image  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+@pytest.mark.skipif(not _have_pil(), reason="Pillow not installed")
+def test_pil_destination_rgb_size_wh(clip):
+    """PIL: yields PIL.Image (RGB mode, size=(W, H))."""
+    from PIL import Image
+    frames = list(extract_frames(
+        clip, start_instant=0.0, end_instant=0.3,
+        destination="pil",
+    ))
+    assert len(frames) > 0
+    for im in frames:
+        assert isinstance(im, Image.Image)
+        assert im.mode == "RGB"
+        # PIL.size is (width, height), NOT (height, width).
+        assert im.size == (64, 64)
+
+
+@pytest.mark.skipif(not _have_pil(), reason="Pillow not installed")
+def test_pil_destination_rejects_batch_size(clip):
+    with pytest.raises(ValueError, match="batch_size"):
+        list(extract_frames(
+            clip, start_instant=0.0, end_instant=0.2,
+            destination="pil", batch_size=4,
+        ))
+
+
+def test_destination_pil_raises_when_pillow_absent(clip):
+    if _have_pil():
+        pytest.skip("Pillow is installed; can't simulate absence")
+    with pytest.raises(ImportError, match="Pillow"):
+        list(extract_frames(clip, start_instant=0.0, end_instant=0.2, destination="pil"))
+
+
+# ---------------------------------------------------------------------------
+# layout validation
+# ---------------------------------------------------------------------------
+
+
+def test_layout_rejects_unknown(clip):
+    with pytest.raises(ValueError, match="layout"):
+        list(extract_frames(
+            clip, start_instant=0.0, end_instant=0.2,
+            destination="numpy", batch_size=2, layout="bogus",
+        ))

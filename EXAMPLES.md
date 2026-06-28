@@ -182,49 +182,64 @@ frames = list(vh.extract_frames("clip.mp4", backend="pyav", hwaccel="videotoolbo
 
 `hwaccel` is ignored by `vidgear` (OpenCV doesn't surface it cleanly).
 
-### Destination: numpy or torch tensors
+### Destination: numpy, torch, or PIL
 
-By default, `extract_frames` yields BGR uint8 `numpy.ndarray` of shape
-`(H, W, 3)` — same convention as OpenCV. For ML pipelines you can
-yield `torch.Tensor` directly (lazy torch import; raises `ImportError`
-if torch isn't installed):
+`extract_frames` honors the **conventional** colorspace and axis layout
+for the destination framework:
+
+| Destination  | Colorspace | Per-frame shape | Batched shape (`batch_size=N`)                    |
+|---|---|---|---|
+| `"numpy"` (default, OpenCV) | **BGR** uint8 | `(H, W, 3)` HWC | `(N, H, W, 3)` NHWC (`layout="image"`) **or** THWC (`layout="video"`) — same memory |
+| `"torch"` (PyTorch)         | **RGB** uint8 | `(3, H, W)` CHW | `(N, 3, H, W)` NCHW (`layout="image"`) **or** `(3, N, H, W)` CTHW (`layout="video"`) |
+| `"pil"` (Pillow)            | **RGB**       | `PIL.Image`, `size=(W, H)` | not supported (Pillow has no batched type) |
+
+Legend: N = batch size, T = time (= N), C = channels (= 3), H = height, W = width.
+
+Notes:
+- For numpy the `layout` choice is **purely semantic** (NHWC and THWC
+  share the same memory layout). For torch it's a real permutation —
+  NCHW vs CTHW differ in axis order.
+- PIL's `image.size` is `(W, H)`, opposite from numpy/torch's `(H, W)`.
+- All non-numpy destinations are **lazy imports**: video-helper itself
+  doesn't take torch or Pillow as a dependency.
 
 ```python
-import torch
-
-# Per-frame torch tensors on Apple Silicon GPU.
-for frame in vh.extract_frames(
-    "clip.mp4",
-    destination="torch", device="mps",
-):
-    # frame.shape == (H, W, 3); BGR uint8; on MPS
+# Default — numpy, BGR, channels last (OpenCV style).
+for frame in vh.extract_frames("clip.mp4", start_instant=10, end_instant=20):
+    # frame.shape == (H, W, 3), BGR uint8
     ...
-```
 
-For maximum throughput, **batch the transfer**: one host→device copy
-per batch instead of one per frame.
+# Torch CHW RGB on Apple Silicon GPU, per-frame.
+import torch
+for frame in vh.extract_frames("clip.mp4", destination="torch", device="mps"):
+    # frame.shape == (3, H, W), RGB uint8, on MPS
+    ...
 
-```python
+# Torch NCHW RGB — typical image-model batch.
 for batch in vh.extract_frames(
     "clip.mp4",
-    destination="torch", device="mps", batch_size=32,
+    destination="torch", device="mps", batch_size=32, layout="image",
 ):
-    # batch.shape == (N, H, W, 3); N == 32 for all but the last batch
-    embeddings = model(batch)
+    # batch.shape == (N, 3, H, W); one host→device transfer per batch
+    embeddings = image_model(batch)
+
+# Torch CTHW RGB — typical 3D-CNN / video-model clip.
+for clip in vh.extract_frames(
+    "clip.mp4",
+    destination="torch", device="mps", batch_size=16, layout="video",
+):
+    # clip.shape == (3, T, H, W); T == 16 for all but the last clip
+    embedding = video_model(clip)
+
+# PIL.Image per frame — for code that uses Pillow filters / draw / paste.
+for im in vh.extract_frames("clip.mp4", destination="pil"):
+    # im.mode == "RGB", im.size == (W, H)
+    im.filter(...)
 ```
 
-`device="auto"` resolves to cuda → mps → cpu in that order.
+`device="auto"` for torch resolves to `cuda` → `mps` → `cpu` in that order.
 
-The same `batch_size` kwarg works with `destination="numpy"` — yields
-`(N, H, W, 3)` ndarrays:
-
-```python
-for batch in vh.extract_frames("clip.mp4", batch_size=16):
-    # batch.shape == (16, H, W, 3) numpy uint8 BGR
-    ...
-```
-
-**Honest performance note:** at the time of v1.4.0, the torch path
+**Honest performance note:** at the time of v1.4.1, the torch path
 materializes each frame as numpy before stacking and shipping to
 device. That's one round-trip per batch, not zero-copy. A future C++
 extension (planned for v1.5+) will let VideoToolbox / NVDEC hand
