@@ -38,7 +38,7 @@ finally we still discuss between different python package managers and try to su
 
 ```bash
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0
 ```
 
 # Usage
@@ -130,7 +130,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 | `video_dimensions` | `(video_file: str) -> dict` | Returns `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
 | `video_duration` | `(input_video: str) -> float` | Duration in seconds (thin wrapper over `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encode with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. |
-| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Multi-backend dispatcher (VidGear / PyAV / ffmpeg-pipe). `destination`: `"numpy"` (HWC BGR), `"torch"` (CHW RGB, `device=cpu/mps/cuda/auto`), or `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout="image"` yields NHWC/NCHW batches; `layout="video"` yields THWC/CTHW clips. `frame_indices`/`frame_times` = sparse access via PyAV keyframe-seek. `hwaccel="auto"` enables VideoToolbox/CUDA but offers no wall-time win for numpy destination — see [SPEED_ANALYSIS.md](SPEED_ANALYSIS.md). Full docs in [EXAMPLES.md](EXAMPLES.md#frame-access). |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, http_headers=None, output_width=None, output_height=None, pad_color="black", destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Multi-backend dispatcher (VidGear / PyAV / ffmpeg-pipe). `destination`: `"numpy"` (HWC BGR), `"torch"` (CHW RGB), or `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout` yields NHWC/NCHW or THWC/CTHW. `frame_indices`/`frame_times` = sparse access via PyAV keyframe-seek. `http_headers` forwards User-Agent/Referer/Cookie to PyAV / ffmpeg-pipe (needed for yt-dlp-resolved YouTube live, members-only, age-gated). `output_width`+`output_height` → exact size with `pad_color`-padded letterbox/pillarbox; one of them alone → aspect-preserving scale. `pad_color="transparent"` → v1.6.0. See [SPEED_ANALYSIS.md](SPEED_ANALYSIS.md) and [EXAMPLES.md](EXAMPLES.md#frame-access). |
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Write a list of BGR frames (OpenCV convention, same as `extract_frames` yields) to a video file. |
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video)` | Temporal crop from `sample_start` to `sample_end` (seconds). |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Generate a silent solid-black video. Odd dimensions are rounded down. |
