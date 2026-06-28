@@ -4,7 +4,7 @@ import platform
 import re
 import shutil
 import subprocess
-from typing import Iterator, List, Optional, Sequence, Set
+from typing import Iterator, List, Optional, Sequence, Set, Tuple
 
 import cv2
 import ffmpeg
@@ -610,6 +610,110 @@ def _extract_via_vidgear(
         stream.stop()
 
 
+def _join_http_headers(http_headers: Optional[dict]) -> Optional[str]:
+    """ffmpeg / PyAV want a single CRLF-separated header string."""
+    if not http_headers:
+        return None
+    return "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
+
+
+def _parse_pad_color(pad_color: str) -> Tuple[int, int, int]:
+    """Parse opaque ``pad_color`` into a BGR uint8 tuple.
+
+    Accepted values:
+    - common names: ``"black"`` / ``"white"`` / ``"red"`` / ``"green"`` / ``"blue"``
+    - hex: ``"#RRGGBB"``
+    - ``"transparent"`` → :class:`ValueError` (would require 4-channel
+      BGRA output, breaking the ``(H, W, 3)`` contract — planned for v1.6.0).
+    """
+    name = pad_color.lower().strip()
+    if name == "transparent":
+        raise ValueError(
+            "pad_color='transparent' is not supported in v1.5.0 — it would "
+            "require 4-channel BGRA / RGBA output, breaking the (H, W, 3) "
+            "contract on every destination. Planned for v1.6.0."
+        )
+    named = {
+        "black": (0, 0, 0),
+        "white": (255, 255, 255),
+        "red": (0, 0, 255),      # BGR
+        "green": (0, 255, 0),
+        "blue": (255, 0, 0),     # BGR
+        "yellow": (0, 255, 255),
+        "cyan": (255, 255, 0),
+        "magenta": (255, 0, 255),
+        "gray": (128, 128, 128),
+        "grey": (128, 128, 128),
+    }
+    if name in named:
+        return named[name]
+    if name.startswith("#") and len(name) == 7:
+        try:
+            r = int(name[1:3], 16)
+            g = int(name[3:5], 16)
+            b = int(name[5:7], 16)
+            return (b, g, r)
+        except ValueError:
+            pass
+    raise ValueError(
+        f"Unknown pad_color {pad_color!r}; expected one of "
+        f"{sorted(named)} / '#RRGGBB' / 'transparent' (transparent → v1.6.0)"
+    )
+
+
+def _apply_output_transform(
+    frame: np.ndarray,
+    output_width: Optional[int],
+    output_height: Optional[int],
+    pad_color_bgr: Tuple[int, int, int],
+) -> np.ndarray:
+    """Resize a BGR frame to (``output_width``, ``output_height``).
+
+    Behavior:
+    - Both dimensions set → scale-fit (preserve aspect ratio) then pad
+      with ``pad_color_bgr`` so the output is exactly the requested size.
+    - Only one dimension set → scale to that dimension preserving aspect
+      ratio (the other dimension is derived; no pad).
+    - Neither set → return frame unchanged.
+
+    Uses ``cv2.INTER_AREA`` when downscaling (sharper for downsizing)
+    and ``cv2.INTER_LINEAR`` when upscaling (cheap, no ringing).
+    """
+    if output_width is None and output_height is None:
+        return frame
+
+    h, w = frame.shape[:2]
+
+    if output_width is not None and output_height is not None:
+        scale = min(output_width / w, output_height / h)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+        scaled = cv2.resize(frame, (new_w, new_h), interpolation=interp)
+        pad_top = (output_height - new_h) // 2
+        pad_bottom = output_height - new_h - pad_top
+        pad_left = (output_width - new_w) // 2
+        pad_right = output_width - new_w - pad_left
+        return cv2.copyMakeBorder(
+            scaled,
+            pad_top, pad_bottom, pad_left, pad_right,
+            cv2.BORDER_CONSTANT,
+            value=list(pad_color_bgr),
+        )
+
+    if output_width is not None:
+        scale = output_width / w
+        new_h = max(1, int(round(h * scale)))
+        interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+        return cv2.resize(frame, (output_width, new_h), interpolation=interp)
+
+    # output_height is not None
+    scale = output_height / h
+    new_w = max(1, int(round(w * scale)))
+    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    return cv2.resize(frame, (new_w, output_height), interpolation=interp)
+
+
 def _extract_via_pyav(
     video_path: str,
     start_index: int,
@@ -618,6 +722,7 @@ def _extract_via_pyav(
     sparse_indices: Optional[Sequence[int]],
     frame_rate: float,
     hwaccel: Optional[str],
+    http_headers: Optional[dict] = None,
 ) -> Iterator[np.ndarray]:
     """PyAV-based decode with keyframe seek and optional hardware accel.
 
@@ -636,18 +741,30 @@ def _extract_via_pyav(
     """
     import av  # lazy
 
+    # HTTP headers (User-Agent / Referer / Cookie / Authorization) are
+    # fed to libavformat via the AVFormatContext options dict — that's
+    # the right place for them (unlike hwaccel, which the same kwarg
+    # silently ignores; see _extract_via_pyav notes above).
+    open_options: Optional[dict] = None
+    headers_str = _join_http_headers(http_headers)
+    if headers_str:
+        open_options = {"headers": headers_str}
+
     if hwaccel:
         try:
             hw = av.codec.hwaccel.HWAccel(device_type=hwaccel)
-            container = av.open(video_path, hwaccel=hw)
+            container = av.open(video_path, hwaccel=hw, options=open_options) \
+                if open_options else av.open(video_path, hwaccel=hw)
         except (av.error.ValueError, ValueError) as exc:
             logging.warning(
                 "PyAV hwaccel=%r unavailable (%s); falling back to software decode",
                 hwaccel, exc,
             )
-            container = av.open(video_path)
+            container = av.open(video_path, options=open_options) \
+                if open_options else av.open(video_path)
     else:
-        container = av.open(video_path)
+        container = av.open(video_path, options=open_options) \
+            if open_options else av.open(video_path)
     try:
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
@@ -700,17 +817,23 @@ def _extract_via_ffmpeg_pipe(
     width: int,
     height: int,
     hwaccel: Optional[str],
+    http_headers: Optional[dict] = None,
 ) -> Iterator[np.ndarray]:
     """ffmpeg subprocess with -ss/-to true seek and raw bgr24 over a pipe.
 
     Sequential only (no sparse). Useful when PyAV is unavailable but
     ffmpeg is. Hwaccel is honored when supported by the local build.
+    HTTP headers (``http_headers``) are passed via ``-headers`` and
+    placed before ``-i`` so they reach the input demuxer.
     """
     start_s = start_index / frame_rate
     end_s = (end_index + 1) / frame_rate
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin"]
     if hwaccel:
         cmd += ["-hwaccel", hwaccel]
+    headers_str = _join_http_headers(http_headers)
+    if headers_str:
+        cmd += ["-headers", headers_str]
     cmd += ["-ss", f"{start_s:.6f}", "-to", f"{end_s:.6f}", "-i", video_path]
     if frame_step > 1:
         # Sample every Nth frame after the seek.
@@ -964,6 +1087,10 @@ def extract_frames(
     frame_times: Optional[Sequence[float]] = None,
     backend: str = "auto",
     hwaccel: Optional[str] = None,
+    http_headers: Optional[dict] = None,
+    output_width: Optional[int] = None,
+    output_height: Optional[int] = None,
+    pad_color: str = "black",
     destination: str = "numpy",
     device: str = "cpu",
     batch_size: Optional[int] = None,
@@ -1022,6 +1149,40 @@ def extract_frames(
         wall-time penalty observed on numpy-destination cells doesn't
         apply (the frames go through one numpy stack and then host→device
         in one shot — see SPEED_ANALYSIS.md).
+    http_headers : dict[str, str], optional
+        HTTP headers forwarded to the underlying decoder. Required for
+        URLs that need a specific ``User-Agent`` / ``Referer`` / ``Cookie``
+        / ``Authorization`` — e.g. yt-dlp-resolved YouTube live streams,
+        members-only / age-gated content, Vimeo private videos, Twitch.
+        Joined into ffmpeg's ``-headers`` CRLF string under the hood.
+        Honored by ``pyav`` and ``ffmpeg-pipe``; the ``vidgear`` backend
+        logs a warning and ignores them (OpenCV's HTTP layer doesn't
+        surface headers cleanly).
+    output_width, output_height : int, optional
+        Exact output frame size in pixels. Behavior:
+
+        - **Both** set → scale-fit (aspect-preserving) then pad with
+          ``pad_color`` so the output is exactly ``output_width × output_height``.
+          Typical for ML pipelines that need a fixed input shape.
+        - **Only one** set → scale to that dimension preserving aspect
+          ratio; the other dimension is derived. No padding.
+        - **Neither** set (default) → frame keeps its native dimensions.
+
+        The transform runs in numpy via ``cv2.resize`` + ``cv2.copyMakeBorder``
+        post-decode. Same behavior across all backends (vidgear / pyav /
+        ffmpeg-pipe).
+    pad_color : str, optional
+        Padding color when scale-fit-and-pad applies (i.e. both
+        ``output_width`` and ``output_height`` are set, and the source's
+        aspect ratio differs from the target). Accepts:
+
+        - common names: ``"black"`` (default), ``"white"``, ``"red"``,
+          ``"green"``, ``"blue"``, ``"yellow"``, ``"cyan"``, ``"magenta"``,
+          ``"gray"`` / ``"grey"``
+        - ``"#RRGGBB"`` hex
+        - ``"transparent"`` raises ``ValueError`` in v1.5.0 — it would
+          require 4-channel BGRA output, breaking the ``(H, W, 3)``
+          contract. Planned for v1.6.0.
     destination : str, optional
         Where frames land. Default ``"numpy"``.
 
@@ -1144,6 +1305,13 @@ def extract_frames(
     )
 
     if chosen == "vidgear":
+        if http_headers:
+            logging.warning(
+                "vidgear backend ignores http_headers — OpenCV doesn't surface "
+                "them cleanly. Auth-protected URLs (YouTube live, members-only, "
+                "age-gated content from yt-helper) will likely 403. Use "
+                "backend='pyav' or 'ffmpeg-pipe' for those."
+            )
         np_iter = _extract_via_vidgear(video_path, s_idx, e_idx, step, stabilize)
     elif chosen == "pyav":
         if not _have_pyav():
@@ -1152,6 +1320,7 @@ def extract_frames(
             )
         np_iter = _extract_via_pyav(
             video_path, s_idx, e_idx, step, indices, frame_rate, resolved_hwaccel,
+            http_headers=http_headers,
         )
     elif chosen == "ffmpeg-pipe":
         if shutil.which("ffmpeg") is None:
@@ -1163,9 +1332,23 @@ def extract_frames(
             )
         np_iter = _extract_via_ffmpeg_pipe(
             video_path, s_idx, e_idx, step, frame_rate, width, height, resolved_hwaccel,
+            http_headers=http_headers,
         )
     else:
         raise AssertionError(f"unreachable backend {chosen!r}")
+
+    # Optional resize + pad pass — validate early so we fail fast.
+    if output_width is not None or output_height is not None:
+        if output_width is not None and output_width <= 0:
+            raise ValueError(f"output_width must be > 0, got {output_width}")
+        if output_height is not None and output_height <= 0:
+            raise ValueError(f"output_height must be > 0, got {output_height}")
+        pad_bgr = _parse_pad_color(pad_color)
+
+        def _resize_pad_iter(src):
+            for frame in src:
+                yield _apply_output_transform(frame, output_width, output_height, pad_bgr)
+        np_iter = _resize_pad_iter(np_iter)
 
     # Final stage: convert/batch into the requested destination form.
     # The fast-path destination="numpy" + batch_size=None is a no-op

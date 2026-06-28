@@ -44,7 +44,7 @@ recipe additionally requires ffmpeg to be built with `libass`.
 ```bash
 # Core only — vidgear + opencv + ffmpeg-python (no optional backends).
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0
 ```
 
 Optional extras (mix and match, or install `[all]`):
@@ -56,7 +56,7 @@ Optional extras (mix and match, or install `[all]`):
 # [all]   — everything (pyav + torch + pillow).
 
 pip install --force-reinstall --no-cache-dir \
-  "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1"
+  "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0"
 ```
 
 You also need `ffmpeg`. macOS: `brew install ffmpeg`. Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
@@ -192,6 +192,65 @@ latency win — useful for batch jobs on battery, or to free the CPU for
 downstream work. For `destination="torch"` + GPU device, the dispatcher
 auto-enables hwaccel: the host→device transfer is unavoidable but
 batched, and the offload is worth it.
+
+### HTTP Headers (auth-protected URLs)
+
+Some sources need a specific `User-Agent` / `Referer` / `Cookie` / `Authorization` to play — typically yt-dlp-resolved YouTube live streams, members-only / age-gated content, Vimeo private videos, Twitch streams. Pass them via `http_headers`:
+
+```python
+# Headers obtained from yt-helper (or hand-rolled)
+headers = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://www.youtube.com/",
+}
+
+for frame in vh.extract_frames(
+    "https://rr5---sn-googlevideo.com/videoplayback?...",
+    http_headers=headers,
+    backend="pyav",        # or "ffmpeg-pipe"; vidgear warns + ignores
+):
+    process(frame)
+```
+
+The VidGear backend logs a warning and ignores `http_headers` — OpenCV doesn't surface them cleanly. Use `backend="pyav"` (preferred) or `"ffmpeg-pipe"` for auth-protected URLs.
+
+### Exact Output Size with Aspect-Preserving Padding
+
+For ML pipelines that need a fixed input shape, set `output_width` + `output_height`. The frame is **scaled-fit** (aspect-preserving) and **padded** to exactly the requested size with `pad_color`:
+
+```python
+# 1920×1080 source → 224×224 square with black letterbox padding
+for frame in vh.extract_frames(
+    "clip.mp4",
+    output_width=224, output_height=224, pad_color="black",
+):
+    # frame.shape == (224, 224, 3); the 16:9 source is centred horizontally
+    # with black bands top and bottom (letterbox).
+    model_input = frame
+```
+
+| `output_width` | `output_height` | Effect |
+|---|---|---|
+| set | set | Scale-fit + pad with `pad_color` to exact `(W, H)` |
+| set | None | Scale to that width, preserve aspect, **no pad** (height derived) |
+| None | set | Scale to that height, preserve aspect, **no pad** |
+| None | None | Native dimensions (default) |
+
+`pad_color` accepts `"black"` (default), `"white"`, `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"gray"` / `"grey"`, or `"#RRGGBB"` hex. `"transparent"` raises `ValueError` until v1.6.0 (would need 4-channel output).
+
+Composable with everything else — destinations, hwaccel, sparse access:
+
+```python
+# Square torch tensors on Apple Silicon GPU, batched
+for batch in vh.extract_frames(
+    "clip.mp4",
+    output_width=224, output_height=224, pad_color="black",
+    destination="torch", device="mps", batch_size=32, layout="image",
+):
+    # batch.shape == (32, 3, 224, 224), NCHW RGB uint8 on MPS
+    logits = model(batch)
+```
 
 ### Destination: numpy, torch, or PIL
 

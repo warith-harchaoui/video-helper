@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "video-helper"
-version = "1.4.1"
+version = "1.5.0"
 description = "Video Helper is a Python library that provides utility functions for processing video files: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 authors = ["Warith HARCHAOUI <warithmetics@deraison.ai>"]
 readme = "README.md"

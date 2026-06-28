@@ -29,7 +29,7 @@ extras_require = {
 
 setup_kwargs = {
     "name": "video-helper",
-    "version": "1.4.1",
+    "version": "1.5.0",
     "description": (
         "Video Helper is a Python library that provides utility functions for "
         "processing video files: validation, format conversion, frame extraction, "
