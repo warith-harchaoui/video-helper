@@ -18,17 +18,18 @@ install_requires = [
 
 # Optional extras:
 #   pyav   — best windowed-sequential + sparse backend, hwaccel support.
-#   torch  — destination="torch" + batched (N, H, W, 3) tensors on
-#            cpu / mps / cuda. video-helper itself stays torch-free.
+#   torch  — destination="torch" (NCHW / CTHW RGB) on cpu / mps / cuda.
+#   pil    — destination="pil" (PIL.Image RGB, size=(W, H)).
 extras_require = {
     "pyav": ["av>=12,<18"],
     "torch": ["torch>=2.0,<3"],
-    "all": ["av>=12,<18", "torch>=2.0,<3"],
+    "pil": ["pillow>=10,<12"],
+    "all": ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12"],
 }
 
 setup_kwargs = {
     "name": "video-helper",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": (
         "Video Helper is a Python library that provides utility functions for "
         "processing video files: validation, format conversion, frame extraction, "

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "video-helper"
-version = "1.4.0"
+version = "1.4.1"
 description = "Video Helper is a Python library that provides utility functions for processing video files: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 authors = ["Warith HARCHAOUI <warithmetics@deraison.ai>"]
 readme = "README.md"
@@ -15,14 +15,16 @@ os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v
 # (best default for those access patterns — see SPEED_ANALYSIS.md).
 # Without it, the dispatcher falls back to vidgear / ffmpeg-pipe.
 av = {version = ">=12,<18", optional = true}
-# Optional: torch unlocks destination="torch" + batched (N, H, W, 3)
-# tensors on cpu / mps / cuda. video-helper itself stays torch-free.
+# Optional: torch unlocks destination="torch" (NCHW/CTHW RGB on cpu/mps/cuda).
 torch = {version = ">=2.0,<3", optional = true}
+# Optional: Pillow unlocks destination="pil" (PIL.Image RGB, size=(W, H)).
+pillow = {version = ">=10,<12", optional = true}
 
 [tool.poetry.extras]
 pyav = ["av"]
 torch = ["torch"]
-all = ["av", "torch"]
+pil = ["pillow"]
+all = ["av", "torch", "pillow"]
 
 
 [build-system]
