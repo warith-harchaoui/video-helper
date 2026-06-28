@@ -1,13 +1,16 @@
+import logging
 import os
-import os_helper as osh
+import platform
+import re
+import shutil
+import subprocess
+from typing import Iterator, List, Optional, Sequence, Set
+
+import cv2
 import ffmpeg
 import numpy as np
+import os_helper as osh
 from vidgear.gears import VideoGear
-import re
-from typing import Iterator, List, Set
-import cv2
-
-import logging
 
 
 video_extensions = [
@@ -398,114 +401,638 @@ def video_converter(
 
 
 
+# ──────────────────────────────────────────────────────────────────────────
+#  Backend dispatcher for ``extract_frames``
+#
+#  Three backends with distinct sweet spots, picked automatically (override
+#  via the ``backend=`` kwarg). See SPEED_ANALYSIS.md for the empirical
+#  evidence behind the routing rules.
+#
+#  - ``vidgear``      → fastest path for **full sequential decode** on
+#                       macOS (OpenCV+AVFoundation + worker thread); the
+#                       only backend that supports ``stabilize=True``.
+#                       Decodes from t=0 with no real seek, so it pays a
+#                       large tax on windowed / sparse reads.
+#  - ``pyav``         → fastest for **windowed sequential** and **sparse**
+#                       (frame_indices / frame_times) thanks to keyframe
+#                       seek. Default for everything that isn't a full
+#                       sequential read. Honors ``hwaccel``.
+#  - ``ffmpeg-pipe``  → ffmpeg subprocess fallback (true ``-ss``/``-to``
+#                       seek). Used only when PyAV isn't installed.
+#
+#  History: a decord backend was prototyped in v1.4 but removed before
+#  release — empirical benchmarks (see SPEED_ANALYSIS.md) showed PyAV
+#  beating decord by ~30% on its own sweet-spot (sparse access) while
+#  avoiding decord's ffmpeg@4 source-build install pain.
+#
+#  All backends yield BGR uint8 ndarrays of shape (H, W, 3) for backward
+#  compatibility with the OpenCV / VidGear convention.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+_BACKENDS = ("auto", "vidgear", "pyav", "ffmpeg-pipe")
+
+
+def _resolve_hwaccel(hwaccel: Optional[str]) -> Optional[str]:
+    """Translate ``hwaccel="auto"`` into a concrete value supported by the
+    locally-installed ffmpeg, or None when no acceleration is available.
+
+    A value of ``None`` (Python None) disables hwaccel — this is the
+    default for ``extract_frames`` because the SPEED_ANALYSIS benchmark
+    showed VideoToolbox hurting every scenario on a 426×426 H.264 clip
+    (the format-conversion overhead eats the decode win on small frames).
+    Worth re-evaluating on 4K HEVC content.
+
+    Any explicit string is returned as-is so the caller can opt into
+    something exotic without fighting the heuristic.
+    """
+    if hwaccel != "auto":
+        return hwaccel
+    if shutil.which("ffmpeg") is None:
+        return None
+    try:
+        supported = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-hwaccels"],
+            capture_output=True, text=True, check=False,
+        ).stdout
+    except Exception:
+        return None
+    system = platform.system().lower()
+    if system == "darwin" and "videotoolbox" in supported:
+        return "videotoolbox"
+    if "cuda" in supported and shutil.which("nvidia-smi") is not None:
+        return "cuda"
+    if "qsv" in supported:
+        return "qsv"
+    return None
+
+
+def _have_pyav() -> bool:
+    try:
+        import av  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _choose_backend(
+    backend: str,
+    stabilize: bool,
+    sparse: bool,
+    full_sequential: bool,
+) -> str:
+    """Resolve ``backend="auto"`` against installed packages and call shape.
+
+    Routing rules (when ``backend="auto"``):
+
+    - ``stabilize=True``                  → vidgear (forced; only one that supports it)
+    - sparse access (indices / times)     → pyav if installed, else vidgear (range+filter fallback)
+    - full sequential (start=0, end=total)→ vidgear (4× faster than PyAV on macOS — see SPEED_ANALYSIS.md)
+    - windowed sequential                 → pyav if installed, else ffmpeg-pipe if ffmpeg on PATH, else vidgear
+    """
+    if backend not in _BACKENDS:
+        raise ValueError(
+            f"Unknown backend {backend!r}; expected one of {_BACKENDS}"
+        )
+    if stabilize:
+        if backend not in ("auto", "vidgear"):
+            raise ValueError(
+                f"stabilize=True requires the vidgear backend; got backend={backend!r}"
+            )
+        return "vidgear"
+    if backend != "auto":
+        return backend
+
+    if sparse:
+        # Sparse access: PyAV's keyframe-seek + PTS filter is the fastest
+        # option we ship (see SPEED_ANALYSIS.md). VidGear's no-seek loop
+        # is a last-resort fallback when PyAV is missing.
+        return "pyav" if _have_pyav() else "vidgear"
+
+    if full_sequential:
+        # Full sequential reads: VidGear (OpenCV+AVFoundation + worker
+        # thread) beats PyAV by 4× on macOS. No reason to give that up.
+        return "vidgear"
+
+    # Windowed sequential: PyAV's keyframe seek wins. ffmpeg-pipe is a
+    # backup when PyAV is missing; VidGear last because it has no real seek.
+    if _have_pyav():
+        return "pyav"
+    if shutil.which("ffmpeg") is not None:
+        return "ffmpeg-pipe"
+    return "vidgear"
+
+
+def _resolve_indices(
+    duration: float,
+    frame_rate: float,
+    start_index: Optional[int],
+    end_index: Optional[int],
+    start_instant: Optional[float],
+    end_instant: Optional[float],
+    frame_step: int,
+    frame_interval: Optional[float],
+    frame_indices: Optional[Sequence[int]],
+    frame_times: Optional[Sequence[float]],
+):
+    """Normalize the public range/sparse API into a single representation.
+
+    Returns
+    -------
+    indices : list[int] | None
+        Concrete indices when sparse access was requested, else None.
+    start_index, end_index : int
+        Inclusive bounds when sequential access was requested.
+    frame_step : int
+        Sampling stride (>=1).
+    sparse : bool
+        True iff the caller specified ``frame_indices`` / ``frame_times``.
+    """
+    total = int(duration * frame_rate)
+
+    if frame_times is not None:
+        frame_indices = [int(round(t * frame_rate)) for t in frame_times]
+    if frame_indices is not None:
+        indices = sorted({int(i) for i in frame_indices if 0 <= int(i) < total})
+        return indices, 0, total - 1, 1, True
+
+    if start_instant is not None:
+        start_index = int(start_instant * frame_rate)
+    if end_instant is not None:
+        end_index = int(end_instant * frame_rate)
+    if start_index is None:
+        start_index = 0
+    if end_index is None:
+        end_index = total
+    if frame_interval is not None:
+        frame_step = max(1, int(frame_interval * frame_rate))
+    frame_step = max(1, int(frame_step))
+
+    assert 0 <= start_index <= end_index <= total, (
+        f"Invalid frame range:\n\t{start_index} "
+        f"({osh.time2str(1.0 * start_index / frame_rate)}) to {end_index} "
+        f"({osh.time2str(1.0 * end_index / frame_rate)}).\n"
+        f"It should be within 0 to {total} (for {osh.time2str(duration)} "
+        f"at {frame_rate} fps)"
+    )
+    return None, start_index, end_index, frame_step, False
+
+
+def _extract_via_vidgear(
+    video_path: str,
+    start_index: int,
+    end_index: int,
+    frame_step: int,
+    stabilize: bool,
+) -> Iterator[np.ndarray]:
+    """Decode-everything-and-filter loop on top of VidGear / OpenCV.
+
+    Only path that supports software stabilization. Decodes from frame 0
+    even when ``start_index > 0`` (no real seek) — accept this cost when
+    stabilization is required or when faster backends aren't installed.
+    """
+    stream = VideoGear(source=video_path, stabilize=stabilize).start()
+    current_index = 0
+    try:
+        while True:
+            frame = stream.read()
+            if frame is None:
+                break
+            if current_index < start_index:
+                current_index += 1
+                continue
+            if current_index <= end_index and (current_index - start_index) % frame_step == 0:
+                yield frame
+            if current_index > end_index:
+                break
+            current_index += 1
+    finally:
+        stream.stop()
+
+
+def _extract_via_pyav(
+    video_path: str,
+    start_index: int,
+    end_index: int,
+    frame_step: int,
+    sparse_indices: Optional[Sequence[int]],
+    frame_rate: float,
+    hwaccel: Optional[str],
+) -> Iterator[np.ndarray]:
+    """PyAV-based decode with keyframe seek and optional hardware accel.
+
+    Notes
+    -----
+    PyAV's ``container.seek`` accepts an offset in ``AV_TIME_BASE`` units
+    (microseconds) when no ``stream`` is passed. We rely on that and
+    recover the exact frame index from ``frame.pts * stream.time_base``,
+    so a coarse keyframe seek is fine — we just drop everything before the
+    requested index.
+
+    Hardware acceleration is wired through ``av.codec.hwaccel.HWAccel``
+    (not the format-context ``options=`` kwarg, which is silently ignored
+    for hwaccel — that bug existed in v1.4.0-dev and inflated all
+    ``hwaccel="auto"`` cells in SPEED_ANALYSIS.md to be no-ops).
+    """
+    import av  # lazy
+
+    if hwaccel:
+        try:
+            hw = av.codec.hwaccel.HWAccel(device_type=hwaccel)
+            container = av.open(video_path, hwaccel=hw)
+        except (av.error.ValueError, ValueError) as exc:
+            logging.warning(
+                "PyAV hwaccel=%r unavailable (%s); falling back to software decode",
+                hwaccel, exc,
+            )
+            container = av.open(video_path)
+    else:
+        container = av.open(video_path)
+    try:
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+
+        def _seek_to_seconds(seconds: float) -> None:
+            # AV_TIME_BASE is 1 µs; convert seconds → microseconds.
+            offset_us = max(0, int(seconds * 1_000_000))
+            container.seek(offset_us, any_frame=False, backward=True)
+
+        def _index_of(frame) -> int:
+            if frame.pts is None:
+                return -1
+            return int(round(float(frame.pts * stream.time_base) * frame_rate))
+
+        if sparse_indices is not None and len(sparse_indices) > 0:
+            wanted = sorted(set(sparse_indices))
+            wanted_set = set(wanted)
+            _seek_to_seconds(wanted[0] / frame_rate)
+            for frame in container.decode(stream):
+                index = _index_of(frame)
+                if index in wanted_set:
+                    yield frame.to_ndarray(format="bgr24")
+                    wanted_set.discard(index)
+                    if not wanted_set:
+                        break
+            return
+
+        # Sequential range: seek to a keyframe at-or-before start_index,
+        # then PTS-filter to the exact bounds.
+        if start_index > 0:
+            _seek_to_seconds(start_index / frame_rate)
+        for frame in container.decode(stream):
+            index = _index_of(frame)
+            if index < start_index:
+                continue
+            if index > end_index:
+                break
+            if (index - start_index) % frame_step == 0:
+                yield frame.to_ndarray(format="bgr24")
+    finally:
+        container.close()
+
+
+def _extract_via_ffmpeg_pipe(
+    video_path: str,
+    start_index: int,
+    end_index: int,
+    frame_step: int,
+    frame_rate: float,
+    width: int,
+    height: int,
+    hwaccel: Optional[str],
+) -> Iterator[np.ndarray]:
+    """ffmpeg subprocess with -ss/-to true seek and raw bgr24 over a pipe.
+
+    Sequential only (no sparse). Useful when PyAV is unavailable but
+    ffmpeg is. Hwaccel is honored when supported by the local build.
+    """
+    start_s = start_index / frame_rate
+    end_s = (end_index + 1) / frame_rate
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin"]
+    if hwaccel:
+        cmd += ["-hwaccel", hwaccel]
+    cmd += ["-ss", f"{start_s:.6f}", "-to", f"{end_s:.6f}", "-i", video_path]
+    if frame_step > 1:
+        # Sample every Nth frame after the seek.
+        cmd += ["-vf", f"select=not(mod(n\\,{frame_step}))", "-vsync", "vfr"]
+    cmd += ["-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
+
+    frame_size = width * height * 3
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        while True:
+            raw = proc.stdout.read(frame_size)
+            if not raw or len(raw) < frame_size:
+                break
+            yield np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3)).copy()
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        # Drain stderr for diagnostics.
+        err = proc.stderr.read().decode("utf-8", errors="replace").strip()
+        if err and proc.returncode not in (0, None):
+            logging.warning("ffmpeg stderr: %s", err)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Destination converter — yields frames in the user's preferred form
+#  (numpy ndarray or torch tensor on a chosen device), optionally batched
+#  to amortize the host→device transfer.
+#
+#  When ``destination="torch"``, torch is imported lazily — the helper
+#  itself does NOT take torch as a dependency. Install with the
+#  ``[torch]`` extra or BYO torch.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _have_torch() -> bool:
+    try:
+        import torch  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _resolve_torch_device(device: str):
+    """Translate ``device`` ("auto" / "cpu" / "mps" / "cuda") into a torch.device.
+
+    "auto" → cuda if available, else mps if available, else cpu.
+    """
+    import torch  # lazy
+
+    if device == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    return torch.device(device)
+
+
+def _to_destination(
+    np_frames: Iterator[np.ndarray],
+    destination: str,
+    device: str,
+    batch_size: Optional[int],
+):
+    """Convert/batch the upstream numpy-frame iterator into the requested destination.
+
+    - ``destination="numpy"`` + no batch  → yields ``np.ndarray`` (H, W, 3) (no-op pass-through)
+    - ``destination="numpy"`` + batch     → yields ``np.ndarray`` (N, H, W, 3)
+    - ``destination="torch"`` + no batch  → yields ``torch.Tensor`` (H, W, 3) on device
+    - ``destination="torch"`` + batch     → yields ``torch.Tensor`` (N, H, W, 3) on device
+                                            (single host→device transfer per batch)
+
+    Frames stay in BGR uint8 — same convention as the backends.
+    """
+    if destination not in ("numpy", "torch"):
+        raise ValueError(
+            f"Unknown destination {destination!r}; expected 'numpy' or 'torch'"
+        )
+    if batch_size is not None and batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+
+    if destination == "numpy":
+        if batch_size is None:
+            yield from np_frames
+            return
+        batch: list = []
+        for frame in np_frames:
+            batch.append(frame)
+            if len(batch) == batch_size:
+                yield np.stack(batch, axis=0)
+                batch = []
+        if batch:
+            yield np.stack(batch, axis=0)
+        return
+
+    # destination == "torch"
+    if not _have_torch():
+        raise ImportError(
+            "destination='torch' requires PyTorch. Install with: pip install 'video-helper[torch]' "
+            "(or bring your own torch)"
+        )
+    import torch  # lazy
+
+    dev = _resolve_torch_device(device)
+    if batch_size is None:
+        for frame in np_frames:
+            # torch.from_numpy shares memory with the ndarray; .to(device)
+            # always copies. For per-frame yield the host→device transfer
+            # happens N times — pass batch_size to amortize.
+            yield torch.from_numpy(frame).to(dev)
+        return
+
+    batch = []
+    for frame in np_frames:
+        batch.append(frame)
+        if len(batch) == batch_size:
+            # Stack on CPU first (avoids per-frame transfer), then ship the
+            # whole batch to device in one call.
+            yield torch.from_numpy(np.stack(batch, axis=0)).to(dev)
+            batch = []
+    if batch:
+        yield torch.from_numpy(np.stack(batch, axis=0)).to(dev)
+
+
 def extract_frames(
     video_path: str,
-    start_index: int = None,
-    end_index: int = None,
-    start_instant: float = None,
-    end_instant: float = None,
+    start_index: Optional[int] = None,
+    end_index: Optional[int] = None,
+    start_instant: Optional[float] = None,
+    end_instant: Optional[float] = None,
     stabilize: bool = False,
     frame_step: int = 1,
-    frame_interval: float = None,
-) -> Iterator[np.ndarray]:
+    frame_interval: Optional[float] = None,
+    frame_indices: Optional[Sequence[int]] = None,
+    frame_times: Optional[Sequence[float]] = None,
+    backend: str = "auto",
+    hwaccel: Optional[str] = None,
+    destination: str = "numpy",
+    device: str = "cpu",
+    batch_size: Optional[int] = None,
+) -> Iterator:
     """
-    Extract frames from a video file between the specified start and end indices or time range, with optional frame sampling.
-    
+    Extract frames from a video, dispatching to the best available backend.
+
+    The function picks a backend automatically based on the requested
+    access pattern and what's installed locally; pass ``backend=...`` to
+    override. Frames are yielded in the user's preferred form via
+    ``destination`` (numpy array or torch tensor on a chosen device),
+    optionally **batched** to amortize the host→device transfer.
+
+    Backends
+    --------
+    - ``vidgear`` — OpenCV+VidGear with a producer thread. **Fastest path
+      for full sequential decode** up to ~720p on macOS (uses
+      AVFoundation under the hood) and the **only backend that supports**
+      ``stabilize=True``. Decodes from t=0 with no real seek.
+    - ``pyav`` — direct ffmpeg libav bindings. **Best default for
+      windowed sequential, sparse reads, and any "torch on GPU"
+      destination** thanks to keyframe seek + hwaccel support.
+    - ``ffmpeg-pipe`` — ffmpeg subprocess fallback. Useful when PyAV
+      isn't installed. Sequential only; honors ``hwaccel``.
+
     Parameters
     ----------
     video_path : str
         Path to the input video file.
-    start_index : int, optional
-        Start index of the frame range. If None, starts from the beginning of the video.
-    end_index : int, optional
-        End index of the frame range. If None, extracts frames until the end of the video.
-    start_instant : float, optional
-        Start time in seconds. If specified, overrides start_index.
-    end_instant : float, optional
-        End time in seconds. If specified, overrides end_index.
-    stabilize: bool, optional
-        If True, stabilizes the video before extracting frames (using VidGear). Defaults to False.
+    start_index, end_index : int, optional
+        Inclusive frame-index bounds. If None, defaults to start-of-file
+        and end-of-file respectively.
+    start_instant, end_instant : float, optional
+        Same bounds expressed in seconds. When provided, they override the
+        index form.
+    stabilize : bool, optional
+        If True, runs VidGear's software stabilizer. Forces ``backend="vidgear"``.
     frame_step : int, optional
-        Extract every nth frame. Defaults to 1 (extract every frame).
+        Sampling stride within the range (every Nth frame). Defaults to 1.
     frame_interval : float, optional
-        Time interval between frames in seconds. Overrides frame_step if specified
+        Sampling period in seconds. Overrides ``frame_step`` when given.
+    frame_indices : list[int], optional
+        Explicit set of frame indices to read (sparse / random access).
+        When provided, range parameters are ignored.
+    frame_times : list[float], optional
+        Same as ``frame_indices`` but in seconds; converted internally.
+    backend : str, optional
+        ``"auto"`` (default), ``"vidgear"``, ``"pyav"``, or ``"ffmpeg-pipe"``.
+    hwaccel : str, optional
+        Hardware-accelerated decoder. Default ``None``. Pass ``"auto"`` to
+        enable platform-appropriate accel (``"videotoolbox"`` on macOS,
+        ``"cuda"`` on Linux+NVIDIA), or an explicit value. Honored only
+        by ``pyav`` and ``ffmpeg-pipe``. For ``destination="torch"``
+        with a GPU device, ``"auto"`` is enabled by default since the
+        wall-time penalty observed on numpy-destination cells doesn't
+        apply (the frames go through one numpy stack and then host→device
+        in one shot — see SPEED_ANALYSIS.md).
+    destination : str, optional
+        Where frames land. ``"numpy"`` (default) yields ``np.ndarray``
+        (H, W, 3) BGR uint8 — backward-compatible behavior.
+        ``"torch"`` yields ``torch.Tensor`` (H, W, 3) BGR uint8 on
+        ``device`` (PyTorch is imported lazily; raises ImportError if
+        absent).
+    device : str, optional
+        Target device when ``destination="torch"``. ``"cpu"`` (default),
+        ``"mps"`` (Apple Silicon), ``"cuda"`` (NVIDIA), or ``"auto"``
+        (cuda > mps > cpu). Ignored when ``destination="numpy"``.
+    batch_size : int, optional
+        If provided, yield a batched tensor / array of shape
+        ``(N, H, W, 3)`` per batch instead of one frame at a time. The
+        last batch may be smaller. Strongly recommended with
+        ``destination="torch"`` + GPU device: one host→device transfer
+        per batch instead of one per frame (typical 5-20× win).
 
     Yields
     ------
-    frame : numpy.ndarray
-        Extracted frames with shape (height, width, channels) and pixel values between 0 and 255.
+    numpy.ndarray
+        Successive frames as ``(H, W, 3)`` BGR uint8 arrays — same
+        convention as OpenCV and the previous VidGear-only implementation.
 
-    Notes
-    -----
-    This function uses VidGear's VideoGear for efficient frame extraction. Frame sampling allows skipping frames (e.g., extract every nth frame).
-    
-    Usage
-    -----
-    >>> for frame in extract_frames("video.mp4", start_instant=10, end_instant=20, frame_step=5):
-    >>>     process_frame(frame)
+    Examples
+    --------
+    >>> # Sequential time range — dispatcher picks PyAV (windowed)
+    >>> for frame in extract_frames("clip.mp4", start_instant=10, end_instant=20, frame_step=5):
+    ...     process(frame)
+
+    >>> # Sparse access at specific times — routed to PyAV
+    >>> list(extract_frames("clip.mp4", frame_times=[1.5, 12.0, 47.0]))
+
+    >>> # Stream as torch tensors on Apple Silicon, batched for one transfer per 32 frames
+    >>> for batch in extract_frames("clip.mp4",
+    ...                             destination="torch", device="mps", batch_size=32):
+    ...     # batch.shape == (N, H, W, 3); N == 32 for all but the last batch
+    ...     model(batch)
     """
-    # Check if the video file is valid
     assert is_valid_video_file(video_path), f"Video file not okay:\n\t{video_path}"
 
-    # Get video details (dimensions, duration, frame_rate)
     d = video_dimensions(video_path)
     duration = d["duration"]
     frame_rate = d["frame_rate"]
+    width = d["width"]
+    height = d["height"]
+    total_frames = int(duration * frame_rate)
 
-    # Calculate start_index from start_instant, if provided
-    if start_instant is not None:
-        start_index = int(start_instant * frame_rate)
+    indices, s_idx, e_idx, step, sparse = _resolve_indices(
+        duration=duration,
+        frame_rate=frame_rate,
+        start_index=start_index,
+        end_index=end_index,
+        start_instant=start_instant,
+        end_instant=end_instant,
+        frame_step=frame_step,
+        frame_interval=frame_interval,
+        frame_indices=frame_indices,
+        frame_times=frame_times,
+    )
 
-    # Default start_index to 0 if not provided
-    if start_index is None:
-        start_index = 0
+    # "Full sequential" = start at 0, end at (or past) the last frame,
+    # step 1 — the regime where VidGear's threaded AVFoundation pipeline
+    # beats PyAV by ~4× at ≤720p on macOS (see SPEED_ANALYSIS.md). PyAV
+    # catches up and wins at 1080p+; we keep the rule simple here.
+    full_sequential = (
+        not sparse
+        and s_idx == 0
+        and e_idx >= total_frames - 1
+        and step == 1
+    )
 
-    # Calculate end_index from end_instant, if provided
-    if end_instant is not None:
-        end_index = int(end_instant * frame_rate)
+    # For destination="torch" with a GPU device, PyAV is the right backend
+    # (only one with hwaccel, and the dispatcher should never pick vidgear
+    # for a GPU-destined pipeline since vidgear can't be hardware-accelerated).
+    torch_gpu = destination == "torch" and device in ("mps", "cuda", "auto")
+    if torch_gpu and backend == "auto":
+        backend = "pyav"
+        if hwaccel is None:
+            # For the torch+GPU destination, hwaccel auto-enables: the
+            # per-frame numpy materialisation is unavoidable today, but
+            # the batched torch path makes the offloaded decode worth it.
+            hwaccel = "auto"
 
-    # Default end_index to the last frame if not provided
-    if end_index is None:
-        end_index = int(duration * frame_rate)
+    chosen = _choose_backend(
+        backend=backend, stabilize=stabilize, sparse=sparse, full_sequential=full_sequential,
+    )
+    resolved_hwaccel = _resolve_hwaccel(hwaccel) if chosen in ("pyav", "ffmpeg-pipe") else None
 
-    # Calculate frame_step from frame_interval, if provided
-    if frame_interval is not None:
-        frame_step = int(frame_interval * frame_rate)
+    logging.debug(
+        "extract_frames: backend=%s hwaccel=%s sparse=%s full_seq=%s range=[%s,%s] step=%s "
+        "destination=%s device=%s batch_size=%s",
+        chosen, resolved_hwaccel, sparse, full_sequential, s_idx, e_idx, step,
+        destination, device, batch_size,
+    )
 
-    # Check if start_index and end_index are within the valid frame range
-    assert 0 <= start_index <= end_index <= int(duration * frame_rate), f"Invalid frame range:\n\t{start_index} ({osh.time2str(1.0 * start_index / frame_rate)}) to {end_index} ({osh.time2str(1.0 * end_index / frame_rate)}).\n" \
-        f"It should be within 0 to {int(duration * frame_rate)} (for {osh.time2str(duration)} at {frame_rate} fps)"
+    if chosen == "vidgear":
+        np_iter = _extract_via_vidgear(video_path, s_idx, e_idx, step, stabilize)
+    elif chosen == "pyav":
+        if not _have_pyav():
+            raise ImportError(
+                "backend='pyav' requires PyAV. Install with: pip install 'video-helper[pyav]'"
+            )
+        np_iter = _extract_via_pyav(
+            video_path, s_idx, e_idx, step, indices, frame_rate, resolved_hwaccel,
+        )
+    elif chosen == "ffmpeg-pipe":
+        if shutil.which("ffmpeg") is None:
+            raise RuntimeError("backend='ffmpeg-pipe' requires ffmpeg on PATH")
+        if sparse:
+            raise ValueError(
+                "backend='ffmpeg-pipe' does not support sparse access; "
+                "use backend='pyav' instead."
+            )
+        np_iter = _extract_via_ffmpeg_pipe(
+            video_path, s_idx, e_idx, step, frame_rate, width, height, resolved_hwaccel,
+        )
+    else:
+        raise AssertionError(f"unreachable backend {chosen!r}")
 
-    # Initialize video stream
-    stream = VideoGear(source=video_path, stabilize=stabilize).start()
-    current_index = 0  # Start from the first frame
-
-    try:
-        # Iterate through video frames
-        while True:
-            frame = stream.read()
-
-            # If no more frames, exit the loop
-            if frame is None:
-                break
-
-            # Skip frames until reaching the start_index
-            if current_index < start_index:
-                current_index += 1
-                continue
-
-            # Yield frames only if current_index is within the range and is a multiple of frame_step
-            if current_index <= end_index and (current_index - start_index) % frame_step == 0:
-                yield frame
-
-            # Stop if end_index is reached
-            if current_index > end_index:
-                break
-
-            current_index += 1
-
-    finally:
-        stream.stop()  # Ensure the video stream is properly closed
+    # Final stage: convert/batch into the requested destination form.
+    # The fast-path destination="numpy" + batch_size=None is a no-op
+    # pass-through (no extra copy, no stacking).
+    yield from _to_destination(np_iter, destination, device, batch_size)
 
 
 def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None:

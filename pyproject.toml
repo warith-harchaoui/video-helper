@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "video-helper"
-version = "1.3.0"
-description = "Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats."
-authors = ["Warith Harchaoui <warith.harchaoui@gmail.com>, Mohamed Chelali <mohamed.t.chelali@gmail.com>, Bachir Zerroug <bzerroug@gmail.com>"]
+version = "1.4.0"
+description = "Video Helper is a Python library that provides utility functions for processing video files: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
+authors = ["Warith HARCHAOUI <warithmetics@deraison.ai>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -10,7 +10,19 @@ python = ">=3.10,<3.14"
 opencv-python = "^4.10.0.84"
 ffmpeg-python = "^0.2.0"
 vidgear = "^0.3.3"
-os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v1.2.0"}
+os-helper = {git = "https://github.com/warith-harchaoui/os-helper.git", rev = "v1.3.0"}
+# Optional: PyAV unlocks the windowed-sequential + sparse PyAV backend
+# (best default for those access patterns — see SPEED_ANALYSIS.md).
+# Without it, the dispatcher falls back to vidgear / ffmpeg-pipe.
+av = {version = ">=12,<18", optional = true}
+# Optional: torch unlocks destination="torch" + batched (N, H, W, 3)
+# tensors on cpu / mps / cuda. video-helper itself stays torch-free.
+torch = {version = ">=2.0,<3", optional = true}
+
+[tool.poetry.extras]
+pyav = ["av"]
+torch = ["torch"]
+all = ["av", "torch"]
 
 
 [build-system]

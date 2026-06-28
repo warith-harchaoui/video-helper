@@ -38,7 +38,7 @@ finally we still discuss between different python package managers and try to su
 
 ```bash
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.3.0
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.0
 ```
 
 # Usage
@@ -130,7 +130,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 | `video_dimensions` | `(video_file: str) -> dict` | Returns `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
 | `video_duration` | `(input_video: str) -> float` | Duration in seconds (thin wrapper over `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encode with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. |
-| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None) -> Iterator[np.ndarray]` | Generator yielding RGB frames in the given range. `start_instant`/`end_instant` (seconds) override the index form; `frame_interval` (seconds) overrides `frame_step`. |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel="auto") -> Iterator[np.ndarray]` | Generator yielding BGR frames. Multi-backend dispatcher (VidGear / PyAV / decord / ffmpeg-pipe) picks the fastest path for the requested access pattern; `frame_indices` / `frame_times` request sparse / random access; `hwaccel="auto"` uses VideoToolbox on macOS and CUDA on Linux+NVIDIA. See [EXAMPLES.md](EXAMPLES.md#frame-access). |
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Write a list of RGB frames to a video file. |
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video)` | Temporal crop from `sample_start` to `sample_end` (seconds). |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Generate a silent solid-black video. Odd dimensions are rounded down. |
@@ -145,8 +145,9 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 All frames are numpy arrays of shape `(height, width, 3)` with pixel values in `[0, 255]`.
 
-# Authors
- - [Warith Harchaoui](https://harchaoui.org/warith)
- - [Mohamed Chelali](https://mchelali.github.io)
- - [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug)
+# Author
+ - [Warith HARCHAOUI](https://harchaoui.org/warith)
+
+# Acknowledgements
+Special thanks to [Mohamed Chelali](https://mchelali.github.io) and [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug) for fruitful discussions.
 
