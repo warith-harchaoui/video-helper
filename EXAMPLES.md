@@ -42,21 +42,21 @@ recipe additionally requires ffmpeg to be built with `libass`.
 ## Setup
 
 ```bash
+# Core only — vidgear + opencv + ffmpeg-python (no optional backends).
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.0
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1
 ```
 
-Optional faster backends for [`extract_frames`](#frame-access):
+Optional extras (mix and match, or install `[all]`):
 
 ```bash
-# PyAV — lowest-overhead sequential decode, supports hardware acceleration.
-pip install --force-reinstall --no-cache-dir \
-  "video-helper[pyav] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.4.0"
+# [pyav]  — best windowed-sequential + sparse decoder. Honors hwaccel.
+# [torch] — destination="torch" (NCHW / CTHW RGB on cpu / mps / cuda).
+# [pil]   — destination="pil" (PIL.Image, RGB, size=(W, H)).
+# [all]   — everything (pyav + torch + pillow).
 
-# decord — fastest sparse / random-access reads. Not in extras: as of mid-2026
-# PyPI wheels don't cover Python 3.13 / Apple Silicon, and upstream
-# (https://github.com/dmlc/decord) recommends building from source. Install
-# manually after cloning + cmake; the dispatcher falls back to PyAV otherwise.
+pip install --force-reinstall --no-cache-dir \
+  "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.4.1"
 ```
 
 You also need `ffmpeg`. macOS: `brew install ffmpeg`. Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
@@ -123,8 +123,9 @@ for frame in vh.extract_frames(
 ### Sparse / Random Access
 
 Need a handful of frames at specific times? Pass `frame_indices` or
-`frame_times` instead of a range — the dispatcher routes to decord (when
-installed; fastest for this pattern) and falls back to PyAV otherwise.
+`frame_times` instead of a range — the dispatcher routes to PyAV
+(keyframe-seek) and falls back to VidGear (decode-all then filter) if
+PyAV isn't installed.
 
 ```python
 frames = list(vh.extract_frames("clip.mp4", frame_times=[1.5, 12.0, 47.0]))
@@ -132,17 +133,20 @@ frames = list(vh.extract_frames("clip.mp4", frame_indices=[0, 150, 900]))
 ```
 
 For long videos with a few sparse picks this is **dramatically** faster
-than the range API — backends keyframe-seek instead of decoding
-everything from t=0.
+than the range API — PyAV keyframe-seeks instead of decoding everything
+from t=0.
 
 ### Choosing a Backend
 
 | Backend | Best for | Notes |
 |---|---|---|
-| `vidgear` | Stabilization (`stabilize=True`) | Only path with software stabilizer. Decodes from t=0; slowest for narrow windows. |
-| `pyav` | Sequential time-range reads | Default when installed. Lowest Python overhead, supports `hwaccel`. |
-| `decord` | Sparse / random-access reads | Fastest for `frame_indices` / `frame_times`. Manual install on Py3.13+. |
-| `ffmpeg-pipe` | Sequential, no PyAV available | Subprocess + raw bgr24 pipe. Honors `hwaccel`. No sparse support. |
+| `vidgear` | Full sequential ≤ 720p, and **only** path for `stabilize=True` | OpenCV + producer thread. Decodes from t=0; pays a tax on windowed / sparse reads. |
+| `pyav` | Windowed sequential, sparse access, any `destination="torch"` + GPU | libav direct bindings. Lowest Python overhead, supports `hwaccel`. |
+| `ffmpeg-pipe` | Sequential when PyAV isn't installed | Subprocess + raw bgr24 pipe. Honors `hwaccel`. No sparse support. ~10-20× slower than PyAV — keep only as fallback. |
+
+A decord backend was prototyped during v1.4 development and dropped —
+see [`SPEED_ANALYSIS.md`](SPEED_ANALYSIS.md) for the numbers (PyAV
+beat decord ~30 % on its own sweet spot in our bench).
 
 ```python
 # Let the dispatcher decide (default).
@@ -158,8 +162,9 @@ frames = list(vh.extract_frames("clip.mp4", stabilize=True))
 
 ### Hardware Acceleration
 
-`hwaccel="auto"` (the default) picks the best decoder block exposed by
-your local ffmpeg build:
+Default is `hwaccel=None` (software decode). Opt in via `hwaccel="auto"`
+or an explicit value (`"videotoolbox"`, `"cuda"`, `"qsv"`). `"auto"`
+resolves to:
 
 - macOS → `videotoolbox` (Apple's media engine — fast, very low-power,
   great on Apple Silicon for H.264 / HEVC / VP9; M3+ adds AV1).
@@ -167,20 +172,26 @@ your local ffmpeg build:
 - Linux + Intel iGPU → `qsv` (QuickSync).
 - Otherwise → software decode.
 
-Realistic speedup is ~2-3× for HD/4K H.264-HEVC on CPU+hwaccel paths
-(the bottleneck moves to the device → host frame copy). Bigger wins
-come from **keeping frames on GPU** for a downstream ML pipeline, which
-is outside this function's scope.
-
 ```python
-# Explicitly disable hwaccel (useful for benchmarking or buggy drivers).
-frames = list(vh.extract_frames("clip.mp4", backend="pyav", hwaccel=None))
+# Opt into the platform-appropriate hardware decoder.
+frames = list(vh.extract_frames("clip.mp4", hwaccel="auto"))
 
 # Force a specific accelerator.
-frames = list(vh.extract_frames("clip.mp4", backend="pyav", hwaccel="videotoolbox"))
+frames = list(vh.extract_frames("clip.mp4", hwaccel="videotoolbox"))
 ```
 
 `hwaccel` is ignored by `vidgear` (OpenCV doesn't surface it cleanly).
+
+**Honest performance note** (see [SPEED_ANALYSIS.md](SPEED_ANALYSIS.md)):
+hwaccel **does** offload decode to the media engine (CPU/Wall ratio
+drops from ~4× to ~0.8× — CPU is mostly idle), **but** wall time is
+2-3× *worse* for `destination="numpy"` because the frames still need a
+GPU→CPU + swscale roundtrip to land as BGR numpy arrays. So with
+`destination="numpy"`, hwaccel is a **power / parallelism win**, not a
+latency win — useful for batch jobs on battery, or to free the CPU for
+downstream work. For `destination="torch"` + GPU device, the dispatcher
+auto-enables hwaccel: the host→device transfer is unavoidable but
+batched, and the offload is worth it.
 
 ### Destination: numpy, torch, or PIL
 
