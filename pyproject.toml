@@ -51,4 +51,4 @@ Issues = "https://github.com/warith-harchaoui/video-helper/issues"
 
 [tool.setuptools.packages.find]
 include = ["video_helper*"]
-exclude = ["tests*"]
+exclude = ["tests*", "assets*"]
