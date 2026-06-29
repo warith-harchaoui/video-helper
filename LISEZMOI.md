@@ -6,7 +6,7 @@
 
 `Video Helper` fait partie d'une collection de bibliothèques appelée `AI Helpers`, développée pour bâtir des applications d'intelligence artificielle.
 
-[🕸️ AI Helpers](https://harchaoui.org/warith/ai-helpers)
+[🌍 AI Helpers](https://harchaoui.org/warith/ai-helpers)
 
 [![logo](assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
 
