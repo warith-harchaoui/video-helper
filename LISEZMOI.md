@@ -149,4 +149,4 @@ Par défaut les frames sont des `numpy.ndarray` BGR de forme `(H, W, 3)` avec de
  - [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
 
 # Remerciements
-Special thanks to [Mohamed Chelali](https://mchelali.github.io) and [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug) for fruitful discussions.
+Remerciements chaleureux à [Mohamed Chelali](https://mchelali.github.io) et [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug) pour nos échanges fructueux.
