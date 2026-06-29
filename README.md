@@ -1,6 +1,6 @@
 # Video Helper
 
-> 🌐 Version française : [LISEZMOI.md](LISEZMOI.md)
+[🇫🇷](LISEZMOI.md) · [🇬🇧](README.md)
 
 `Video Helper` belongs to a collection of libraries called `AI Helpers` developed for building Artificial Intelligence.
 
@@ -37,10 +37,9 @@ To use Video Helper, you must install `ffmpeg`:
 
 finally we still discuss between different python package managers and try to support as much as possible
 
-
 ```bash
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.1
 ```
 
 # Usage
@@ -48,7 +47,6 @@ pip install --force-reinstall --no-cache-dir \
 For the full catalog of recipes, see [📋 EXAMPLES.md](EXAMPLES.md).
 
 Here’s an example of how to use Video Helper to load, convert, and extract frames from a video file:
-
 
 ```python
 import video_helper as vh
@@ -104,7 +102,6 @@ for frame in vh.extract_frames(
 Another example is about subtitles
 
 Convert SRT subtitles to WebVTT with color preservation:
-
 
 ```python
 import video_helper as vh
