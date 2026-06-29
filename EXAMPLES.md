@@ -59,7 +59,7 @@ pip install --force-reinstall --no-cache-dir \
   "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.5.1"
 ```
 
-You also need `ffmpeg`. macOS: `brew install ffmpeg`. Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
+You also need `ffmpeg`. macOS: `brew install ffmpeg` (install `brew` thanks to [brew.sh](https://brew.sh/)). Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
 
 To use [`burn_subtitles`](#burn-subtitles), the ffmpeg build must include
 `libass`. Verify with `ffmpeg -filters | grep subtitles` — if missing on
