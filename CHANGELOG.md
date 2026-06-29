@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Documentation
+## [1.5.2] - 2026-06-29
+
+### Added
+
+- `is_valid_video_file(url)` short-circuits to `True` for `http://` /
+  `https://` URLs — the only way to validate a remote URL is to spend
+  bandwidth fetching it, and ffmpeg surfaces a clear error downstream
+  if the URL is bad. Lets yt-dlp-resolved direct URLs (e.g. from
+  `youtube_helper.pick_video_stream`) pass through.
+- `video_dimensions(...)` accepts a new optional `http_headers` kwarg.
+  When the input is a URL, the headers are forwarded to `ffprobe` via
+  `-headers` so authenticated streams (YouTube live, members-only,
+  age-gated) probe correctly.
+- `extract_frames(...)` now passes its `http_headers` argument through
+  to the internal `video_dimensions(...)` probe so URL inputs no
+  longer 403 on the metadata round-trip before decoding begins.
+
+### Tests
+
+- `tests/test_url_support.py` — 6 unit tests for the URL short-circuit
+  and the new `http_headers` parameter. Network-free (the URL paths are
+  exercised through behaviour assertions; no actual ffprobe call is
+  made against the internet).
+
+## [1.5.1] - 2026-06-29
+
+### Changed
 
 - Establish suite-wide Python coding-style mandate in `CONTRIBUTING.md`:
   numpy-style docstrings on every function and class, module-level

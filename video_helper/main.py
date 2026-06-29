@@ -190,17 +190,30 @@ def is_valid_video_file(video_file: str) -> bool:
     ``ffprobe`` invocation so both a fake ``.mp4`` (no video stream) and a
     real video renamed to ``.xyz`` are rejected.
 
+    HTTP / HTTPS URLs short-circuit to ``True``: the only way to truly
+    validate a remote URL is to spend bandwidth fetching part of the
+    stream, and ffmpeg will surface a clear error downstream if the URL
+    is bad. Callers passing a yt-dlp-resolved direct URL (with
+    ``http_headers``) wouldn't even get past this gate otherwise.
+
     Parameters
     ----------
     video_file : str
-        Path to the input video file.
+        Path to the input video file, or an HTTP / HTTPS URL.
 
     Returns
     -------
     bool
         True iff the file exists, ffprobe finds at least one video stream,
-        and the extension is in :data:`video_extensions`.
+        and the extension is in :data:`video_extensions` — OR
+        ``video_file`` is an HTTP / HTTPS URL.
     """
+    # HTTP / HTTPS URLs are trusted: ffprobe / ffmpeg-on-pipe surface a
+    # clear error later if the URL is invalid, and there is no way to
+    # cheaply verify a remote stream's contents without downloading.
+    if video_file.startswith(("http://", "https://")):
+        return True
+
     if not osh.file_exists(video_file):
         logging.info(f"Video file not found: {video_file}")
         return False
@@ -222,43 +235,58 @@ def is_valid_video_file(video_file: str) -> bool:
 
 
 
-def video_dimensions(video_file: str) -> dict:
+def video_dimensions(video_file: str, http_headers: Optional[dict] = None) -> dict:
     """
-    Get the dimensions of a video file using ffmpeg-python:
-    - width
-    - height
-    - duration
-    - frame rate
+    Get the dimensions of a video file (or URL) using ``ffmpeg-python``.
+
+    Returned keys: ``width``, ``height``, ``duration``, ``frame_rate``,
+    ``has_sound``.
 
     Parameters
     ----------
     video_file : str
-        Path to the input video file.
+        Path to the input video file, OR an HTTP / HTTPS URL (e.g. a
+        yt-dlp-resolved direct media URL).
+    http_headers : dict[str, str], optional
+        HTTP headers (User-Agent, Referer, Cookie, …) forwarded to
+        ffprobe via ``-headers``. Required when ``video_file`` is a URL
+        that needs specific headers — e.g. yt-dlp-resolved YouTube live,
+        members-only, age-gated content. Ignored when ``video_file`` is
+        a local path.
 
     Returns
     -------
     dict
-        A dictionary containing the video dimensions:
-        - width: int, width of the video in pixels
-        - height: int, height of the video in pixels
-        - duration: float, duration of the video in seconds
-        - frame_rate: float, frame rate of the video in frames per second
-        - has_sound: bool, whether the video has sound or not
+        ``{"width": int, "height": int, "duration": float,
+        "frame_rate": float, "has_sound": bool}``.
 
-    Usage
-    -----
-    >>> video_file = "video.mp4"
-    >>> d = video_dimensions(video_file)
+    Examples
+    --------
+    >>> d = video_dimensions("video.mp4")
     >>> print(d)
     {'width': 1920, 'height': 1080, 'duration': 10.0, 'frame_rate': 30.0, 'has_sound': True}
 
     Notes
     -----
-    The function uses ffmpeg to probe the video file and extract the video stream information to get the dimensions, duration, and frame rate.
+    Uses :func:`ffmpeg.probe` (a thin wrapper over ``ffprobe``) for
+    metadata extraction. ``http_headers`` are passed through ffprobe's
+    ``-headers`` flag so URL-protected streams probe correctly.
     """
-    osh.checkfile(video_file, msg=f"Video file not found: {video_file}")
+    is_url = video_file.startswith(("http://", "https://"))
+    if not is_url:
+        osh.checkfile(video_file, msg=f"Video file not found: {video_file}")
 
-    probe = ffmpeg.probe(video_file)
+    # For URL inputs, splice the user's http_headers into ffprobe's
+    # input options. ffmpeg-python's ``probe`` accepts arbitrary kwargs
+    # which it converts into CLI flags.
+    probe_kwargs: dict = {}
+    if is_url and http_headers:
+        # ffmpeg expects a single CRLF-separated string before -i.
+        probe_kwargs["headers"] = "\r\n".join(
+            f"{k}: {v}" for k, v in http_headers.items()
+        ) + "\r\n"
+
+    probe = ffmpeg.probe(video_file, **probe_kwargs)
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
     width = int(video_info["width"])
     height = int(video_info["height"])
@@ -1276,7 +1304,11 @@ def extract_frames(
     """
     assert is_valid_video_file(video_path), f"Video file not okay:\n\t{video_path}"
 
-    d = video_dimensions(video_path)
+    # Pass http_headers through to the ffprobe call when the input is a
+    # URL — yt-dlp-resolved YouTube live / members-only / age-gated
+    # streams need the matching User-Agent / Cookie set, otherwise the
+    # probe 403s before we even get to decode.
+    d = video_dimensions(video_path, http_headers=http_headers)
     duration = d["duration"]
     frame_rate = d["frame_rate"]
     width = d["width"]
