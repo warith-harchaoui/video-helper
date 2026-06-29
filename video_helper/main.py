@@ -1,3 +1,30 @@
+"""
+video_helper.main
+=================
+
+Implementation module for ``video_helper``: frame extraction across
+three backends (VidGear / PyAV / ffmpeg-pipe), file-level conversion,
+sparse / range / interval indexing, hwaccel routing, scale-fit-and-pad,
+multi-destination yields (numpy / torch / pil), and small ffmpeg-shelled
+helpers (chunk extraction, concatenation, subtitle burn-in, …).
+
+Usage example
+-------------
+>>> from video_helper.main import extract_frames, video_dimensions
+>>> info = video_dimensions("clip.mp4")
+>>> for frame in extract_frames("clip.mp4", frame_step=5):
+...     # frame.shape == (H, W, 3) — BGR uint8
+...     pass
+
+The public surface is re-exported from ``video_helper`` (the package
+``__init__``); prefer ``import video_helper as vh`` and call
+``vh.extract_frames(...)`` instead of touching this module directly.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui
+"""
+
 import logging
 import os
 import platform
