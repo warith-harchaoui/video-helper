@@ -148,7 +148,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 By default frames are BGR `numpy.ndarray` of shape `(H, W, 3)` with pixel values in `[0, 255]`. See [EXAMPLES.md → Destination](EXAMPLES.md#destination-numpy-torch-or-pil) for the full shape × colorspace table including torch (CHW/NCHW/CTHW RGB) and PIL (RGB, `size=(W, H)`).
 
 # Author
- - [Warith HARCHAOUI](https://harchaoui.org/warith)
+ - [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
 
 # Acknowledgements
 Special thanks to [Mohamed Chelali](https://mchelali.github.io) and [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug) for fruitful discussions.
