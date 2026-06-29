@@ -44,7 +44,7 @@ recipe additionally requires ffmpeg to be built with `libass`.
 ```bash
 # Core only — vidgear + opencv + ffmpeg-python (no optional backends).
 pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0
+  git+https://github.com/warith-harchaoui/video-helper.git@v1.5.1
 ```
 
 Optional extras (mix and match, or install `[all]`):
@@ -56,7 +56,7 @@ Optional extras (mix and match, or install `[all]`):
 # [all]   — everything (pyav + torch + pillow).
 
 pip install --force-reinstall --no-cache-dir \
-  "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.5.0"
+  "video-helper[all] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.5.1"
 ```
 
 You also need `ffmpeg`. macOS: `brew install ffmpeg`. Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
