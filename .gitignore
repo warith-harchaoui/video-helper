@@ -245,3 +245,4 @@ cython_debug/
 !*config.json.example
 !*config.yaml.example
 !*config.yml.example
+nomoreclaude.sh

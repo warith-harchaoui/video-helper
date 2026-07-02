@@ -6,7 +6,17 @@ Multi-backend frame extraction (VidGear / PyAV / ffmpeg-pipe), video
 conversion, subtitle muxing, and lightweight image-ops glue for the AI
 Helpers suite.
 
-Usage example
+Multi-surface exposure
+----------------------
+Every public function below is reachable from four surfaces:
+
+- Python library import (this module).
+- Argparse CLI: ``video-helper`` (stdlib-only, always installed).
+- Click CLI: ``video-helper-click`` (needs the ``[cli]`` extra).
+- FastAPI HTTP: ``video_helper.api`` (needs the ``[api]`` extra).
+- MCP server: ``video-helper-mcp`` (needs the ``[api,mcp]`` extras).
+
+Usage Example
 -------------
 >>> import video_helper as vh
 >>> for frame in vh.extract_frames("clip.mp4", frame_interval=1.0):
@@ -19,8 +29,12 @@ for yt-dlp-resolved sources, scale-fit-and-pad, …).
 
 Author
 ------
-Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui
+Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 """
+
+# Package-level metadata — kept in sync with pyproject.toml on release.
+__author__ = "Warith Harchaoui, Ph.D."
+__email__ = "warithmetics@deraison.ai"
 
 # Import the public surface from ``main``. Names re-exported here are
 # what downstream callers should rely on; anything not listed in

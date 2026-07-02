@@ -114,6 +114,29 @@ css_file = "subtitles.css"
 vh.srt2vtt(srt_file, vtt_file, css_file)
 ```
 
+# Exposition multi-surface
+
+Chaque fonction publique est accessible depuis cinq surfaces, toutes
+câblées systématiquement (rien n'est réservé à la CLI ou à la
+bibliothèque) :
+
+| Surface | Installation | Point d'entrée |
+| --- | --- | --- |
+| Bibliothèque Python | `pip install video-helper` | `import video_helper as vh` |
+| CLI argparse (stdlib) | `pip install video-helper` | `video-helper --help` |
+| CLI click | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
+| HTTP FastAPI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
+| Serveur MCP | `pip install 'video-helper[api,mcp]'` | `video-helper-mcp` |
+
+Le `Dockerfile` à la racine embarque `.[api,mcp,pyav]` par défaut sur
+`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + MCP.
+
+Voir [GUI.md](GUI.md) pour le plan de conception GUI innovant (canvas
+de recette + comparateur frame-first + zone de dépôt par lots — pas un
+miroir de la CLI) et [LANDSCAPE.md](LANDSCAPE.md) pour la comparaison
+avec moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV et
+consorts.
+
 # Fonctionnalités
 - **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
 - **Conversion** : `video_converter` — ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.

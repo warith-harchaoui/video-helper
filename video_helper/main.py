@@ -8,7 +8,7 @@ sparse / range / interval indexing, hwaccel routing, scale-fit-and-pad,
 multi-destination yields (numpy / torch / pil), and small ffmpeg-shelled
 helpers (chunk extraction, concatenation, subtitle burn-in, …).
 
-Usage example
+Usage Example
 -------------
 >>> from video_helper.main import extract_frames, video_dimensions
 >>> info = video_dimensions("clip.mp4")
@@ -22,7 +22,7 @@ The public surface is re-exported from ``video_helper`` (the package
 
 Author
 ------
-Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui
+Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 """
 
 import logging

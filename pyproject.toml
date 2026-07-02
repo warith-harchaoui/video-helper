@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-helper"
-version = "1.5.2"
-description = "Video Helper — utility functions for video processing: validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
+version = "1.6.0"
+description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = {text = "BSD-3-Clause"}
@@ -42,8 +42,45 @@ pyav = ["av>=12,<18"]
 torch = ["torch>=2.0,<3"]
 # Pillow unlocks destination="pil" (PIL.Image RGB, size=(W, H)).
 pil = ["pillow>=10,<12"]
+# CLI-only-with-click extra. The argparse variant needs no runtime dep
+# and is always available.
+cli = ["click>=8.1,<9"]
+# FastAPI HTTP surface (video_helper.api). uvicorn + python-multipart
+# so multipart file uploads work out of the box.
+api = [
+    "fastapi>=0.111,<1",
+    "uvicorn>=0.30,<1",
+    "python-multipart>=0.0.9,<1",
+]
+# MCP surface (video_helper.mcp). Depends on the `api` extra
+# — fastapi-mcp wraps the FastAPI app.
+mcp = [
+    "fastapi-mcp>=0.3,<1",
+    "fastapi>=0.111,<1",
+    "uvicorn>=0.30,<1",
+    "python-multipart>=0.0.9,<1",
+]
 all = ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12"]
-dev = ["pytest>=8", "av>=12,<18"]
+# `dev` keeps the bar low for CI — pytest + httpx (for FastAPI TestClient)
+# + click (so the click CLI import always resolves in tests) + api / mcp
+# so smoke tests exercise every surface.
+dev = [
+    "pytest>=8",
+    "av>=12,<18",
+    "httpx>=0.27",
+    "click>=8.1,<9",
+    "fastapi>=0.111,<1",
+    "python-multipart>=0.0.9,<1",
+    "fastapi-mcp>=0.3,<1",
+]
+
+[project.scripts]
+# argparse-based CLI — no runtime dep beyond stdlib + core package.
+video-helper = "video_helper.cli_argparse:main"
+# click-based twin — install with [cli] extra.
+video-helper-click = "video_helper.cli_click:cli"
+# MCP server (over FastAPI) — install with [api,mcp] extras.
+video-helper-mcp = "video_helper.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/warith-harchaoui/video-helper"
