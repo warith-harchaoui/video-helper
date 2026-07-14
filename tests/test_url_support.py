@@ -20,7 +20,6 @@ import pytest
 
 from video_helper import is_valid_video_file, video_dimensions
 
-
 # ---------------------------------------------------------------------------
 # is_valid_video_file — URL short-circuit
 # ---------------------------------------------------------------------------
@@ -68,7 +67,7 @@ def test_video_dimensions_accepts_http_headers_kwarg() -> None:
 def test_video_dimensions_local_file_no_headers_required() -> None:
     """Local-file probes never need ``http_headers`` and never read them."""
     # No file at this path → ``osh.checkfile`` raises. We only need to
-    # confirm the call path; the actual exception type is asserted
-    # elsewhere.
-    with pytest.raises(Exception):
+    # confirm the call path fails; the concrete exception type is intentionally
+    # broad here (it is pinned in a dedicated test elsewhere), hence the noqa.
+    with pytest.raises(Exception):  # noqa: B017 — type is asserted in a focused test
         video_dimensions("/tmp/nonexistent_video_xyz.mp4")

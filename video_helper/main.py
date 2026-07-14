@@ -25,13 +25,20 @@ Author
 Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 """
 
-import logging
+# ``from __future__ import annotations`` makes every annotation a string at
+# runtime (PEP 563). It lets us reference forward / optional types (e.g.
+# ``torch.Tensor``, ``av.VideoFrame``) in signatures without importing the
+# heavy optional dependency at module import time — the annotation is only
+# evaluated by tooling, never executed.
+from __future__ import annotations
+
 import os
 import platform
 import re
 import shutil
 import subprocess
-from typing import Iterator, List, Optional, Sequence, Set, Tuple
+from collections.abc import Iterator, Sequence
+from typing import TYPE_CHECKING
 
 import cv2
 import ffmpeg
@@ -39,8 +46,22 @@ import numpy as np
 import os_helper as osh
 from vidgear.gears import VideoGear
 
+# ``torch`` is an *optional* extra: import it only for type-checking so the
+# ``torch.device`` / ``torch.Tensor`` annotations resolve for tooling, while
+# runtime import stays lazy (inside the functions that need it).
+if TYPE_CHECKING:  # pragma: no cover — types only, never executed at runtime
+    import av
+    import torch
 
-video_extensions = [
+# Logging goes through os-helper (``osh.info/warning/error/debug``), the shared
+# logging surface for the AI Helpers suite. It respects ``osh.verbosity(...)``
+# so the embedding application controls output from one place — no bare
+# ``print`` and no per-module stdlib logger (rule 6).
+
+# File extensions we accept as "video". Kept as a plain list (not a set) so
+# error messages can show a stable, human-ordered list; membership tests are
+# case-normalized at the call site.
+video_extensions: list[str] = [
     "mp4",
     "avi",
     "mov",
@@ -59,18 +80,19 @@ video_extensions = [
     "m2ts",
     "mts",
     "rm",
-    "asf"
+    "asf",
 ]
 
-def extract_unique_colors(srt_file_path: str) -> Set[str]:
+
+def extract_unique_colors(srt_file_path: str) -> set[str]:
     """
     Extract all unique hex color codes from an SRT file.
-    
+
     Parameters
     ----------
     srt_file_path : str
         Path to the input .srt file.
-    
+
     Returns
     -------
     Set[str]
@@ -85,20 +107,21 @@ def extract_unique_colors(srt_file_path: str) -> Set[str]:
     """
     color_tag_pattern = re.compile(r'<font color="(#\w{6})">', re.IGNORECASE)
     unique_colors = set()
-    
-    with open(srt_file_path, 'r', encoding='utf-8') as srt_file:
+
+    with open(srt_file_path, encoding="utf-8") as srt_file:
         for line in srt_file:
             # Find all occurrences of <font color="#RRGGBB">
             matches = color_tag_pattern.findall(line)
             # Add all found hex colors to the set (uppercase to avoid duplicates)
             unique_colors.update([match.upper() for match in matches])
-    
+
     return unique_colors
 
-def _generate_css_from_colors(color_codes: Set[str], css_file_path: str) -> None:
+
+def _generate_css_from_colors(color_codes: set[str], css_file_path: str) -> None:
     """
     Generate a CSS file with styles for each unique color code.
-    
+
     Parameters
     ----------
     color_codes : Set[str]
@@ -112,13 +135,14 @@ def _generate_css_from_colors(color_codes: Set[str], css_file_path: str) -> None
     >>> css_file = "styles.css"
     >>> _generate_css_from_colors(unique_colors, css_file)
     """
-    with open(css_file_path, 'w', encoding='utf-8') as css_file:
+    with open(css_file_path, "w", encoding="utf-8") as css_file:
         for color in color_codes:
             # Strip the '#' from the color code for the class name and use the hex code for styling
-            class_name = color.replace('#', '').lower()
+            class_name = color.replace("#", "").lower()
             css_file.write(f"::cue(.{class_name}) {{ color: {color}; }}\n")
 
-    logging.info(f"CSS file generated: {css_file_path}")
+    osh.info(f"CSS file generated: {css_file_path}")
+
 
 def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = None) -> None:
     """
@@ -156,11 +180,25 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = 
 
     def convert_color_tags(line: str) -> str:
         """Rewrite ``<font color="#RRGGBB">…</font>`` as ``<c.rrggbb>…</c>``."""
-        color_tag_pattern = re.compile(
-            r'<font color="(#\w{6})">(.*?)<\/font>', re.IGNORECASE
-        )
+        color_tag_pattern = re.compile(r'<font color="(#\w{6})">(.*?)<\/font>', re.IGNORECASE)
 
         def replace_color(match: re.Match) -> str:
+            """Turn one regex match of a ``<font color>`` tag into a VTT ``<c>``.
+
+            Parameters
+            ----------
+            match : re.Match
+                Match with group 1 = ``#RRGGBB`` color, group 2 = inner text.
+
+            Returns
+            -------
+            str
+                ``<c.rrggbb>text</c>`` — the WebVTT class-cue equivalent, with
+                the color used as a lowercase CSS class name (see the sidecar
+                CSS produced by ``_generate_css_from_colors``).
+            """
+            # Normalize the hex to uppercase for the human-facing value, but
+            # derive the CSS class name in lowercase without the leading '#'.
             color_code = match.group(1).upper()
             text = match.group(2)
             class_name = color_code.replace("#", "").lower()
@@ -168,7 +206,7 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = 
 
         return color_tag_pattern.sub(replace_color, line)
 
-    with open(srt_file_path, "r", encoding="utf-8") as srt_file:
+    with open(srt_file_path, encoding="utf-8") as srt_file:
         lines = srt_file.readlines()
 
     with open(vtt_file_path, "w", encoding="utf-8") as vtt_file:
@@ -180,7 +218,8 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = 
                 line = line.replace(",", ".")
             vtt_file.write(line)
 
-    logging.info(f"WebVTT saved: {vtt_file_path}")
+    osh.info(f"WebVTT saved: {vtt_file_path}")
+
 
 def is_valid_video_file(video_file: str) -> bool:
     """
@@ -215,7 +254,7 @@ def is_valid_video_file(video_file: str) -> bool:
         return True
 
     if not osh.file_exists(video_file):
-        logging.info(f"Video file not found: {video_file}")
+        osh.info(f"Video file not found: {video_file}")
         return False
 
     valid = False
@@ -230,12 +269,11 @@ def is_valid_video_file(video_file: str) -> bool:
     if ext.lower() not in video_extensions:
         valid = False
 
-    logging.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
+    osh.info(f"Video file {video_file} is {'valid' if valid else 'invalid'}")
     return valid
 
 
-
-def video_dimensions(video_file: str, http_headers: Optional[dict] = None) -> dict:
+def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     """
     Get the dimensions of a video file (or URL) using ``ffmpeg-python``.
 
@@ -282,9 +320,7 @@ def video_dimensions(video_file: str, http_headers: Optional[dict] = None) -> di
     probe_kwargs: dict = {}
     if is_url and http_headers:
         # ffmpeg expects a single CRLF-separated string before -i.
-        probe_kwargs["headers"] = "\r\n".join(
-            f"{k}: {v}" for k, v in http_headers.items()
-        ) + "\r\n"
+        probe_kwargs["headers"] = "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
 
     probe = ffmpeg.probe(video_file, **probe_kwargs)
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
@@ -305,15 +341,14 @@ def video_dimensions(video_file: str, http_headers: Optional[dict] = None) -> di
     return d
 
 
-
 def video_converter(
     input_video: str,
-    output_video: str = None,
-    frame_rate: int = None,
-    width: int = None,
-    height: int = None,
+    output_video: str | None = None,
+    frame_rate: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
     without_sound: bool = False,
-):
+) -> None:
     """
     Convert a video file to a new format with specified options.
 
@@ -335,13 +370,13 @@ def video_converter(
     Notes
     -----
     - The output video file will be in the same format as the input, unless an output file with a different format is specified.
-        
+
     Examples
     --------
     >>> video_converter("input.mp4", "output.mp4", frame_rate=30, width=640, height=480)
     >>> video_converter("input.mp4", "output.mp4", without_sound=True)
     """
-    logging.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
+    osh.info(f"Converting video file:\n\t{input_video}\ninto\n\t{output_video}")
 
     # Check if the input video file exists and is valid
     assert is_valid_video_file(input_video), f"Input video file not okay:\n\t{input_video}"
@@ -363,13 +398,18 @@ def video_converter(
     # accepts.
     if not frame_rate and not width and not height and not without_sound:
         if input_ext.lower() == output_ext.lower():
-            ffmpeg.input(input_video).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+            ffmpeg.input(input_video).output(output_video, vcodec="copy", acodec="copy").run(
+                overwrite_output=True, quiet=quiet
+            )
         else:
             ffmpeg.input(input_video).output(
-                output_video, vcodec='libx264', acodec='aac', pix_fmt='yuv420p',
+                output_video,
+                vcodec="libx264",
+                acodec="aac",
+                pix_fmt="yuv420p",
             ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
-        logging.info(f"Video file converted successfully:\n{output_video}")
+        osh.info(f"Video file converted successfully:\n{output_video}")
         return
 
     # Ensure width and height are even
@@ -379,20 +419,23 @@ def video_converter(
         height -= 1
 
     # Use temporary files for conversion if needed
-    with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
-         osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
-
+    with (
+        osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input,
+        osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output,
+    ):
         # Normalize the input into an .mp4 container before the filter
         # pass. Codec-copy only works when source codecs are already
         # MP4-compatible (h264 + aac); for VP8/VP9/Opus/etc. we must
         # transcode, otherwise ffmpeg refuses the cross-container mux.
         if input_ext.lower() != "mp4":
-            transcode_kwargs = {'vcodec': 'libx264', 'pix_fmt': 'yuv420p'}
+            transcode_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p"}
             if without_sound:
-                transcode_kwargs['an'] = None
+                transcode_kwargs["an"] = None
             else:
-                transcode_kwargs['acodec'] = 'aac'
-            ffmpeg.input(input_video).output(temp_input, **transcode_kwargs).run(overwrite_output=True, quiet=quiet)
+                transcode_kwargs["acodec"] = "aac"
+            ffmpeg.input(input_video).output(temp_input, **transcode_kwargs).run(
+                overwrite_output=True, quiet=quiet
+            )
         else:
             osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
 
@@ -407,7 +450,9 @@ def video_converter(
 
         # Apply video scaling and padding if needed
         if width and height:
-            ffmpeg_options["vf"] = f"scale='min({width},iw*{height}/ih):min({height},ih*{width}/iw)',pad='{width}:{height}:(ow-iw)/2:(oh-ih)/2:black'"
+            ffmpeg_options["vf"] = (
+                f"scale='min({width},iw*{height}/ih):min({height},ih*{width}/iw)',pad='{width}:{height}:(ow-iw)/2:(oh-ih)/2:black'"
+            )
         elif width:
             ffmpeg_options["vf"] = f"scale={width}:-1"  # Maintain aspect ratio
         elif height:
@@ -423,12 +468,16 @@ def video_converter(
 
         # If the output format is not MP4, perform final conversion
         if output_ext.lower() != "mp4":
-            ffmpeg.input(temp_output).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+            ffmpeg.input(temp_output).output(output_video, vcodec="copy", acodec="copy").run(
+                overwrite_output=True, quiet=quiet
+            )
         else:
             osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
 
     # Validate the final output video
-    assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{input_video}\ninto\n\t{output_video}"
+    assert is_valid_video_file(output_video), (
+        f"Failed to convert video file:\n\t{input_video}\ninto\n\t{output_video}"
+    )
 
     # Retrieve video properties for validation
     d = video_dimensions(output_video)
@@ -436,7 +485,9 @@ def video_converter(
     # Validate frame rate
     if frame_rate:
         error = round(100 * np.abs(d["frame_rate"] - frame_rate) / frame_rate)
-        assert error < 2, f"Failed to set frame rate for video file ({d['frame_rate']} vs {frame_rate}, error = {error}%):\n\t{output_video}"
+        assert error < 2, (
+            f"Failed to set frame rate for video file ({d['frame_rate']} vs {frame_rate}, error = {error}%):\n\t{output_video}"
+        )
 
     # Validate width and height
     if width:
@@ -448,12 +499,7 @@ def video_converter(
     if without_sound:
         assert not d["has_sound"], f"Failed to remove audio from video file:\n\t{output_video}"
 
-    logging.info(f"Video file converted successfully:\n\t{output_video}")
-
-
-
-
-
+    osh.info(f"Video file converted successfully:\n\t{output_video}")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -488,7 +534,7 @@ def video_converter(
 _BACKENDS = ("auto", "vidgear", "pyav", "ffmpeg-pipe")
 
 
-def _resolve_hwaccel(hwaccel: Optional[str]) -> Optional[str]:
+def _resolve_hwaccel(hwaccel: str | None) -> str | None:
     """Translate ``hwaccel="auto"`` into a concrete value supported by the
     locally-installed ffmpeg, or None when no acceleration is available.
 
@@ -508,7 +554,9 @@ def _resolve_hwaccel(hwaccel: Optional[str]) -> Optional[str]:
     try:
         supported = subprocess.run(
             ["ffmpeg", "-hide_banner", "-hwaccels"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout
     except Exception:
         return None
@@ -523,8 +571,19 @@ def _resolve_hwaccel(hwaccel: Optional[str]) -> Optional[str]:
 
 
 def _have_pyav() -> bool:
+    """Return whether the optional ``pyav`` extra is importable.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``import av`` succeeds, ``False`` otherwise. Used by the
+        backend dispatcher to decide whether the PyAV path is available.
+    """
+    # Import-probe (same strategy as ``_have_torch`` / ``_have_pil``): a bare
+    # import is the most reliable availability signal and stays cheap.
     try:
         import av  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -546,9 +605,7 @@ def _choose_backend(
     - windowed sequential                 → pyav if installed, else ffmpeg-pipe if ffmpeg on PATH, else vidgear
     """
     if backend not in _BACKENDS:
-        raise ValueError(
-            f"Unknown backend {backend!r}; expected one of {_BACKENDS}"
-        )
+        raise ValueError(f"Unknown backend {backend!r}; expected one of {_BACKENDS}")
     if stabilize:
         if backend not in ("auto", "vidgear"):
             raise ValueError(
@@ -581,15 +638,15 @@ def _choose_backend(
 def _resolve_indices(
     duration: float,
     frame_rate: float,
-    start_index: Optional[int],
-    end_index: Optional[int],
-    start_instant: Optional[float],
-    end_instant: Optional[float],
+    start_index: int | None,
+    end_index: int | None,
+    start_instant: float | None,
+    end_instant: float | None,
     frame_step: int,
-    frame_interval: Optional[float],
-    frame_indices: Optional[Sequence[int]],
-    frame_times: Optional[Sequence[float]],
-):
+    frame_interval: float | None,
+    frame_indices: Sequence[int] | None,
+    frame_times: Sequence[float] | None,
+) -> tuple[list[int] | None, int, int, int, bool]:
     """Normalize the public range/sparse API into a single representation.
 
     Returns
@@ -665,14 +722,14 @@ def _extract_via_vidgear(
         stream.stop()
 
 
-def _join_http_headers(http_headers: Optional[dict]) -> Optional[str]:
+def _join_http_headers(http_headers: dict | None) -> str | None:
     """ffmpeg / PyAV want a single CRLF-separated header string."""
     if not http_headers:
         return None
     return "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
 
 
-def _parse_pad_color(pad_color: str) -> Tuple[int, int, int]:
+def _parse_pad_color(pad_color: str) -> tuple[int, int, int]:
     """Parse opaque ``pad_color`` into a BGR uint8 tuple.
 
     Accepted values:
@@ -691,9 +748,9 @@ def _parse_pad_color(pad_color: str) -> Tuple[int, int, int]:
     named = {
         "black": (0, 0, 0),
         "white": (255, 255, 255),
-        "red": (0, 0, 255),      # BGR
+        "red": (0, 0, 255),  # BGR
         "green": (0, 255, 0),
-        "blue": (255, 0, 0),     # BGR
+        "blue": (255, 0, 0),  # BGR
         "yellow": (0, 255, 255),
         "cyan": (255, 255, 0),
         "magenta": (255, 0, 255),
@@ -718,9 +775,9 @@ def _parse_pad_color(pad_color: str) -> Tuple[int, int, int]:
 
 def _apply_output_transform(
     frame: np.ndarray,
-    output_width: Optional[int],
-    output_height: Optional[int],
-    pad_color_bgr: Tuple[int, int, int],
+    output_width: int | None,
+    output_height: int | None,
+    pad_color_bgr: tuple[int, int, int],
 ) -> np.ndarray:
     """Resize a BGR frame to (``output_width``, ``output_height``).
 
@@ -751,7 +808,10 @@ def _apply_output_transform(
         pad_right = output_width - new_w - pad_left
         return cv2.copyMakeBorder(
             scaled,
-            pad_top, pad_bottom, pad_left, pad_right,
+            pad_top,
+            pad_bottom,
+            pad_left,
+            pad_right,
             cv2.BORDER_CONSTANT,
             value=list(pad_color_bgr),
         )
@@ -774,10 +834,10 @@ def _extract_via_pyav(
     start_index: int,
     end_index: int,
     frame_step: int,
-    sparse_indices: Optional[Sequence[int]],
+    sparse_indices: Sequence[int] | None,
     frame_rate: float,
-    hwaccel: Optional[str],
-    http_headers: Optional[dict] = None,
+    hwaccel: str | None,
+    http_headers: dict | None = None,
 ) -> Iterator[np.ndarray]:
     """PyAV-based decode with keyframe seek and optional hardware accel.
 
@@ -800,7 +860,7 @@ def _extract_via_pyav(
     # fed to libavformat via the AVFormatContext options dict — that's
     # the right place for them (unlike hwaccel, which the same kwarg
     # silently ignores; see _extract_via_pyav notes above).
-    open_options: Optional[dict] = None
+    open_options: dict | None = None
     headers_str = _join_http_headers(http_headers)
     if headers_str:
         open_options = {"headers": headers_str}
@@ -808,30 +868,61 @@ def _extract_via_pyav(
     if hwaccel:
         try:
             hw = av.codec.hwaccel.HWAccel(device_type=hwaccel)
-            container = av.open(video_path, hwaccel=hw, options=open_options) \
-                if open_options else av.open(video_path, hwaccel=hw)
-        except (av.error.ValueError, ValueError) as exc:
-            logging.warning(
-                "PyAV hwaccel=%r unavailable (%s); falling back to software decode",
-                hwaccel, exc,
+            container = (
+                av.open(video_path, hwaccel=hw, options=open_options)
+                if open_options
+                else av.open(video_path, hwaccel=hw)
             )
-            container = av.open(video_path, options=open_options) \
-                if open_options else av.open(video_path)
+        except (av.error.ValueError, ValueError) as exc:
+            osh.warning(
+                "PyAV hwaccel=%r unavailable (%s); falling back to software decode",
+                hwaccel,
+                exc,
+            )
+            container = (
+                av.open(video_path, options=open_options) if open_options else av.open(video_path)
+            )
     else:
-        container = av.open(video_path, options=open_options) \
-            if open_options else av.open(video_path)
+        container = (
+            av.open(video_path, options=open_options) if open_options else av.open(video_path)
+        )
     try:
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
 
         def _seek_to_seconds(seconds: float) -> None:
-            # AV_TIME_BASE is 1 µs; convert seconds → microseconds.
+            """Seek the container to the keyframe at-or-before ``seconds``.
+
+            Parameters
+            ----------
+            seconds : float
+                Target position in seconds (clamped to >= 0).
+            """
+            # AV_TIME_BASE is 1 µs; convert seconds → microseconds. ``backward``
+            # lands on the nearest preceding keyframe so decoding stays valid.
             offset_us = max(0, int(seconds * 1_000_000))
             container.seek(offset_us, any_frame=False, backward=True)
 
-        def _index_of(frame) -> int:
+        def _index_of(frame: av.VideoFrame) -> int:
+            """Map a decoded frame's PTS to its integer frame index.
+
+            Parameters
+            ----------
+            frame : av.VideoFrame
+                Decoded PyAV frame.
+
+            Returns
+            -------
+            int
+                Zero-based frame index, or ``-1`` when the frame carries no PTS
+                (rare, but possible on some malformed streams).
+            """
+            # No presentation timestamp → we cannot place the frame; signal -1
+            # so the caller skips it rather than mis-indexing the stream.
             if frame.pts is None:
                 return -1
+            # PTS is in stream time-base units; scale to seconds then to a
+            # frame index at the stream's frame rate.
             return int(round(float(frame.pts * stream.time_base) * frame_rate))
 
         if sparse_indices is not None and len(sparse_indices) > 0:
@@ -871,8 +962,8 @@ def _extract_via_ffmpeg_pipe(
     frame_rate: float,
     width: int,
     height: int,
-    hwaccel: Optional[str],
-    http_headers: Optional[dict] = None,
+    hwaccel: str | None,
+    http_headers: dict | None = None,
 ) -> Iterator[np.ndarray]:
     """ffmpeg subprocess with -ss/-to true seek and raw bgr24 over a pipe.
 
@@ -914,7 +1005,7 @@ def _extract_via_ffmpeg_pipe(
         # Drain stderr for diagnostics.
         err = proc.stderr.read().decode("utf-8", errors="replace").strip()
         if err and proc.returncode not in (0, None):
-            logging.warning("ffmpeg stderr: %s", err)
+            osh.warning("ffmpeg stderr: %s", err)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -968,27 +1059,58 @@ def _extract_via_ffmpeg_pipe(
 
 
 def _have_torch() -> bool:
+    """Return whether the optional ``torch`` extra is importable.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``import torch`` succeeds, ``False`` otherwise. Used to
+        gate ``destination="torch"`` without hard-depending on torch.
+    """
+    # Probe by import: cheaper and more reliable than inspecting metadata,
+    # and it also catches broken installs (present but not importable).
     try:
         import torch  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
 def _have_pil() -> bool:
+    """Return whether the optional ``pillow`` extra is importable.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``import PIL.Image`` succeeds, ``False`` otherwise. Gates
+        ``destination="pil"``.
+    """
+    # Same import-probe strategy as ``_have_torch`` — keep the two in sync.
     try:
         import PIL.Image  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
-def _resolve_torch_device(device: str):
+def _resolve_torch_device(device: str) -> torch.device:
     """Translate ``device`` ("auto" / "cpu" / "mps" / "cuda") into a torch.device.
 
     "auto" → cuda if available, else mps if available, else cpu.
+
+    Parameters
+    ----------
+    device : str
+        Requested device string, or ``"auto"`` for best-available.
+
+    Returns
+    -------
+    torch.device
+        Concrete torch device object.
     """
-    import torch  # lazy
+    import torch  # lazy — only imported when a torch destination is requested
 
     if device == "auto":
         if torch.cuda.is_available():
@@ -999,9 +1121,23 @@ def _resolve_torch_device(device: str):
     return torch.device(device)
 
 
-def _bgr_hwc_to_torch_chw_rgb(np_frame: np.ndarray, device):
-    """Convert one numpy HWC BGR uint8 frame to a torch CHW RGB uint8 tensor."""
+def _bgr_hwc_to_torch_chw_rgb(np_frame: np.ndarray, device: torch.device) -> torch.Tensor:
+    """Convert one numpy HWC BGR uint8 frame to a torch CHW RGB uint8 tensor.
+
+    Parameters
+    ----------
+    np_frame : numpy.ndarray
+        Single frame ``(H, W, 3)``, BGR uint8 (OpenCV convention).
+    device : torch.device
+        Destination device for the resulting tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor ``(3, H, W)``, RGB uint8, on ``device``.
+    """
     import torch  # lazy
+
     # flip(-1): reverse the channel axis (BGR → RGB).
     # permute(2, 0, 1): HWC → CHW.
     # contiguous(): force a single copy so downstream ops don't trip on a
@@ -1010,25 +1146,53 @@ def _bgr_hwc_to_torch_chw_rgb(np_frame: np.ndarray, device):
     return torch.from_numpy(np_frame).flip(-1).permute(2, 0, 1).contiguous().to(device)
 
 
-def _bgr_to_torch_image_batch(np_batch_nhwc: np.ndarray, device):
-    """Convert numpy NHWC BGR uint8 batch → torch NCHW RGB uint8 on device."""
+def _bgr_to_torch_image_batch(np_batch_nhwc: np.ndarray, device: torch.device) -> torch.Tensor:
+    """Convert numpy NHWC BGR uint8 batch → torch NCHW RGB uint8 on device.
+
+    Parameters
+    ----------
+    np_batch_nhwc : numpy.ndarray
+        Batch ``(N, H, W, 3)``, BGR uint8.
+    device : torch.device
+        Destination device.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor ``(N, 3, H, W)``, RGB uint8, on ``device``.
+    """
     import torch
+
     return (
         torch.from_numpy(np_batch_nhwc)
-        .flip(-1)                  # NHWC BGR → NHWC RGB
-        .permute(0, 3, 1, 2)       # NHWC → NCHW
+        .flip(-1)  # NHWC BGR → NHWC RGB
+        .permute(0, 3, 1, 2)  # NHWC → NCHW
         .contiguous()
         .to(device)
     )
 
 
-def _bgr_to_torch_video_clip(np_clip_thwc: np.ndarray, device):
-    """Convert numpy THWC BGR uint8 clip → torch CTHW RGB uint8 on device."""
+def _bgr_to_torch_video_clip(np_clip_thwc: np.ndarray, device: torch.device) -> torch.Tensor:
+    """Convert numpy THWC BGR uint8 clip → torch CTHW RGB uint8 on device.
+
+    Parameters
+    ----------
+    np_clip_thwc : numpy.ndarray
+        Clip ``(T, H, W, 3)``, BGR uint8.
+    device : torch.device
+        Destination device.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor ``(3, T, H, W)`` (CTHW), RGB uint8, on ``device``.
+    """
     import torch
+
     return (
         torch.from_numpy(np_clip_thwc)
-        .flip(-1)                  # THWC BGR → THWC RGB
-        .permute(3, 0, 1, 2)       # THWC → CTHW
+        .flip(-1)  # THWC BGR → THWC RGB
+        .permute(3, 0, 1, 2)  # THWC → CTHW
         .contiguous()
         .to(device)
     )
@@ -1038,17 +1202,37 @@ def _to_destination(
     np_frames: Iterator[np.ndarray],
     destination: str,
     device: str,
-    batch_size: Optional[int],
+    batch_size: int | None,
     layout: str,
-):
+) -> Iterator[object]:
     """Convert/batch the upstream numpy-frame iterator into the requested destination.
 
     See the cheat-sheet at the top of this section for shapes / colorspaces.
+
+    Parameters
+    ----------
+    np_frames : Iterator[numpy.ndarray]
+        Upstream HWC BGR uint8 frames.
+    destination : str
+        One of ``"numpy"``, ``"torch"``, ``"pil"``.
+    device : str
+        Torch device string (only used when ``destination == "torch"``).
+    batch_size : int or None
+        Batch size for stacked yields, or ``None`` for one item at a time.
+    layout : str
+        ``"image"`` (per-frame / NCHW) or ``"video"`` (clip / CTHW) batching.
+
+    Yields
+    ------
+    object
+        numpy arrays, torch tensors, or PIL images depending on
+        ``destination`` — the concrete type is documented in the section
+        cheat-sheet above (kept as ``object`` here because the yield type is
+        genuinely destination-dependent).
     """
     if destination not in ("numpy", "torch", "pil"):
         raise ValueError(
-            f"Unknown destination {destination!r}; "
-            "expected 'numpy', 'torch', or 'pil'"
+            f"Unknown destination {destination!r}; expected 'numpy', 'torch', or 'pil'"
         )
     if destination == "pil" and batch_size is not None:
         raise ValueError(
@@ -1057,9 +1241,7 @@ def _to_destination(
             "/ 'torch' for batched tensors."
         )
     if layout not in ("image", "video"):
-        raise ValueError(
-            f"Unknown layout {layout!r}; expected 'image' or 'video'"
-        )
+        raise ValueError(f"Unknown layout {layout!r}; expected 'image' or 'video'")
     if batch_size is not None and batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
 
@@ -1089,6 +1271,7 @@ def _to_destination(
                 "pip install 'video-helper[pil]' (or bring your own PIL)"
             )
         from PIL import Image  # lazy
+
         for frame in np_frames:
             # Flip BGR → RGB before handing to PIL (which is RGB-native).
             yield Image.fromarray(frame[:, :, ::-1])
@@ -1115,11 +1298,11 @@ def _to_destination(
     for frame in np_frames:
         batch.append(frame)
         if len(batch) == batch_size:
-            stacked = np.stack(batch, axis=0)        # NHWC == THWC, BGR
+            stacked = np.stack(batch, axis=0)  # NHWC == THWC, BGR
             if layout == "image":
-                yield _bgr_to_torch_image_batch(stacked, dev)    # NCHW RGB
+                yield _bgr_to_torch_image_batch(stacked, dev)  # NCHW RGB
             else:  # "video"
-                yield _bgr_to_torch_video_clip(stacked, dev)     # CTHW RGB
+                yield _bgr_to_torch_video_clip(stacked, dev)  # CTHW RGB
             batch = []
     if batch:
         stacked = np.stack(batch, axis=0)
@@ -1131,24 +1314,24 @@ def _to_destination(
 
 def extract_frames(
     video_path: str,
-    start_index: Optional[int] = None,
-    end_index: Optional[int] = None,
-    start_instant: Optional[float] = None,
-    end_instant: Optional[float] = None,
+    start_index: int | None = None,
+    end_index: int | None = None,
+    start_instant: float | None = None,
+    end_instant: float | None = None,
     stabilize: bool = False,
     frame_step: int = 1,
-    frame_interval: Optional[float] = None,
-    frame_indices: Optional[Sequence[int]] = None,
-    frame_times: Optional[Sequence[float]] = None,
+    frame_interval: float | None = None,
+    frame_indices: Sequence[int] | None = None,
+    frame_times: Sequence[float] | None = None,
     backend: str = "auto",
-    hwaccel: Optional[str] = None,
-    http_headers: Optional[dict] = None,
-    output_width: Optional[int] = None,
-    output_height: Optional[int] = None,
+    hwaccel: str | None = None,
+    http_headers: dict | None = None,
+    output_width: int | None = None,
+    output_height: int | None = None,
     pad_color: str = "black",
     destination: str = "numpy",
     device: str = "cpu",
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
     layout: str = "image",
 ) -> Iterator:
     """
@@ -1332,12 +1515,7 @@ def extract_frames(
     # step 1 — the regime where VidGear's threaded AVFoundation pipeline
     # beats PyAV by ~4× at ≤720p on macOS (see SPEED_ANALYSIS.md). PyAV
     # catches up and wins at 1080p+; we keep the rule simple here.
-    full_sequential = (
-        not sparse
-        and s_idx == 0
-        and e_idx >= total_frames - 1
-        and step == 1
-    )
+    full_sequential = not sparse and s_idx == 0 and e_idx >= total_frames - 1 and step == 1
 
     # For destination="torch" with a GPU device, PyAV is the right backend
     # (only one with hwaccel, and the dispatcher should never pick vidgear
@@ -1352,20 +1530,31 @@ def extract_frames(
             hwaccel = "auto"
 
     chosen = _choose_backend(
-        backend=backend, stabilize=stabilize, sparse=sparse, full_sequential=full_sequential,
+        backend=backend,
+        stabilize=stabilize,
+        sparse=sparse,
+        full_sequential=full_sequential,
     )
     resolved_hwaccel = _resolve_hwaccel(hwaccel) if chosen in ("pyav", "ffmpeg-pipe") else None
 
-    logging.debug(
+    osh.debug(
         "extract_frames: backend=%s hwaccel=%s sparse=%s full_seq=%s range=[%s,%s] step=%s "
         "destination=%s device=%s batch_size=%s",
-        chosen, resolved_hwaccel, sparse, full_sequential, s_idx, e_idx, step,
-        destination, device, batch_size,
+        chosen,
+        resolved_hwaccel,
+        sparse,
+        full_sequential,
+        s_idx,
+        e_idx,
+        step,
+        destination,
+        device,
+        batch_size,
     )
 
     if chosen == "vidgear":
         if http_headers:
-            logging.warning(
+            osh.warning(
                 "vidgear backend ignores http_headers — OpenCV doesn't surface "
                 "them cleanly. Auth-protected URLs (YouTube live, members-only, "
                 "age-gated content from yt-helper) will likely 403. Use "
@@ -1378,7 +1567,13 @@ def extract_frames(
                 "backend='pyav' requires PyAV. Install with: pip install 'video-helper[pyav]'"
             )
         np_iter = _extract_via_pyav(
-            video_path, s_idx, e_idx, step, indices, frame_rate, resolved_hwaccel,
+            video_path,
+            s_idx,
+            e_idx,
+            step,
+            indices,
+            frame_rate,
+            resolved_hwaccel,
             http_headers=http_headers,
         )
     elif chosen == "ffmpeg-pipe":
@@ -1386,11 +1581,17 @@ def extract_frames(
             raise RuntimeError("backend='ffmpeg-pipe' requires ffmpeg on PATH")
         if sparse:
             raise ValueError(
-                "backend='ffmpeg-pipe' does not support sparse access; "
-                "use backend='pyav' instead."
+                "backend='ffmpeg-pipe' does not support sparse access; use backend='pyav' instead."
             )
         np_iter = _extract_via_ffmpeg_pipe(
-            video_path, s_idx, e_idx, step, frame_rate, width, height, resolved_hwaccel,
+            video_path,
+            s_idx,
+            e_idx,
+            step,
+            frame_rate,
+            width,
+            height,
+            resolved_hwaccel,
             http_headers=http_headers,
         )
     else:
@@ -1404,9 +1605,25 @@ def extract_frames(
             raise ValueError(f"output_height must be > 0, got {output_height}")
         pad_bgr = _parse_pad_color(pad_color)
 
-        def _resize_pad_iter(src):
+        def _resize_pad_iter(src: Iterator[np.ndarray]) -> Iterator[np.ndarray]:
+            """Apply the scale-fit-and-pad transform to every upstream frame.
+
+            Parameters
+            ----------
+            src : Iterator[numpy.ndarray]
+                Upstream BGR uint8 frames.
+
+            Yields
+            ------
+            numpy.ndarray
+                Each frame resized into ``output_width`` × ``output_height``
+                with aspect-preserving padding (color ``pad_bgr``).
+            """
+            # Wrap lazily so the resize/pad cost is paid frame-by-frame during
+            # iteration, never up front for the whole clip.
             for frame in src:
                 yield _apply_output_transform(frame, output_width, output_height, pad_bgr)
+
         np_iter = _resize_pad_iter(np_iter)
 
     # Final stage: convert/batch into the requested destination form.
@@ -1415,7 +1632,7 @@ def extract_frames(
     yield from _to_destination(np_iter, destination, device, batch_size, layout)
 
 
-def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30) -> None:
+def dump_frames(frames_list: list[np.ndarray], output_movie: str, fps: int = 30) -> None:
     """
     Save frames to a video file.
 
@@ -1440,7 +1657,9 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
     assert len(frames_list) > 0, "No frames to dump!"
 
     height, width, channels = frames_list[0].shape
-    assert all(frame.shape == (height, width, channels) for frame in frames_list), "Frames do not have consistent dimensions!"
+    assert all(frame.shape == (height, width, channels) for frame in frames_list), (
+        "Frames do not have consistent dimensions!"
+    )
 
     _, _, output_ext = osh.folder_name_ext(output_movie)
     quiet = osh.verbosity() <= 0
@@ -1450,25 +1669,32 @@ def dump_frames(frames_list: List[np.ndarray], output_movie: str, fps: int = 30)
             frame_pattern = osh.join([temp_folder, "frame_%09d.png"])
             for i, frame in enumerate(frames_list):
                 frame_path = frame_pattern % i
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # BGR convention of opencv
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # BGR convention of opencv
                 cv2.imwrite(frame_path, frame_bgr)
 
             temp_movie = osh.join([temp_folder, "temp_movie.mp4"])
-            ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(overwrite_output=True, quiet=quiet)
+            ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(
+                overwrite_output=True, quiet=quiet
+            )
 
             if output_ext.lower() != "mp4":
-                ffmpeg.input(temp_movie).output(output_movie, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+                ffmpeg.input(temp_movie).output(output_movie, vcodec="copy", acodec="copy").run(
+                    overwrite_output=True, quiet=quiet
+                )
             else:
                 osh.copyfile(temp_movie, output_movie)
 
         except Exception as e:
-            raise Exception(f"Error occurred while dumping frames to video: {e}")
+            # Chain the original exception (``from e``) so the traceback keeps
+            # the ffmpeg-level cause instead of masking it (ruff B904).
+            raise Exception(f"Error occurred while dumping frames to video: {e}") from e
 
-    logging.info(f"Video saved successfully: {output_movie}")
+    osh.info(f"Video saved successfully: {output_movie}")
 
 
-
-def extract_video_chunk(input_video: str, sample_start: float, sample_end: float, output_video: str) -> None:
+def extract_video_chunk(
+    input_video: str, sample_start: float, sample_end: float, output_video: str
+) -> None:
     """
     Extract a chunk of video from the specified start to end time and save it to a new file.
 
@@ -1490,44 +1716,54 @@ def extract_video_chunk(input_video: str, sample_start: float, sample_end: float
     assert is_valid_video_file(input_video), f"Video file not okay:\n\t{input_video}"
     metadata = video_dimensions(input_video)
     duration = metadata["duration"]
-    assert sample_end>sample_start and duration >= sample_end and duration > sample_start, f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})"
+    assert sample_end > sample_start and duration >= sample_end and duration > sample_start, (
+        f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})"
+    )
 
     _, _, input_ext = osh.folder_name_ext(input_video)
     _, _, output_ext = osh.folder_name_ext(output_video)
 
     quiet = True
 
-
-    with osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input, \
-         osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output:
-
+    with (
+        osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input,
+        osh.temporary_filename(suffix=".mp4", mode="wb") as temp_output,
+    ):
         # Normalize the input into an .mp4 container before the temporal
         # cut. Codec-copy only works when source codecs are already
         # MP4-compatible (h264 + aac); for arbitrary inputs we transcode
         # to H.264/AAC, which every MP4-class container accepts.
         if input_ext.lower() != "mp4":
             ffmpeg.input(input_video).output(
-                temp_input, vcodec='libx264', acodec='aac', pix_fmt='yuv420p',
+                temp_input,
+                vcodec="libx264",
+                acodec="aac",
+                pix_fmt="yuv420p",
             ).run(overwrite_output=True, quiet=quiet)
         else:
             osh.copyfile(input_video, temp_input)  # Direct copy if already MP4
 
         # Actually do the temporal selection
-        ffmpeg.input(temp_input, ss=sample_start, to=sample_end).output(temp_output).run(overwrite_output=True)
+        ffmpeg.input(temp_input, ss=sample_start, to=sample_end).output(temp_output).run(
+            overwrite_output=True
+        )
 
         # If the output format is not MP4, perform final conversion
         if output_ext.lower() != "mp4":
-            ffmpeg.input(temp_output).output(output_video, vcodec='copy', acodec='copy').run(overwrite_output=True, quiet=quiet)
+            ffmpeg.input(temp_output).output(output_video, vcodec="copy", acodec="copy").run(
+                overwrite_output=True, quiet=quiet
+            )
         else:
             osh.copyfile(temp_output, output_video)  # Copy to final output if MP4
 
     if is_valid_video_file(output_video):
-        logging.info(f"Video chunk extracted successfully:\n\t{output_video}")
+        osh.info(f"Video chunk extracted successfully:\n\t{output_video}")
     else:
         raise RuntimeError(
             f"Video could not be cropped (original: {input_video}, "
             f"start: {sample_start}, end: {sample_end}, duration: {duration})"
         )
+
 
 # ──────────────────────────────────────────────────────────────────────────
 #  Pipeline helpers — composition primitives shared by video editors that
@@ -1603,20 +1839,20 @@ def black_video(
     """
     assert duration > 0, f"black_video duration must be > 0, got {duration}"
     assert width > 0 and height > 0, f"black_video needs positive dims, got {width}x{height}"
-    if width % 2: width -= 1
-    if height % 2: height -= 1
+    # H.264 with yuv420p requires even width/height; drop the last odd pixel
+    # rather than fail the encode on a user-supplied odd dimension.
+    if width % 2:
+        width -= 1
+    if height % 2:
+        height -= 1
     quiet = osh.verbosity() <= 0
 
     (
-        ffmpeg
-        .input(f"color=c=black:s={width}x{height}:r={frame_rate}",
-               f="lavfi", t=duration)
-        .output(output_video, vcodec="libx264", pix_fmt="yuv420p",
-                preset="medium", crf=20, an=None)
+        ffmpeg.input(f"color=c=black:s={width}x{height}:r={frame_rate}", f="lavfi", t=duration)
+        .output(output_video, vcodec="libx264", pix_fmt="yuv420p", preset="medium", crf=20, an=None)
         .run(overwrite_output=True, quiet=quiet)
     )
-    assert is_valid_video_file(output_video), \
-        f"Failed to write black_video:\n\t{output_video}"
+    assert is_valid_video_file(output_video), f"Failed to write black_video:\n\t{output_video}"
 
 
 def image_loop_to_video(
@@ -1660,34 +1896,44 @@ def image_loop_to_video(
 
     stream = ffmpeg.input(image, loop=1, framerate=frame_rate, t=duration)
     out_kwargs = {
-        "vcodec": "libx264", "pix_fmt": "yuv420p",
-        "preset": "medium", "crf": 20, "an": None,
+        "vcodec": "libx264",
+        "pix_fmt": "yuv420p",
+        "preset": "medium",
+        "crf": 20,
+        "an": None,
         "t": duration,
     }
+    # H.264 with yuv420p needs even dimensions; nudge any odd target down by
+    # one pixel so the encoder never rejects the requested size.
     if width and height:
-        if width % 2: width -= 1
-        if height % 2: height -= 1
+        if width % 2:
+            width -= 1
+        if height % 2:
+            height -= 1
         out_kwargs["vf"] = (
             f"scale='min({width},iw*{height}/ih):min({height},ih*{width}/iw)',"
             f"pad='{width}:{height}:(ow-iw)/2:(oh-ih)/2:black',"
             f"format=yuv420p,fps={frame_rate}"
         )
     elif width:
-        if width % 2: width -= 1
+        if width % 2:
+            width -= 1
         out_kwargs["vf"] = f"scale={width}:-1,format=yuv420p,fps={frame_rate}"
     elif height:
-        if height % 2: height -= 1
+        if height % 2:
+            height -= 1
         out_kwargs["vf"] = f"scale=-1:{height},format=yuv420p,fps={frame_rate}"
     else:
         out_kwargs["vf"] = f"format=yuv420p,fps={frame_rate}"
 
     stream.output(output_video, **out_kwargs).run(overwrite_output=True, quiet=quiet)
-    assert is_valid_video_file(output_video), \
+    assert is_valid_video_file(output_video), (
         f"Failed to write image_loop_to_video:\n\t{output_video}"
+    )
 
 
 def concat_videos(
-    input_videos: List[str],
+    input_videos: list[str],
     output_video: str,
     reencode: bool = True,
     frame_rate: int = None,
@@ -1737,21 +1983,26 @@ def concat_videos(
         stream = ffmpeg.input(manifest, format="concat", safe=0)
         out_kwargs = {}
         if reencode:
-            out_kwargs.update({
-                "vcodec": "libx264", "pix_fmt": "yuv420p",
-                "preset": "medium", "crf": 20, "an": None,
-            })
+            out_kwargs.update(
+                {
+                    "vcodec": "libx264",
+                    "pix_fmt": "yuv420p",
+                    "preset": "medium",
+                    "crf": 20,
+                    "an": None,
+                }
+            )
             if frame_rate:
                 out_kwargs["r"] = frame_rate
         else:
             out_kwargs.update({"vcodec": "copy", "acodec": "copy"})
 
         stream.output(output_video, **out_kwargs).run(
-            overwrite_output=True, quiet=quiet,
+            overwrite_output=True,
+            quiet=quiet,
         )
 
-    assert is_valid_video_file(output_video), \
-        f"Failed to write concat_videos:\n\t{output_video}"
+    assert is_valid_video_file(output_video), f"Failed to write concat_videos:\n\t{output_video}"
 
 
 def overlay_image(
@@ -1805,21 +2056,17 @@ def overlay_image(
     in_img = ffmpeg.input(image)
     if scale_width:
         in_img = in_img.filter("scale", scale_width, -1)
-    overlaid = ffmpeg.overlay(in_v.video, in_img,
-                              x=x, y=y, eval="frame", format="auto")
+    overlaid = ffmpeg.overlay(in_v.video, in_img, x=x, y=y, eval="frame", format="auto")
 
-    out_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p",
-                  "preset": "medium", "crf": 20}
+    out_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p", "preset": "medium", "crf": 20}
     # Preserve the original audio stream if present (probe lazily).
     has_audio = video_dimensions(input_video).get("has_sound", False)
     if has_audio:
-        out = ffmpeg.output(overlaid, in_v.audio, output_video,
-                            acodec="copy", **out_kwargs)
+        out = ffmpeg.output(overlaid, in_v.audio, output_video, acodec="copy", **out_kwargs)
     else:
         out = ffmpeg.output(overlaid, output_video, an=None, **out_kwargs)
     out.run(overwrite_output=True, quiet=quiet)
-    assert is_valid_video_file(output_video), \
-        f"Failed to write overlay_image:\n\t{output_video}"
+    assert is_valid_video_file(output_video), f"Failed to write overlay_image:\n\t{output_video}"
 
 
 def extract_audio_track(
@@ -1864,13 +2111,12 @@ def extract_audio_track(
     ...                     encoding="libmp3lame", sample_rate=22050)
     """
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
-    assert is_valid_video_file(input_video), \
-        f"Invalid input video file: {input_video}"
+    assert is_valid_video_file(input_video), f"Invalid input video file: {input_video}"
     quiet = osh.verbosity() <= 0
 
     ffmpeg.input(input_video).output(
         output_audio,
-        vn=None,                # drop the video stream
+        vn=None,  # drop the video stream
         ac=channels,
         ar=sample_rate,
         acodec=encoding,
@@ -1935,10 +2181,10 @@ def mux_audio_video(
     if shortest:
         out_kwargs["shortest"] = None
     ffmpeg.output(in_v.video, in_a.audio, output_video, **out_kwargs).run(
-        overwrite_output=True, quiet=quiet,
+        overwrite_output=True,
+        quiet=quiet,
     )
-    assert is_valid_video_file(output_video), \
-        f"Failed to write mux_audio_video:\n\t{output_video}"
+    assert is_valid_video_file(output_video), f"Failed to write mux_audio_video:\n\t{output_video}"
 
 
 def burn_subtitles(
@@ -2003,8 +2249,7 @@ def burn_subtitles(
     ...                force_style="FontName=Helvetica,FontSize=28,Outline=2")
     """
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
-    osh.checkfile(subtitles_file,
-                  msg=f"Subtitles file not found: {subtitles_file}")
+    osh.checkfile(subtitles_file, msg=f"Subtitles file not found: {subtitles_file}")
     quiet = osh.verbosity() <= 0
 
     # Check the obvious user error first (wrong file format) so callers on a
@@ -2023,8 +2268,10 @@ def burn_subtitles(
     # silently lack it and produce a cryptic "Error parsing filterchain".
     # Fail fast with an actionable error instead.
     import subprocess as _sp
-    _filters = _sp.run(["ffmpeg", "-hide_banner", "-filters"],
-                       capture_output=True, text=True, check=False).stdout
+
+    _filters = _sp.run(
+        ["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True, check=False
+    ).stdout
     if "subtitles" not in _filters:
         raise RuntimeError(
             "ffmpeg has no `subtitles` filter (libass missing). Rebuild "
@@ -2036,10 +2283,7 @@ def burn_subtitles(
     # Escape special chars for the subtitles filter — colons mainly, also
     # backslashes and single quotes. Order matters: backslash first.
     subs_abs = os.path.abspath(subtitles_file)
-    subs_esc = (subs_abs
-                .replace("\\", "\\\\")
-                .replace(":", r"\:")
-                .replace("'", r"\'"))
+    subs_esc = subs_abs.replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")
 
     vf = f"subtitles='{subs_esc}'"
     if not osh.emptystring(force_style):
@@ -2047,14 +2291,19 @@ def burn_subtitles(
 
     in_stream = ffmpeg.input(input_video)
     has_audio = video_dimensions(input_video).get("has_sound", False)
-    out_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p",
-                  "preset": "medium", "crf": 20, "vf": vf}
+    out_kwargs = {
+        "vcodec": "libx264",
+        "pix_fmt": "yuv420p",
+        "preset": "medium",
+        "crf": 20,
+        "vf": vf,
+    }
     if has_audio:
         out_kwargs["acodec"] = "copy"
     else:
         out_kwargs["an"] = None
     in_stream.output(output_video, **out_kwargs).run(
-        overwrite_output=True, quiet=quiet,
+        overwrite_output=True,
+        quiet=quiet,
     )
-    assert is_valid_video_file(output_video), \
-        f"Failed to write burn_subtitles:\n\t{output_video}"
+    assert is_valid_video_file(output_video), f"Failed to write burn_subtitles:\n\t{output_video}"

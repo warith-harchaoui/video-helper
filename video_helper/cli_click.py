@@ -36,12 +36,13 @@ from __future__ import annotations
 import json
 import os
 
+import os_helper as osh
+
 try:
     import click
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "The click CLI requires the [cli] extra. "
-        "Install with: pip install 'video-helper[cli]'"
+        "The click CLI requires the [cli] extra. Install with: pip install 'video-helper[cli]'"
     ) from exc
 
 # Same underlying functions as the argparse twin — one source of truth.
@@ -61,7 +62,6 @@ from . import (
     video_dimensions,
     video_duration,
 )
-
 
 # ---------------------------------------------------------------------------
 # Top-level group
@@ -153,7 +153,9 @@ def duration(input_: str) -> None:
 @click.option("--frame-rate", "frame_rate", type=int, default=None)
 @click.option("--width", type=int, default=None)
 @click.option("--height", type=int, default=None)
-@click.option("--without-sound", "without_sound", is_flag=True, default=False, help="Drop the audio stream.")
+@click.option(
+    "--without-sound", "without_sound", is_flag=True, default=False, help="Drop the audio stream."
+)
 def convert(
     input_: str,
     output: str,
@@ -385,8 +387,12 @@ def burn_subs(input_: str, subs: str, output: str, force_style: str | None) -> N
 
 @cli.command("srt2vtt")
 @click.option("--input", "input_", required=True, type=click.Path(exists=True))
-@click.option("--output", type=click.Path(), default=None, help="Output .vtt (default: sibling of input).")
-@click.option("--css", type=click.Path(), default=None, help="Output .css (default: sibling of input).")
+@click.option(
+    "--output", type=click.Path(), default=None, help="Output .vtt (default: sibling of input)."
+)
+@click.option(
+    "--css", type=click.Path(), default=None, help="Output .css (default: sibling of input)."
+)
 def srt2vtt_cmd(input_: str, output: str | None, css: str | None) -> None:
     """Convert an SRT to WebVTT + companion CSS."""
     srt2vtt(srt_file_path=input_, vtt_file_path=output, css_file_path=css)
@@ -427,7 +433,7 @@ def extract_frames_cmd(
     """Stream frames to disk as one PNG per sampled frame."""
     import cv2  # noqa: WPS433 — deferred so `--help` stays cheap
 
-    os.makedirs(output_dir, exist_ok=True)
+    osh.make_directory(output_dir)
     written: list[str] = []
     for i, frame in enumerate(
         extract_frames(

@@ -1,18 +1,35 @@
-import os
-import pytest
-import os_helper as osh
-import numpy as np
-from video_helper import (
-    extract_unique_colors,
-    srt2vtt,
-    is_valid_video_file,
-    video_dimensions,
-    video_converter,
-    extract_frames,
-    dump_frames,
-    extract_video_chunk,
-)
+"""
+Core library tests for ``video_helper``.
 
+Module summary
+--------------
+Exercises the primary public functions — validation, dimension probing,
+conversion, chunk extraction, and frame extraction / dumping — against the
+committed fixtures in ``video_tests/``. Integration-heavy cases are guarded
+so the suite degrades gracefully when a fixture or optional backend is
+missing.
+
+Author
+------
+Project maintainers.
+"""
+
+from __future__ import annotations
+
+import os
+
+import numpy as np
+import os_helper as osh
+import pytest
+
+from video_helper import (
+    dump_frames,
+    extract_frames,
+    extract_video_chunk,
+    is_valid_video_file,
+    video_converter,
+    video_dimensions,
+)
 
 # Local fixtures shipped with the repo (see video_tests/).
 # `shaky.mp4` has audio; `example_converted.mp4` does not.
@@ -23,13 +40,14 @@ VIDEO_NO_AUDIO = osh.join([FIXTURES_DIR, "example_converted.mp4"])
 osh.verbosity(0)
 
 
-def _require(path):
+def _require(path) -> str:
+    """Return the fixture path, skipping the test if it does not exist."""
     if not osh.file_exists(path):
         pytest.skip(f"Fixture missing: {path}")
     return path
 
 
-def test_video_dimensions():
+def test_video_dimensions() -> None:
     """Video dimensions and frame rate are retrieved correctly."""
     video_file = _require(VIDEO_WITH_AUDIO)
     d = video_dimensions(video_file)
@@ -38,7 +56,7 @@ def test_video_dimensions():
     assert d["has_sound"] is True
 
 
-def test_video_conversion(tmp_path):
+def test_video_conversion(tmp_path) -> None:
     """Conversion applies fps, resize, and audio stripping."""
     video_file = _require(VIDEO_WITH_AUDIO)
     src = video_dimensions(video_file)
@@ -65,7 +83,7 @@ def test_video_conversion(tmp_path):
     assert d["duration"] > 0
 
 
-def test_frame_extraction():
+def test_frame_extraction() -> None:
     """Frame extraction honors time range and frame_step."""
     video_file = _require(VIDEO_NO_AUDIO)
     d = video_dimensions(video_file)
@@ -107,14 +125,12 @@ def test_frame_extraction():
     assert abs(len(frames_interval) - expected_interval) <= 2
 
 
-def test_frames_dump(tmp_path):
+def test_frames_dump(tmp_path) -> None:
     """Round-trip: extract a short window of frames, dump, and re-open."""
     video_file = _require(VIDEO_NO_AUDIO)
     d = video_dimensions(video_file)
 
-    frames = list(
-        extract_frames(video_file, start_instant=0.0, end_instant=1.0)
-    )
+    frames = list(extract_frames(video_file, start_instant=0.0, end_instant=1.0))
     assert len(frames) > 0
 
     out = str(tmp_path / "frames.mp4")
@@ -122,7 +138,7 @@ def test_frames_dump(tmp_path):
     assert is_valid_video_file(out)
 
 
-def test_extract_video_chunk(tmp_path):
+def test_extract_video_chunk(tmp_path) -> None:
     """Temporal crop yields a valid, shorter video."""
     video_file = _require(VIDEO_NO_AUDIO)
     out = str(tmp_path / "chunk.mp4")

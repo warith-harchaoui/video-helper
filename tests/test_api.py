@@ -17,6 +17,8 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 # FastAPI is in the ``[api]`` optional extra — skip cleanly otherwise.
@@ -27,7 +29,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture(scope="module")
-def client():
+def client() -> Iterator[TestClient]:
     """Yield a TestClient bound to the video-helper FastAPI app."""
     from video_helper.api import app
 
@@ -35,14 +37,14 @@ def client():
         yield c
 
 
-def test_health_returns_ok(client):
+def test_health_returns_ok(client) -> None:
     """``/health`` should return 200 + ``{"status": "ok"}``."""
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
 
 
-def test_openapi_lists_expected_endpoints(client):
+def test_openapi_lists_expected_endpoints(client) -> None:
     """The OpenAPI spec should list every expected route path."""
     r = client.get("/openapi.json")
     assert r.status_code == 200
@@ -67,7 +69,7 @@ def test_openapi_lists_expected_endpoints(client):
     assert expected.issubset(set(paths.keys()))
 
 
-def test_docs_endpoint_is_served(client):
+def test_docs_endpoint_is_served(client) -> None:
     """``/docs`` should serve the Swagger UI landing HTML."""
     r = client.get("/docs")
     assert r.status_code == 200

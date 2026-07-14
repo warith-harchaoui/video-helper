@@ -48,7 +48,6 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 try:
     from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
@@ -76,7 +75,6 @@ from . import (
     video_duration,
 )
 
-
 # ---------------------------------------------------------------------------
 # App factory + shared plumbing
 # ---------------------------------------------------------------------------
@@ -95,7 +93,7 @@ app = FastAPI(
 )
 
 
-def _spool(upload: UploadFile, dest_dir: Path, suffix_hint: Optional[str] = None) -> Path:
+def _spool(upload: UploadFile, dest_dir: Path, suffix_hint: str | None = None) -> Path:
     """
     Persist an ``UploadFile`` to a temp path on disk.
 
@@ -128,8 +126,16 @@ def _spool(upload: UploadFile, dest_dir: Path, suffix_hint: Optional[str] = None
     return out
 
 
-def _cleanup(*paths) -> None:
-    """Best-effort cleanup — never let a tidy-up failure kill a response."""
+def _cleanup(*paths: str | Path) -> None:
+    """Best-effort cleanup — never let a tidy-up failure kill a response.
+
+    Parameters
+    ----------
+    *paths : str or pathlib.Path
+        Files and/or directories to remove. Missing entries are ignored, and
+        any error is swallowed so a failed cleanup can never break the HTTP
+        response that scheduled it (run as a ``BackgroundTask``).
+    """
     for p in paths:
         try:
             path = Path(p)
@@ -219,12 +225,15 @@ def convert(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     output_format: str = Form("mp4", description="Target container extension."),
-    frame_rate: Optional[int] = Form(None),
-    width: Optional[int] = Form(None),
-    height: Optional[int] = Form(None),
+    frame_rate: int | None = Form(None),
+    width: int | None = Form(None),
+    height: int | None = Form(None),
     without_sound: bool = Form(False),
-):
+) -> FileResponse:
     """Re-encode / resize / drop-audio the uploaded video."""
+    # Spool the upload to a real file: ffmpeg-based helpers need a seekable
+    # path on disk, not an in-memory stream. ``lstrip('.')`` tolerates callers
+    # passing either "mp4" or ".mp4" as the target container.
     tmp = _new_tmpdir()
     src = _spool(file, tmp)
     dst = tmp / f"converted.{output_format.lstrip('.')}"
@@ -236,7 +245,11 @@ def convert(
         height=height,
         without_sound=without_sound,
     )
+    # Delete the temp dir only *after* the response has been streamed — a
+    # BackgroundTask runs post-response, so ``dst`` is still readable now.
     background.add_task(_cleanup, tmp)
+    # Generic octet-stream: the client already knows the format it asked for,
+    # and this avoids guessing a MIME type per container.
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
 
@@ -247,8 +260,9 @@ def chunk(
     start: float = Form(...),
     end: float = Form(...),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Extract a ``[start, end]`` slice from the uploaded video."""
+    # Same spool-to-disk pattern as /convert (ffmpeg needs a seekable file).
     tmp = _new_tmpdir()
     src = _spool(file, tmp)
     dst = tmp / f"chunk.{output_format.lstrip('.')}"
@@ -270,8 +284,11 @@ def black(
     height: int = Form(...),
     frame_rate: int = Form(30),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Synthesize a silent solid-black clip."""
+    # No upload to spool here — the clip is generated from parameters only.
+    # ``duration`` is aliased so the wire field stays "duration" while the
+    # Python name avoids shadowing the builtin sense of the word.
     tmp = _new_tmpdir()
     dst = tmp / f"black.{output_format.lstrip('.')}"
     black_video(
@@ -291,11 +308,13 @@ def image_loop(
     image: UploadFile = File(...),
     duration_seconds: float = Form(..., alias="duration"),
     frame_rate: int = Form(30),
-    width: Optional[int] = Form(None),
-    height: Optional[int] = Form(None),
+    width: int | None = Form(None),
+    height: int | None = Form(None),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Loop a still image for ``duration`` seconds into a silent video."""
+    # Preserve the image's real extension (falling back to .png) so ffmpeg
+    # picks the right image demuxer for the still.
     tmp = _new_tmpdir()
     img = _spool(image, tmp, suffix_hint=Path(image.filename or "").suffix or ".png")
     dst = tmp / f"loop.{output_format.lstrip('.')}"
@@ -316,9 +335,9 @@ def concat(
     background: BackgroundTasks,
     files: list[UploadFile] = File(...),
     reencode: bool = Form(True),
-    frame_rate: Optional[int] = Form(None),
+    frame_rate: int | None = Form(None),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Concatenate multiple uploaded videos head-to-tail."""
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="concat needs at least 2 files")
@@ -349,13 +368,16 @@ def overlay(
     image: UploadFile = File(...),
     x: str = Form("0"),
     y: str = Form("0"),
-    scale_width: Optional[int] = Form(None),
+    scale_width: int | None = Form(None),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Overlay a still image on the uploaded video."""
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    # Second upload needs a different filename — spool manually.
+    # ``x`` / ``y`` are strings, not ints, on purpose: they may be ffmpeg
+    # overlay expressions (e.g. "main_w-overlay_w-10"), not just pixel offsets.
+    # Second upload needs a different filename — spool manually so it doesn't
+    # overwrite the video spooled above.
     img = tmp / (f"overlay{Path(image.filename or '').suffix or '.png'}")
     with img.open("wb") as fp:
         shutil.copyfileobj(image.file, fp)
@@ -380,8 +402,10 @@ def extract_audio(
     sample_rate: int = Form(44100),
     channels: int = Form(2),
     encoding: str = Form("pcm_s16le"),
-):
+) -> FileResponse:
     """Dump the audio track of the uploaded video."""
+    # Default output_format is "wav" here (not "mp4") since the payload is
+    # audio; the container extension still drives the encoder choice.
     tmp = _new_tmpdir()
     src = _spool(file, tmp)
     dst = tmp / f"audio.{output_format.lstrip('.')}"
@@ -405,11 +429,12 @@ def mux_audio(
     audio_bitrate: str = Form("192k"),
     shortest: bool = Form(False),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Mux a separate audio track onto the uploaded video."""
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    # Second upload — separate name.
+    # Second upload must not reuse ``_spool``'s fixed "upload" name or it would
+    # clobber the video; spool it manually under a distinct "audio_track" name.
     a = tmp / (f"audio_track{Path(audio.filename or '').suffix or '.wav'}")
     with a.open("wb") as fp:
         shutil.copyfileobj(audio.file, fp)
@@ -431,12 +456,14 @@ def burn_subs(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     subs: UploadFile = File(...),
-    force_style: Optional[str] = Form(None),
+    force_style: str | None = Form(None),
     output_format: str = Form("mp4"),
-):
+) -> FileResponse:
     """Burn subtitles into the frames of the uploaded video."""
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+    # Keep the subtitle file's real extension (.srt/.vtt/.ass) — libass selects
+    # the parser from it, so a wrong suffix would silently drop the captions.
     s = tmp / (f"subs{Path(subs.filename or '').suffix or '.srt'}")
     with s.open("wb") as fp:
         shutil.copyfileobj(subs.file, fp)
@@ -455,8 +482,10 @@ def burn_subs(
 def srt2vtt_route(
     background: BackgroundTasks,
     file: UploadFile = File(...),
-):
+) -> StreamingResponse:
     """Convert an uploaded SRT to WebVTT + companion CSS; response is a ZIP."""
+    # Force the ``.srt`` suffix regardless of the uploaded filename so the
+    # converter always treats the input as SubRip.
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=".srt")
     out_vtt = tmp / "output.vtt"
@@ -485,18 +514,22 @@ def extract_frames_route(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     frame_step: int = Form(1),
-    frame_interval: Optional[float] = Form(None),
-    start: Optional[float] = Form(None),
-    end: Optional[float] = Form(None),
+    frame_interval: float | None = Form(None),
+    start: float | None = Form(None),
+    end: float | None = Form(None),
     backend: str = Form("auto"),
-):
+) -> StreamingResponse:
     """Extract frames as PNGs; response is a ZIP archive."""
+    # cv2 import is deferred to request time: importing OpenCV at module load
+    # would slow every worker startup even for endpoints that never write PNGs.
     import cv2  # noqa: WPS433 — deferred so the module import stays cheap
 
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
     frames_dir = tmp / "frames"
     frames_dir.mkdir()
+    # Extraction can fail deep in a backend; wrap it so we clean up the temp dir
+    # eagerly and surface a 500 instead of leaking files on the error path.
     try:
         for i, frame in enumerate(
             extract_frames(

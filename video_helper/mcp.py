@@ -45,7 +45,6 @@ except ImportError as exc:  # pragma: no cover
 # Reuse the exact same FastAPI app — MCP is a thin wrapper on top.
 from .api import app
 
-
 # ``FastApiMCP`` mounts an MCP endpoint on the existing FastAPI app; we
 # store the wrapped instance at module scope so downstream code (tests,
 # ASGI runners) can access both the FastAPI app and the MCP handler.

@@ -51,7 +51,9 @@ def _has_subtitles_filter() -> bool:
     """Return True if ffmpeg was built with libass (subtitles filter)."""
     proc = subprocess.run(
         ["ffmpeg", "-hide_banner", "-filters"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return "subtitles" in proc.stdout
 
@@ -84,13 +86,15 @@ def _write_srt(path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_extract_unique_colors(tmp_path):
+def test_extract_unique_colors(tmp_path) -> None:
+    """extract_unique_colors returns the distinct hex colors used in an SRT."""
     srt = _write_srt(tmp_path / "subs.srt")
     colors = extract_unique_colors(srt)
     assert colors == {"#FF0000", "#00FF00"}
 
 
-def test_srt2vtt_default_paths(tmp_path):
+def test_srt2vtt_default_paths(tmp_path) -> None:
+    """srt2vtt writes sibling .vtt/.css with color cue classes and dot timecodes."""
     srt = _write_srt(tmp_path / "subs.srt")
     srt2vtt(srt)
     vtt = tmp_path / "subs.vtt"
@@ -105,7 +109,8 @@ def test_srt2vtt_default_paths(tmp_path):
     assert "00:00:00.500 --> 00:00:02.000" in vtt_text
 
 
-def test_srt2vtt_custom_paths(tmp_path):
+def test_srt2vtt_custom_paths(tmp_path) -> None:
+    """srt2vtt honors explicit vtt/css paths and emits ::cue rules per color."""
     srt = _write_srt(tmp_path / "subs.srt")
     vtt = tmp_path / "out.vtt"
     css = tmp_path / "out.css"
@@ -122,7 +127,8 @@ def test_srt2vtt_custom_paths(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_video_duration_matches_black_video(tmp_path):
+def test_video_duration_matches_black_video(tmp_path) -> None:
+    """video_duration reports the duration of a generated black clip."""
     out = str(tmp_path / "black.mp4")
     black_video(1.5, 64, 64, out, frame_rate=15)
     assert is_valid_video_file(out)
@@ -134,7 +140,8 @@ def test_video_duration_matches_black_video(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_black_video_dimensions(tmp_path):
+def test_black_video_dimensions(tmp_path) -> None:
+    """black_video rounds odd dimensions down to even and produces a silent clip."""
     out = str(tmp_path / "black.mp4")
     black_video(0.5, 65, 33, out, frame_rate=15)  # odd dims → rounded down
     assert is_valid_video_file(out)
@@ -143,7 +150,8 @@ def test_black_video_dimensions(tmp_path):
     assert d["has_sound"] is False
 
 
-def test_black_video_rejects_bad_duration(tmp_path):
+def test_black_video_rejects_bad_duration(tmp_path) -> None:
+    """black_video rejects a non-positive duration with an assertion."""
     with pytest.raises(AssertionError):
         black_video(0.0, 64, 64, str(tmp_path / "x.mp4"))
 
@@ -153,7 +161,8 @@ def test_black_video_rejects_bad_duration(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_image_loop_to_video_letterbox(tmp_path):
+def test_image_loop_to_video_letterbox(tmp_path) -> None:
+    """image_loop_to_video letterboxes a still into an exact target resolution."""
     png = _write_png(tmp_path / "still.png", color=(255, 0, 0), size=(50, 40))
     out = str(tmp_path / "still.mp4")
     image_loop_to_video(png, 1.0, out, frame_rate=15, width=128, height=72)
@@ -168,7 +177,8 @@ def test_image_loop_to_video_letterbox(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_concat_videos_doubles_duration(tmp_path):
+def test_concat_videos_doubles_duration(tmp_path) -> None:
+    """Concatenating two equal clips yields a clip of roughly double duration."""
     a = str(tmp_path / "a.mp4")
     b = str(tmp_path / "b.mp4")
     black_video(1.0, 64, 64, a, frame_rate=15)
@@ -179,7 +189,8 @@ def test_concat_videos_doubles_duration(tmp_path):
     assert abs(video_duration(out) - 2.0) < 0.2
 
 
-def test_concat_videos_rejects_empty(tmp_path):
+def test_concat_videos_rejects_empty(tmp_path) -> None:
+    """concat_videos rejects an empty input list with an assertion."""
     with pytest.raises(AssertionError):
         concat_videos([], str(tmp_path / "x.mp4"))
 
@@ -189,7 +200,8 @@ def test_concat_videos_rejects_empty(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_overlay_image_preserves_dimensions(tmp_path):
+def test_overlay_image_preserves_dimensions(tmp_path) -> None:
+    """overlay_image keeps the base video's dimensions unchanged."""
     base = str(tmp_path / "base.mp4")
     black_video(1.0, 128, 72, base, frame_rate=15)
     overlay = _write_png(tmp_path / "ovr.png", color=(0, 255, 0), size=(16, 16))
@@ -209,9 +221,17 @@ def _make_silent_wav(path, duration=1.0, sample_rate=16000) -> str:
     """Generate a silent WAV via ffmpeg's anullsrc filter."""
     subprocess.run(
         [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i",
-            f"anullsrc=r={sample_rate}:cl=mono", "-t", str(duration),
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"anullsrc=r={sample_rate}:cl=mono",
+            "-t",
+            str(duration),
             str(path),
         ],
         check=True,
@@ -219,7 +239,8 @@ def _make_silent_wav(path, duration=1.0, sample_rate=16000) -> str:
     return str(path)
 
 
-def test_mux_then_extract_roundtrip(tmp_path):
+def test_mux_then_extract_roundtrip(tmp_path) -> None:
+    """Muxing audio into a silent clip then extracting it round-trips a sound track."""
     video = str(tmp_path / "silent.mp4")
     audio = _make_silent_wav(tmp_path / "silence.wav", duration=1.0)
     black_video(1.0, 64, 64, video, frame_rate=15)
@@ -244,7 +265,8 @@ def test_mux_then_extract_roundtrip(tmp_path):
     not _has_subtitles_filter(),
     reason="ffmpeg built without libass (subtitles filter)",
 )
-def test_burn_subtitles_smoke(tmp_path):
+def test_burn_subtitles_smoke(tmp_path) -> None:
+    """burn_subtitles produces a valid clip preserving the source duration."""
     video = str(tmp_path / "in.mp4")
     black_video(2.5, 128, 72, video, frame_rate=15)
     srt = _write_srt(tmp_path / "subs.srt")
@@ -254,7 +276,8 @@ def test_burn_subtitles_smoke(tmp_path):
     assert abs(video_duration(out) - 2.5) < 0.2
 
 
-def test_burn_subtitles_rejects_unknown_format(tmp_path):
+def test_burn_subtitles_rejects_unknown_format(tmp_path) -> None:
+    """burn_subtitles rejects a subtitle file with an unknown format."""
     video = str(tmp_path / "in.mp4")
     black_video(0.5, 64, 64, video, frame_rate=15)
     bad = tmp_path / "subs.txt"

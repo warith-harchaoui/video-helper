@@ -63,7 +63,8 @@ You also need `ffmpeg`. macOS: `brew install ffmpeg` (install `brew` thanks to [
 
 To use [`burn_subtitles`](#burn-subtitles), the ffmpeg build must include
 `libass`. Verify with `ffmpeg -filters | grep subtitles` — if missing on
-macOS, try `brew uninstall ffmpeg && brew install ffmpeg --HEAD`.
+macOS, try `brew uninstall ffmpeg && brew install ffmpeg --HEAD`
+(install `brew` thanks to [brew.sh](https://brew.sh/)).
 
 ## Probe & Validate
 

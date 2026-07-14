@@ -16,7 +16,6 @@ from video_helper import (
     black_video,
     extract_frames,
     is_valid_video_file,
-    video_dimensions,
 )
 from video_helper.main import (
     _BACKENDS,
@@ -35,7 +34,7 @@ osh.verbosity(0)
 
 
 @pytest.fixture(scope="module")
-def clip(tmp_path_factory):
+def clip(tmp_path_factory) -> str:
     """A 3-second 64x64 H.264 clip with 30 fps."""
     p = tmp_path_factory.mktemp("clip") / "test.mp4"
     black_video(3.0, 64, 64, str(p), frame_rate=30)
@@ -48,13 +47,14 @@ def clip(tmp_path_factory):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_hwaccel_explicit_passthrough():
+def test_resolve_hwaccel_explicit_passthrough() -> None:
+    """An explicit hwaccel value passes through unchanged (None and named accels)."""
     assert _resolve_hwaccel(None) is None
     assert _resolve_hwaccel("cuda") == "cuda"
     assert _resolve_hwaccel("videotoolbox") == "videotoolbox"
 
 
-def test_resolve_hwaccel_auto_returns_known_or_none():
+def test_resolve_hwaccel_auto_returns_known_or_none() -> None:
     """`auto` returns either a string ffmpeg knows about, or None — never garbage."""
     val = _resolve_hwaccel("auto")
     assert val in {None, "videotoolbox", "cuda", "qsv"}
@@ -65,32 +65,36 @@ def test_resolve_hwaccel_auto_returns_known_or_none():
 # ---------------------------------------------------------------------------
 
 
-def test_choose_backend_stabilize_forces_vidgear():
+def test_choose_backend_stabilize_forces_vidgear() -> None:
+    """stabilize=True forces the vidgear backend and rejects any other explicit backend."""
     assert _choose_backend("auto", stabilize=True, sparse=False, full_sequential=False) == "vidgear"
     # Even when explicit, stabilize + non-vidgear must raise.
     with pytest.raises(ValueError):
         _choose_backend("pyav", stabilize=True, sparse=False, full_sequential=False)
 
 
-def test_choose_backend_rejects_unknown():
+def test_choose_backend_rejects_unknown() -> None:
+    """An unrecognized backend name raises ValueError."""
     with pytest.raises(ValueError):
         _choose_backend("bogus", stabilize=False, sparse=False, full_sequential=False)
 
 
-def test_choose_backend_rejects_decord_after_removal():
+def test_choose_backend_rejects_decord_after_removal() -> None:
     """decord was dropped in v1.4.0 — passing it must raise."""
     with pytest.raises(ValueError):
         _choose_backend("decord", stabilize=False, sparse=False, full_sequential=False)
 
 
-def test_choose_backend_explicit_passthrough():
+def test_choose_backend_explicit_passthrough() -> None:
+    """Any explicit (non-auto) backend is returned unchanged."""
     for b in _BACKENDS:
         if b == "auto":
             continue
         assert _choose_backend(b, stabilize=False, sparse=False, full_sequential=False) == b
 
 
-def test_choose_backend_auto_sparse_prefers_pyav():
+def test_choose_backend_auto_sparse_prefers_pyav() -> None:
+    """Auto + sparse selection prefers PyAV when available, else vidgear."""
     chosen = _choose_backend("auto", stabilize=False, sparse=True, full_sequential=False)
     if _have_pyav():
         assert chosen == "pyav"
@@ -98,12 +102,12 @@ def test_choose_backend_auto_sparse_prefers_pyav():
         assert chosen == "vidgear"
 
 
-def test_choose_backend_auto_full_sequential_prefers_vidgear():
+def test_choose_backend_auto_full_sequential_prefers_vidgear() -> None:
     """Full sequential (start=0, end=total, step=1) routes to VidGear (4x faster on macOS)."""
     assert _choose_backend("auto", stabilize=False, sparse=False, full_sequential=True) == "vidgear"
 
 
-def test_choose_backend_auto_windowed_prefers_pyav():
+def test_choose_backend_auto_windowed_prefers_pyav() -> None:
     """Windowed sequential routes to PyAV (keyframe seek beats vidgear's decode-from-t0)."""
     chosen = _choose_backend("auto", stabilize=False, sparse=False, full_sequential=False)
     if _have_pyav():
@@ -117,50 +121,74 @@ def test_choose_backend_auto_windowed_prefers_pyav():
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_indices_sparse_from_times():
+def test_resolve_indices_sparse_from_times() -> None:
+    """frame_times are converted to sparse frame indices at the given fps."""
     indices, _, _, _, sparse = _resolve_indices(
-        duration=2.0, frame_rate=30.0,
-        start_index=None, end_index=None,
-        start_instant=None, end_instant=None,
-        frame_step=1, frame_interval=None,
-        frame_indices=None, frame_times=[0.0, 1.0, 1.5],
+        duration=2.0,
+        frame_rate=30.0,
+        start_index=None,
+        end_index=None,
+        start_instant=None,
+        end_instant=None,
+        frame_step=1,
+        frame_interval=None,
+        frame_indices=None,
+        frame_times=[0.0, 1.0, 1.5],
     )
     assert sparse is True
     assert indices == [0, 30, 45]
 
 
-def test_resolve_indices_sparse_clips_out_of_range():
+def test_resolve_indices_sparse_clips_out_of_range() -> None:
+    """Negative and out-of-bounds sparse indices are dropped."""
     indices, *_ = _resolve_indices(
-        duration=1.0, frame_rate=30.0,
-        start_index=None, end_index=None,
-        start_instant=None, end_instant=None,
-        frame_step=1, frame_interval=None,
-        frame_indices=[-5, 0, 10, 999], frame_times=None,
+        duration=1.0,
+        frame_rate=30.0,
+        start_index=None,
+        end_index=None,
+        start_instant=None,
+        end_instant=None,
+        frame_step=1,
+        frame_interval=None,
+        frame_indices=[-5, 0, 10, 999],
+        frame_times=None,
     )
     assert indices == [0, 10]  # negatives and out-of-bounds dropped
 
 
-def test_resolve_indices_range_from_seconds():
+def test_resolve_indices_range_from_seconds() -> None:
+    """Start/end instants and frame_interval map to frame index range and step."""
     _, s, e, step, sparse = _resolve_indices(
-        duration=10.0, frame_rate=30.0,
-        start_index=None, end_index=None,
-        start_instant=1.0, end_instant=2.0,
-        frame_step=1, frame_interval=0.1,
-        frame_indices=None, frame_times=None,
+        duration=10.0,
+        frame_rate=30.0,
+        start_index=None,
+        end_index=None,
+        start_instant=1.0,
+        end_instant=2.0,
+        frame_step=1,
+        frame_interval=0.1,
+        frame_indices=None,
+        frame_times=None,
     )
     assert sparse is False
     assert s == 30 and e == 60
     assert step == 3  # 0.1s @ 30fps
 
 
-def test_resolve_indices_rejects_inverted_range():
+def test_resolve_indices_rejects_inverted_range() -> None:
+    """A start index greater than the end index triggers an assertion."""
     with pytest.raises(AssertionError):
         _resolve_indices(
-            duration=1.0, frame_rate=30.0,
-            start_index=20, end_index=5,
-            start_instant=None, end_instant=None,
-            frame_step=1, frame_interval=None,
-            frame_indices=None, frame_times=None,
+            duration=1.0,
+            frame_rate=30.0,
+            start_index=20,
+            end_index=5,
+            start_instant=None,
+            end_instant=None,
+            frame_step=1,
+            frame_interval=None,
+            frame_indices=None,
+            frame_times=None,
         )
 
 
@@ -169,16 +197,19 @@ def test_resolve_indices_rejects_inverted_range():
 # ---------------------------------------------------------------------------
 
 
-def _check_bgr_uint8(frame, width=64, height=64):
+def _check_bgr_uint8(frame, width=64, height=64) -> None:
+    """Assert a frame is a BGR uint8 ndarray of the expected (H, W, 3) shape."""
     assert isinstance(frame, np.ndarray)
     assert frame.dtype == np.uint8
     assert frame.shape == (height, width, 3)
 
 
-def test_vidgear_backend_sequential(clip):
+def test_vidgear_backend_sequential(clip) -> None:
+    """The vidgear backend yields BGR uint8 frames over a sequential window."""
     frames = list(
-        extract_frames(clip, start_instant=0.5, end_instant=1.5,
-                       frame_step=5, backend="vidgear", hwaccel=None)
+        extract_frames(
+            clip, start_instant=0.5, end_instant=1.5, frame_step=5, backend="vidgear", hwaccel=None
+        )
     )
     assert len(frames) > 0
     for f in frames:
@@ -186,10 +217,12 @@ def test_vidgear_backend_sequential(clip):
 
 
 @pytest.mark.skipif(not _have_pyav(), reason="PyAV not installed")
-def test_pyav_backend_sequential(clip):
+def test_pyav_backend_sequential(clip) -> None:
+    """The PyAV backend yields BGR uint8 frames over a sequential window."""
     frames = list(
-        extract_frames(clip, start_instant=0.5, end_instant=1.5,
-                       frame_step=5, backend="pyav", hwaccel=None)
+        extract_frames(
+            clip, start_instant=0.5, end_instant=1.5, frame_step=5, backend="pyav", hwaccel=None
+        )
     )
     assert len(frames) > 0
     for f in frames:
@@ -197,42 +230,41 @@ def test_pyav_backend_sequential(clip):
 
 
 @pytest.mark.skipif(not _have_pyav(), reason="PyAV not installed")
-def test_pyav_backend_sparse(clip):
-    frames = list(
-        extract_frames(clip, frame_times=[0.1, 1.0, 2.0],
-                       backend="pyav", hwaccel=None)
-    )
+def test_pyav_backend_sparse(clip) -> None:
+    """The PyAV backend yields one frame per requested sparse frame_time."""
+    frames = list(extract_frames(clip, frame_times=[0.1, 1.0, 2.0], backend="pyav", hwaccel=None))
     assert len(frames) == 3
     for f in frames:
         _check_bgr_uint8(f)
 
 
 @pytest.mark.skipif(not _have_pyav(), reason="PyAV not installed")
-def test_pyav_backend_with_hwaccel_auto(clip):
+def test_pyav_backend_with_hwaccel_auto(clip) -> None:
     """`hwaccel='auto'` must not break PyAV decode (the value just gets
     forwarded to libav; if the host build doesn't support it, ffmpeg
     falls back to software decode silently)."""
     frames = list(
-        extract_frames(clip, start_instant=0.0, end_instant=0.5,
-                       backend="pyav", hwaccel="auto")
+        extract_frames(clip, start_instant=0.0, end_instant=0.5, backend="pyav", hwaccel="auto")
     )
     assert len(frames) > 0
 
 
-def test_ffmpeg_pipe_backend_sequential(clip):
+def test_ffmpeg_pipe_backend_sequential(clip) -> None:
+    """The ffmpeg-pipe backend yields BGR uint8 frames over a sequential window."""
     frames = list(
-        extract_frames(clip, start_instant=0.5, end_instant=1.5,
-                       backend="ffmpeg-pipe", hwaccel=None)
+        extract_frames(
+            clip, start_instant=0.5, end_instant=1.5, backend="ffmpeg-pipe", hwaccel=None
+        )
     )
     assert len(frames) > 0
     for f in frames:
         _check_bgr_uint8(f)
 
 
-def test_ffmpeg_pipe_backend_rejects_sparse(clip):
+def test_ffmpeg_pipe_backend_rejects_sparse(clip) -> None:
+    """The ffmpeg-pipe backend rejects sparse frame_times with a ValueError."""
     with pytest.raises(ValueError, match="sparse"):
-        list(extract_frames(clip, frame_times=[0.5, 1.0],
-                            backend="ffmpeg-pipe", hwaccel=None))
+        list(extract_frames(clip, frame_times=[0.5, 1.0], backend="ffmpeg-pipe", hwaccel=None))
 
 
 # ---------------------------------------------------------------------------
@@ -241,12 +273,18 @@ def test_ffmpeg_pipe_backend_rejects_sparse(clip):
 
 
 @pytest.mark.skipif(not _have_pyav(), reason="PyAV not installed")
-def test_pyav_vs_vidgear_count_matches(clip):
+def test_pyav_vs_vidgear_count_matches(clip) -> None:
     """Same range/step should yield the same number of frames across backends."""
-    vid = list(extract_frames(clip, start_instant=0.0, end_instant=1.0,
-                              frame_step=10, backend="vidgear", hwaccel=None))
-    pyav = list(extract_frames(clip, start_instant=0.0, end_instant=1.0,
-                               frame_step=10, backend="pyav", hwaccel=None))
+    vid = list(
+        extract_frames(
+            clip, start_instant=0.0, end_instant=1.0, frame_step=10, backend="vidgear", hwaccel=None
+        )
+    )
+    pyav = list(
+        extract_frames(
+            clip, start_instant=0.0, end_instant=1.0, frame_step=10, backend="pyav", hwaccel=None
+        )
+    )
     # Allow ±1 frame for keyframe-boundary differences between backends.
     assert abs(len(vid) - len(pyav)) <= 1
 
@@ -256,7 +294,7 @@ def test_pyav_vs_vidgear_count_matches(clip):
 # ---------------------------------------------------------------------------
 
 
-def test_backward_compat_old_signature(clip):
+def test_backward_compat_old_signature(clip) -> None:
     """Old positional/keyword form keeps working without explicit backend/hwaccel."""
     frames = list(extract_frames(clip, start_instant=0.0, end_instant=1.0, frame_step=5))
     assert len(frames) > 0
@@ -270,14 +308,16 @@ def test_backward_compat_old_signature(clip):
 
 
 def _have_torch() -> bool:
+    """Return True if PyTorch is importable in the current environment."""
     try:
         import torch  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
-def test_numpy_destination_default_unchanged(clip):
+def test_numpy_destination_default_unchanged(clip) -> None:
     """The default destination must yield (H,W,3) BGR uint8 ndarrays — backward compat."""
     frames = list(extract_frames(clip, start_instant=0.0, end_instant=0.5))
     assert len(frames) > 0
@@ -287,12 +327,18 @@ def test_numpy_destination_default_unchanged(clip):
         assert f.shape == (64, 64, 3)
 
 
-def test_numpy_destination_batched(clip):
+def test_numpy_destination_batched(clip) -> None:
     """batch_size with numpy destination yields (N,H,W,3) ndarrays."""
-    batches = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-        destination="numpy", batch_size=3,
-    ))
+    batches = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+            destination="numpy",
+            batch_size=3,
+        )
+    )
     assert len(batches) > 0
     total_frames = 0
     for b in batches:
@@ -301,38 +347,55 @@ def test_numpy_destination_batched(clip):
         assert b.shape[0] <= 3  # last batch may be smaller
         total_frames += b.shape[0]
     # Compare against unbatched count
-    unbatched = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-    ))
+    unbatched = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+        )
+    )
     assert total_frames == len(unbatched)
 
 
-def test_destination_rejects_unknown(clip):
+def test_destination_rejects_unknown(clip) -> None:
+    """An unknown destination string raises ValueError."""
     with pytest.raises(ValueError, match="destination"):
         list(extract_frames(clip, start_instant=0.0, end_instant=0.2, destination="bogus"))
 
 
-def test_destination_torch_raises_when_torch_absent(clip):
+def test_destination_torch_raises_when_torch_absent(clip) -> None:
+    """destination='torch' raises ImportError when torch is not installed."""
     if _have_torch():
         pytest.skip("torch is installed; can't simulate absence")
     with pytest.raises(ImportError, match="torch"):
         list(extract_frames(clip, start_instant=0.0, end_instant=0.2, destination="torch"))
 
 
-def test_batch_size_rejects_zero(clip):
+def test_batch_size_rejects_zero(clip) -> None:
+    """A batch_size of zero raises ValueError."""
     with pytest.raises(ValueError, match="batch_size"):
-        list(extract_frames(clip, start_instant=0.0, end_instant=0.2,
-                            destination="numpy", batch_size=0))
+        list(
+            extract_frames(
+                clip, start_instant=0.0, end_instant=0.2, destination="numpy", batch_size=0
+            )
+        )
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_cpu_unbatched_chw_rgb(clip):
+def test_torch_destination_cpu_unbatched_chw_rgb(clip) -> None:
     """Unbatched torch yields CHW RGB uint8 (PyTorch convention)."""
     import torch
-    frames = list(extract_frames(
-        clip, start_instant=0.0, end_instant=0.5,
-        destination="torch", device="cpu",
-    ))
+
+    frames = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=0.5,
+            destination="torch",
+            device="cpu",
+        )
+    )
     assert len(frames) > 0
     for t in frames:
         assert isinstance(t, torch.Tensor)
@@ -343,13 +406,22 @@ def test_torch_destination_cpu_unbatched_chw_rgb(clip):
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_image_batch_nchw(clip):
+def test_torch_destination_image_batch_nchw(clip) -> None:
     """layout='image' + batch yields NCHW RGB (PyTorch batch-of-images)."""
     import torch
-    batches = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-        destination="torch", device="cpu", batch_size=4, layout="image",
-    ))
+
+    batches = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+            destination="torch",
+            device="cpu",
+            batch_size=4,
+            layout="image",
+        )
+    )
     assert len(batches) > 0
     total = 0
     for b in batches:
@@ -358,20 +430,32 @@ def test_torch_destination_image_batch_nchw(clip):
         assert b.ndim == 4 and b.shape[1] == 3 and tuple(b.shape[2:]) == (64, 64)
         assert b.shape[0] <= 4
         total += b.shape[0]
-    unbatched = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-    ))
+    unbatched = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+        )
+    )
     assert total == len(unbatched)
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_video_batch_cthw(clip):
+def test_torch_destination_video_batch_cthw(clip) -> None:
     """layout='video' + batch yields CTHW RGB (PyTorch video clip)."""
-    import torch
-    batches = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-        destination="torch", device="cpu", batch_size=4, layout="video",
-    ))
+    batches = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+            destination="torch",
+            device="cpu",
+            batch_size=4,
+            layout="video",
+        )
+    )
     assert len(batches) > 0
     total_T = 0
     for b in batches:
@@ -379,53 +463,79 @@ def test_torch_destination_video_batch_cthw(clip):
         assert b.ndim == 4 and b.shape[0] == 3 and tuple(b.shape[2:]) == (64, 64)
         assert b.shape[1] <= 4
         total_T += b.shape[1]
-    unbatched = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0, frame_step=5,
-    ))
+    unbatched = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            frame_step=5,
+        )
+    )
     assert total_T == len(unbatched)
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_bgr_to_rgb_conversion(clip):
+def test_torch_destination_bgr_to_rgb_conversion(clip) -> None:
     """The channel flip BGR→RGB must actually happen."""
-    import torch
     # Take one frame as numpy (BGR) and as torch (RGB), verify the channel
     # values are reversed.
     np_frame = next(iter(extract_frames(clip, frame_indices=[0])))
-    th_frame = next(iter(extract_frames(
-        clip, frame_indices=[0], destination="torch", device="cpu",
-    )))
+    th_frame = next(
+        iter(
+            extract_frames(
+                clip,
+                frame_indices=[0],
+                destination="torch",
+                device="cpu",
+            )
+        )
+    )
     # numpy: (H, W, 3) BGR; torch: (3, H, W) RGB.
     # Pixel (0, 0): numpy[0,0] == [B,G,R]; torch[:,0,0] == [R,G,B] — reversed.
-    np_pixel = np_frame[0, 0]            # (3,) [B, G, R]
-    th_pixel = th_frame[:, 0, 0]         # (3,) [R, G, B]
+    np_pixel = np_frame[0, 0]  # (3,) [B, G, R]
+    th_pixel = th_frame[:, 0, 0]  # (3,) [R, G, B]
     assert int(np_pixel[0]) == int(th_pixel[2])  # B in numpy == B (idx 2) in torch
     assert int(np_pixel[1]) == int(th_pixel[1])  # G unchanged
     assert int(np_pixel[2]) == int(th_pixel[0])  # R in numpy (idx 2) == R (idx 0) in torch
 
 
 @pytest.mark.skipif(not _have_torch(), reason="torch not installed")
-def test_torch_destination_auto_device_resolves(clip):
+def test_torch_destination_auto_device_resolves(clip) -> None:
     """device='auto' must resolve to a real torch device."""
-    frames = list(extract_frames(
-        clip, start_instant=0.0, end_instant=0.2,
-        destination="torch", device="auto",
-    ))
+    frames = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=0.2,
+            destination="torch",
+            device="auto",
+        )
+    )
     assert len(frames) > 0
     assert frames[0].device.type in {"cpu", "mps", "cuda"}
 
 
 @pytest.mark.skipif(
-    not _have_torch() or not (hasattr(__import__("torch").backends, "mps")
-                              and __import__("torch").backends.mps.is_available()),
+    not _have_torch()
+    or not (
+        hasattr(__import__("torch").backends, "mps")
+        and __import__("torch").backends.mps.is_available()
+    ),
     reason="torch + MPS required",
 )
-def test_torch_destination_mps_image_batched(clip):
+def test_torch_destination_mps_image_batched(clip) -> None:
     """On Apple Silicon: NCHW tensors land on MPS."""
-    batches = list(extract_frames(
-        clip, start_instant=0.0, end_instant=1.0,
-        destination="torch", device="mps", batch_size=8, layout="image",
-    ))
+    batches = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=1.0,
+            destination="torch",
+            device="mps",
+            batch_size=8,
+            layout="image",
+        )
+    )
     assert len(batches) > 0
     for b in batches:
         assert b.device.type == "mps"
@@ -439,21 +549,28 @@ def test_torch_destination_mps_image_batched(clip):
 
 
 def _have_pil() -> bool:
+    """Return True if Pillow is importable in the current environment."""
     try:
         import PIL.Image  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
 @pytest.mark.skipif(not _have_pil(), reason="Pillow not installed")
-def test_pil_destination_rgb_size_wh(clip):
+def test_pil_destination_rgb_size_wh(clip) -> None:
     """PIL: yields PIL.Image (RGB mode, size=(W, H))."""
     from PIL import Image
-    frames = list(extract_frames(
-        clip, start_instant=0.0, end_instant=0.3,
-        destination="pil",
-    ))
+
+    frames = list(
+        extract_frames(
+            clip,
+            start_instant=0.0,
+            end_instant=0.3,
+            destination="pil",
+        )
+    )
     assert len(frames) > 0
     for im in frames:
         assert isinstance(im, Image.Image)
@@ -463,15 +580,22 @@ def test_pil_destination_rgb_size_wh(clip):
 
 
 @pytest.mark.skipif(not _have_pil(), reason="Pillow not installed")
-def test_pil_destination_rejects_batch_size(clip):
+def test_pil_destination_rejects_batch_size(clip) -> None:
+    """destination='pil' rejects batch_size (PIL images are yielded one at a time)."""
     with pytest.raises(ValueError, match="batch_size"):
-        list(extract_frames(
-            clip, start_instant=0.0, end_instant=0.2,
-            destination="pil", batch_size=4,
-        ))
+        list(
+            extract_frames(
+                clip,
+                start_instant=0.0,
+                end_instant=0.2,
+                destination="pil",
+                batch_size=4,
+            )
+        )
 
 
-def test_destination_pil_raises_when_pillow_absent(clip):
+def test_destination_pil_raises_when_pillow_absent(clip) -> None:
+    """destination='pil' raises ImportError when Pillow is not installed."""
     if _have_pil():
         pytest.skip("Pillow is installed; can't simulate absence")
     with pytest.raises(ImportError, match="Pillow"):
@@ -483,9 +607,16 @@ def test_destination_pil_raises_when_pillow_absent(clip):
 # ---------------------------------------------------------------------------
 
 
-def test_layout_rejects_unknown(clip):
+def test_layout_rejects_unknown(clip) -> None:
+    """An unknown layout string raises ValueError."""
     with pytest.raises(ValueError, match="layout"):
-        list(extract_frames(
-            clip, start_instant=0.0, end_instant=0.2,
-            destination="numpy", batch_size=2, layout="bogus",
-        ))
+        list(
+            extract_frames(
+                clip,
+                start_instant=0.0,
+                end_instant=0.2,
+                destination="numpy",
+                batch_size=2,
+                layout="bogus",
+            )
+        )

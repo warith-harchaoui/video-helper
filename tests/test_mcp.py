@@ -24,7 +24,7 @@ import pytest
 pytest.importorskip("fastapi_mcp")
 
 
-def test_mcp_module_imports_and_exposes_app():
+def test_mcp_module_imports_and_exposes_app() -> None:
     """The MCP module must import and re-expose the FastAPI app + mcp handler."""
     from video_helper import mcp as mcp_module
 
@@ -32,7 +32,7 @@ def test_mcp_module_imports_and_exposes_app():
     assert hasattr(mcp_module, "mcp"), "video_helper.mcp must expose the `mcp` handler."
 
 
-def test_main_entrypoint_is_callable():
+def test_main_entrypoint_is_callable() -> None:
     """The ``video-helper-mcp`` console entry point should be a callable."""
     from video_helper.mcp import main
 

@@ -25,7 +25,6 @@ click = pytest.importorskip("click")
 
 from click.testing import CliRunner  # noqa: E402
 
-
 # The canonical subcommand list — one source of truth for both CLIs.
 EXPECTED_SUBCOMMANDS = {
     "validate",
@@ -45,7 +44,7 @@ EXPECTED_SUBCOMMANDS = {
 }
 
 
-def test_argparse_parser_builds_without_error():
+def test_argparse_parser_builds_without_error() -> None:
     """Building the parser should never fail (imports, subcommand wiring)."""
     from video_helper.cli_argparse import build_parser
 
@@ -57,7 +56,7 @@ def test_argparse_parser_builds_without_error():
     assert EXPECTED_SUBCOMMANDS.issubset(set(subparsers_action.choices.keys()))
 
 
-def test_argparse_help_exits_zero(capsys):
+def test_argparse_help_exits_zero(capsys) -> None:
     """``video-helper --help`` should exit with code 0 and print usage."""
     from video_helper.cli_argparse import main
 
@@ -69,7 +68,7 @@ def test_argparse_help_exits_zero(capsys):
 
 
 @pytest.mark.parametrize("sub", sorted(EXPECTED_SUBCOMMANDS))
-def test_argparse_subcommand_help_exits_zero(sub, capsys):
+def test_argparse_subcommand_help_exits_zero(sub, capsys) -> None:
     """Every argparse subcommand's ``--help`` should exit 0 (no wiring bug)."""
     from video_helper.cli_argparse import main
 
@@ -78,14 +77,14 @@ def test_argparse_subcommand_help_exits_zero(sub, capsys):
     assert exc.value.code == 0
 
 
-def test_click_group_has_expected_subcommands():
+def test_click_group_has_expected_subcommands() -> None:
     """The click group must expose the same subcommands as the argparse CLI."""
     from video_helper.cli_click import cli
 
     assert EXPECTED_SUBCOMMANDS.issubset(set(cli.commands.keys()))
 
 
-def test_click_help_exits_zero():
+def test_click_help_exits_zero() -> None:
     """``video-helper-click --help`` should exit 0."""
     from video_helper.cli_click import cli
 
@@ -96,7 +95,7 @@ def test_click_help_exits_zero():
 
 
 @pytest.mark.parametrize("sub", sorted(EXPECTED_SUBCOMMANDS))
-def test_click_subcommand_help_exits_zero(sub):
+def test_click_subcommand_help_exits_zero(sub) -> None:
     """Every click subcommand's ``--help`` should exit 0."""
     from video_helper.cli_click import cli
 

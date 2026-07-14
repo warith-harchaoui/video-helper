@@ -51,8 +51,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-from typing import Sequence
+from collections.abc import Sequence
+
+import os_helper as osh
 
 # Import the pure functions once here — every subcommand is a thin dispatch
 # on top of these, no logic duplication.
@@ -60,7 +61,6 @@ from . import (
     black_video,
     burn_subtitles,
     concat_videos,
-    dump_frames,
     extract_audio_track,
     extract_frames,
     extract_video_chunk,
@@ -73,7 +73,6 @@ from . import (
     video_dimensions,
     video_duration,
 )
-
 
 # ---------------------------------------------------------------------------
 # Subcommand handlers
@@ -88,6 +87,19 @@ from . import (
 
 
 def _handle_validate(ns: argparse.Namespace) -> int:
+    """
+    Probe a video file / URL for validity and print the boolean.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # is_valid_video_file returns bool; emit lowercase JSON so the exit
     # code matches shell expectations (0 = ok, 1 = invalid) but stdout
     # still carries a machine-friendly value.
@@ -97,6 +109,19 @@ def _handle_validate(ns: argparse.Namespace) -> int:
 
 
 def _handle_dimensions(ns: argparse.Namespace) -> int:
+    """
+    Emit width/height/duration/frame_rate/has_sound as JSON.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # video_dimensions returns a dict — pass http_headers through when
     # the input is a URL (e.g. yt-dlp-resolved streams that need cookies).
     headers = _parse_headers(ns.header) if ns.header else None
@@ -106,12 +131,38 @@ def _handle_dimensions(ns: argparse.Namespace) -> int:
 
 
 def _handle_duration(ns: argparse.Namespace) -> int:
+    """
+    Print the duration of a video, in seconds.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # video_duration returns a float in seconds.
     print(f"{video_duration(ns.input):.6f}")
     return 0
 
 
 def _handle_convert(ns: argparse.Namespace) -> int:
+    """
+    Re-encode / resize / drop audio, then print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # video_converter re-encodes / resizes / drops audio in one pass.
     video_converter(
         input_video=ns.input,
@@ -126,6 +177,19 @@ def _handle_convert(ns: argparse.Namespace) -> int:
 
 
 def _handle_chunk(ns: argparse.Namespace) -> int:
+    """
+    Extract a ``[start, end]`` slice and print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # extract_video_chunk cuts a [start, end] slice into a new file.
     extract_video_chunk(
         input_video=ns.input,
@@ -138,6 +202,19 @@ def _handle_chunk(ns: argparse.Namespace) -> int:
 
 
 def _handle_black(ns: argparse.Namespace) -> int:
+    """
+    Synthesize a silent solid-black clip and print its path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Silent solid-black clip — buffer / breathing shot in a montage.
     black_video(
         duration=ns.duration,
@@ -151,6 +228,19 @@ def _handle_black(ns: argparse.Namespace) -> int:
 
 
 def _handle_image_loop(ns: argparse.Namespace) -> int:
+    """
+    Loop a still image into a silent video and print its path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Loop a still image into a silent video — title-card / slide use case.
     image_loop_to_video(
         image=ns.image,
@@ -165,6 +255,19 @@ def _handle_image_loop(ns: argparse.Namespace) -> int:
 
 
 def _handle_concat(ns: argparse.Namespace) -> int:
+    """
+    Concatenate several videos head-to-tail and print the path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # concat_videos joins N files via ffmpeg's concat demuxer.
     concat_videos(
         input_videos=list(ns.inputs),
@@ -177,6 +280,19 @@ def _handle_concat(ns: argparse.Namespace) -> int:
 
 
 def _handle_overlay(ns: argparse.Namespace) -> int:
+    """
+    Overlay a still image on a video and print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Overlay a still image (PNG with alpha typical) on the video.
     overlay_image(
         input_video=ns.input,
@@ -191,6 +307,19 @@ def _handle_overlay(ns: argparse.Namespace) -> int:
 
 
 def _handle_extract_audio(ns: argparse.Namespace) -> int:
+    """
+    Dump the audio track of a video and print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Dump the audio track of a video into a standalone audio file.
     extract_audio_track(
         input_video=ns.input,
@@ -204,6 +333,19 @@ def _handle_extract_audio(ns: argparse.Namespace) -> int:
 
 
 def _handle_mux_audio(ns: argparse.Namespace) -> int:
+    """
+    Mux a separate audio track onto a video and print the path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Replace the video's audio track with a separate audio file.
     mux_audio_video(
         input_video=ns.input,
@@ -218,6 +360,19 @@ def _handle_mux_audio(ns: argparse.Namespace) -> int:
 
 
 def _handle_burn_subs(ns: argparse.Namespace) -> int:
+    """
+    Burn subtitles into the video frames and print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Burn subtitles into the video frames via libass.
     burn_subtitles(
         input_video=ns.input,
@@ -230,6 +385,19 @@ def _handle_burn_subs(ns: argparse.Namespace) -> int:
 
 
 def _handle_srt2vtt(ns: argparse.Namespace) -> int:
+    """
+    Convert an SRT to WebVTT (+CSS) and print the .vtt path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # SRT → WebVTT with color-preserving CSS sidecar.
     srt2vtt(
         srt_file_path=ns.input,
@@ -247,11 +415,24 @@ def _handle_srt2vtt(ns: argparse.Namespace) -> int:
 
 
 def _handle_extract_frames(ns: argparse.Namespace) -> int:
+    """
+    Stream frames to disk as PNGs and print a JSON manifest.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
     # Stream frames to disk as PNGs. Frame indexing lets us name files
     # with a zero-padded counter that matches the sampled order.
     import cv2  # noqa: WPS433 — deferred so `--help` stays cheap
 
-    os.makedirs(ns.output_dir, exist_ok=True)
+    osh.make_directory(ns.output_dir)
     written: list[str] = []
     # We iterate lazily — extract_frames yields BGR uint8 numpy arrays
     # matching OpenCV's convention, so cv2.imwrite writes them verbatim.
@@ -300,13 +481,31 @@ def _parse_headers(pairs: Sequence[str]) -> dict:
 
 
 def _add_validate(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``validate`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("validate", help="Probe a video file / URL for validity.")
     p.add_argument("--input", required=True, help="Path or HTTP(S) URL to a video.")
     p.set_defaults(func=_handle_validate)
 
 
 def _add_dimensions(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("dimensions", help="Emit width/height/duration/frame_rate/has_sound as JSON.")
+    """
+    Register the ``dimensions`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
+    p = sub.add_parser(
+        "dimensions", help="Emit width/height/duration/frame_rate/has_sound as JSON."
+    )
     p.add_argument("--input", required=True, help="Path or HTTP(S) URL to a video.")
     p.add_argument(
         "--header",
@@ -318,16 +517,34 @@ def _add_dimensions(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_duration(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``duration`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("duration", help="Print the duration of a video, in seconds.")
     p.add_argument("--input", required=True, help="Path to a video file.")
     p.set_defaults(func=_handle_duration)
 
 
 def _add_convert(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``convert`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("convert", help="Re-encode / resize / drop audio in one pass.")
     p.add_argument("--input", required=True, help="Input video path.")
     p.add_argument("--output", required=True, help="Output video path.")
-    p.add_argument("--frame-rate", type=int, default=None, dest="frame_rate", help="Target frame rate.")
+    p.add_argument(
+        "--frame-rate", type=int, default=None, dest="frame_rate", help="Target frame rate."
+    )
     p.add_argument("--width", type=int, default=None, help="Target width in pixels.")
     p.add_argument("--height", type=int, default=None, help="Target height in pixels.")
     p.add_argument(
@@ -341,6 +558,14 @@ def _add_convert(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_chunk(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``chunk`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("chunk", help="Extract a [start, end] slice of a video.")
     p.add_argument("--input", required=True)
     p.add_argument("--start", type=float, required=True, help="Start time in seconds.")
@@ -350,6 +575,14 @@ def _add_chunk(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_black(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``black`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("black", help="Synthesize a silent solid-black clip.")
     p.add_argument("--duration", type=float, required=True, help="Duration in seconds.")
     p.add_argument("--width", type=int, required=True)
@@ -360,6 +593,14 @@ def _add_black(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_image_loop(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``image-loop`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("image-loop", help="Loop a still image into a silent video.")
     p.add_argument("--image", required=True, help="Path to the input still (PNG / JPG / …).")
     p.add_argument("--duration", type=float, required=True)
@@ -371,6 +612,14 @@ def _add_image_loop(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_concat(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``concat`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("concat", help="Concatenate several videos head-to-tail.")
     p.add_argument("--inputs", nargs="+", required=True, help="Videos, in order.")
     p.add_argument("--output", required=True)
@@ -391,20 +640,48 @@ def _add_concat(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_overlay(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``overlay`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("overlay", help="Overlay a still image on a video.")
     p.add_argument("--input", required=True)
     p.add_argument("--image", required=True, help="Overlay image (PNG with alpha typical).")
     p.add_argument("--output", required=True)
-    p.add_argument("--x", default="0", help='X position or ffmpeg overlay expression (default "0").')
-    p.add_argument("--y", default="0", help='Y position or ffmpeg overlay expression (default "0").')
-    p.add_argument("--scale-width", type=int, default=None, dest="scale_width", help="Scale overlay to this width.")
+    p.add_argument(
+        "--x", default="0", help='X position or ffmpeg overlay expression (default "0").'
+    )
+    p.add_argument(
+        "--y", default="0", help='Y position or ffmpeg overlay expression (default "0").'
+    )
+    p.add_argument(
+        "--scale-width",
+        type=int,
+        default=None,
+        dest="scale_width",
+        help="Scale overlay to this width.",
+    )
     p.set_defaults(func=_handle_overlay)
 
 
 def _add_extract_audio(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``extract-audio`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("extract-audio", help="Dump the audio track of a video.")
     p.add_argument("--input", required=True)
-    p.add_argument("--output", required=True, help="Output audio path (extension picks the container).")
+    p.add_argument(
+        "--output", required=True, help="Output audio path (extension picks the container)."
+    )
     p.add_argument("--sample-rate", type=int, default=44100, dest="sample_rate")
     p.add_argument("--channels", type=int, default=2, help="Channel count (default 2).")
     p.add_argument("--encoding", default="pcm_s16le", help="Audio codec (default pcm_s16le).")
@@ -412,6 +689,14 @@ def _add_extract_audio(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_mux_audio(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``mux-audio`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("mux-audio", help="Mux a separate audio track onto a video.")
     p.add_argument("--input", required=True, help="Video file (existing audio is replaced).")
     p.add_argument("--audio", required=True, help="Audio file.")
@@ -428,7 +713,17 @@ def _add_mux_audio(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_burn_subs(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("burn-subs", help="Burn subtitles (.srt / .vtt / .ass) into the video frames.")
+    """
+    Register the ``burn-subs`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
+    p = sub.add_parser(
+        "burn-subs", help="Burn subtitles (.srt / .vtt / .ass) into the video frames."
+    )
     p.add_argument("--input", required=True)
     p.add_argument("--subs", required=True, help="Subtitles file.")
     p.add_argument("--output", required=True)
@@ -442,6 +737,14 @@ def _add_burn_subs(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_srt2vtt(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``srt2vtt`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser("srt2vtt", help="Convert an SRT to WebVTT + companion CSS.")
     p.add_argument("--input", required=True, help="Input .srt path.")
     p.add_argument("--output", default=None, help="Output .vtt (default: sibling of input).")
@@ -450,14 +753,32 @@ def _add_srt2vtt(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_extract_frames(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``extract-frames`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
     p = sub.add_parser(
         "extract-frames",
         help="Stream frames to disk as one PNG per sampled frame.",
     )
     p.add_argument("--input", required=True, help="Input video path or URL.")
-    p.add_argument("--output-dir", required=True, dest="output_dir", help="Destination folder for PNGs.")
-    p.add_argument("--frame-step", type=int, default=1, dest="frame_step", help="Sampling stride (default 1).")
-    p.add_argument("--frame-interval", type=float, default=None, dest="frame_interval", help="Sampling period in seconds.")
+    p.add_argument(
+        "--output-dir", required=True, dest="output_dir", help="Destination folder for PNGs."
+    )
+    p.add_argument(
+        "--frame-step", type=int, default=1, dest="frame_step", help="Sampling stride (default 1)."
+    )
+    p.add_argument(
+        "--frame-interval",
+        type=float,
+        default=None,
+        dest="frame_interval",
+        help="Sampling period in seconds.",
+    )
     p.add_argument("--start", type=float, default=None, help="Start instant in seconds.")
     p.add_argument("--end", type=float, default=None, help="End instant in seconds.")
     p.add_argument(
