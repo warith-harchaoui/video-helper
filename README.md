@@ -12,6 +12,12 @@
 
 Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats.
 
+# Documentation
+
+[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/video-helper-doc/)
+
+[📋 Examples](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
+
 # Installation
 
 **Prerequisites** — **Python 3.10–3.13** and **git**, **ffmpeg**, cross-platform:
