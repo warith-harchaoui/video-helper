@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-07-14
+
+### Fixed
+- Replace references to the archived `yt-helper` project with
+  `youtube-helper` (the extract-frames auth-headers hint and EXAMPLES.md).
+
+
 ## [1.6.3] - 2026-07-14
 
 ### Maintenance

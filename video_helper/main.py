@@ -1557,7 +1557,7 @@ def extract_frames(
             osh.warning(
                 "vidgear backend ignores http_headers — OpenCV doesn't surface "
                 "them cleanly. Auth-protected URLs (YouTube live, members-only, "
-                "age-gated content from yt-helper) will likely 403. Use "
+                "age-gated content from youtube-helper) will likely 403. Use "
                 "backend='pyav' or 'ffmpeg-pipe' for those."
             )
         np_iter = _extract_via_vidgear(video_path, s_idx, e_idx, step, stabilize)

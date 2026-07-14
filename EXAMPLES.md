@@ -199,7 +199,7 @@ batched, and the offload is worth it.
 Some sources need a specific `User-Agent` / `Referer` / `Cookie` / `Authorization` to play — typically yt-dlp-resolved YouTube live streams, members-only / age-gated content, Vimeo private videos, Twitch streams. Pass them via `http_headers`:
 
 ```python
-# Headers obtained from yt-helper (or hand-rolled)
+# Headers obtained from youtube-helper (or hand-rolled)
 headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
