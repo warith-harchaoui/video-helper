@@ -12,13 +12,13 @@
 
 Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires pour le traitement de fichiers vidéo. Elle inclut le chargement, la conversion, l'extraction de frames ainsi que la manipulation de formats de sous-titres.
 
-# Documentation
+## Documentation
 
 [💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/video-helper-doc/)
 
 [📋 Exemples](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
 
-# Installation
+## Installation
 
 **Prérequis** — **Python 3.10–3.13** et **git**, **ffmpeg**, multiplateforme :
 
@@ -26,39 +26,35 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 - 🐧 **Ubuntu/Debian** : `sudo apt update && sudo apt install -y python3 python3-pip git ffmpeg`
 - 🪟 **Windows** (PowerShell) : `winget install Python.Python.3.12 Git.Git Gyan.FFmpeg`
 
-Puis installer le paquet :
+Nous recommandons l'utilisation d'environnements Python. Consultez ce lien si vous ne savez pas comment faire : [🥸 Conseils techniques](https://harchaoui.org/warith/4ml/#install).
 
-
-## Installer le paquet
-
-Nous recommandons l'utilisation d'environnements Python. Consultez ce lien si vous ne savez pas comment faire :
-
-[🥸 Conseils techniques](https://harchaoui.org/warith/4ml/#install)
-
-## Installer `ffmpeg`
-Pour utiliser Video Helper, vous devez installer `ffmpeg` :
-
-- Sous macOS 🍎
-
-  Récupérer [brew](https://brew.sh)
-  ```bash
-  brew install ffmpeg
-  ```
-- Sous Ubuntu 🐧
-  ```bash
-  sudo apt install ffmpeg
-  ```
-- Sous Windows 🪟
-  Allez sur le [site FFmpeg](https://ffmpeg.org/download.html) et suivez les instructions. Il faut ajouter manuellement FFmpeg au PATH système.
-
-Pour finir, nous discutons encore entre différents gestionnaires de paquets Python et essayons de supporter autant que possible.
+### Depuis PyPI (recommandé)
 
 ```bash
-pip install --force-reinstall --no-cache-dir \
-  git+https://github.com/warith-harchaoui/video-helper.git@v1.6.2
+# Utilitaires vidéo de base (bibliothèque + CLI argparse)
+pip install video-helper
+
+# Surfaces et backends optionnels
+pip install "video-helper[pyav]"      # backend de frames PyAV
+pip install "video-helper[cli]"       # CLI click jumelle
+pip install "video-helper[api]"       # surface HTTP FastAPI
+pip install "video-helper[api,mcp]"   # outils MCP au-dessus de FastAPI
 ```
 
-# Utilisation
+### Depuis les sources (sans PyPI)
+
+```bash
+# Utilitaires vidéo de base (bibliothèque + CLI argparse)
+pip install "git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+
+# Surfaces et backends optionnels
+pip install "video-helper[pyav] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+pip install "video-helper[cli] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+pip install "video-helper[api] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+pip install "video-helper[api,mcp] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+```
+
+## Utilisation
 
 Pour le catalogue complet d'exemples, voir [📋 EXAMPLES.md](EXAMPLES.md).
 
@@ -129,7 +125,7 @@ css_file = "subtitles.css"
 vh.srt2vtt(srt_file, vtt_file, css_file)
 ```
 
-# Exposition multi-surface
+## Exposition multi-surface
 
 Chaque fonction publique est accessible depuis cinq surfaces, toutes
 câblées systématiquement (rien n'est réservé à la CLI ou à la
@@ -152,7 +148,7 @@ miroir de la CLI) et [LANDSCAPE.md](LANDSCAPE.md) pour la comparaison
 avec moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV et
 consorts.
 
-# Fonctionnalités
+## Fonctionnalités
 - **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
 - **Conversion** : `video_converter` — ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
 - **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
@@ -160,7 +156,7 @@ consorts.
 - **Primitives de pipeline** : `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
 
-# Référence d'API
+## Référence d'API
 
 | Fonction | Signature | Description |
 | --- | --- | --- |
@@ -183,8 +179,12 @@ consorts.
 
 Par défaut les frames sont des `numpy.ndarray` BGR de forme `(H, W, 3)` avec des valeurs de pixels dans `[0, 255]`. Voir [EXAMPLES.md → Destination](EXAMPLES.md#destination-numpy-torch-or-pil) pour la table complète forme × colorimétrie incluant torch (CHW/NCHW/CTHW RGB) et PIL (RGB, `size=(W, H)`).
 
-# Auteur
+## Auteur
  - [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
 
-# Remerciements
+## Remerciements
 Remerciements chaleureux à [Mohamed Chelali](https://mchelali.github.io) et [Bachir Zerroug](https://www.linkedin.com/in/bachirzerroug) pour nos échanges fructueux.
+
+## Licence
+
+Ce projet est distribué sous licence BSD-3-Clause — voir le fichier [LICENSE](LICENSE) pour les détails.

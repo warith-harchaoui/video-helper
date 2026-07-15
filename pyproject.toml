@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-helper"
-version = "1.6.4"
+version = "1.6.5"
 description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
