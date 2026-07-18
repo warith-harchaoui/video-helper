@@ -20,6 +20,8 @@ Author
 Project maintainers.
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
@@ -28,13 +30,61 @@ import os
 # surface rather than bare prints (see CODING.md rule 6).
 logger = logging.getLogger(__name__)
 
-def read_requirements(file_path='requirements.txt'):
+def read_requirements(file_path: str = 'requirements.txt') -> list[str]:
+    """Read and clean a pip ``requirements.txt`` file.
+
+    Parameters
+    ----------
+    file_path : str, optional
+        Path to the requirements file to read (default
+        ``'requirements.txt'``).
+
+    Returns
+    -------
+    list[str]
+        One entry per dependency line, with surrounding whitespace
+        stripped and blank lines / ``#`` comment lines removed.
+    """
+    # Keep only meaningful lines: drop blanks and full-line comments so
+    # downstream parsing never sees noise from the requirements file.
     with open(file_path) as f:
         requirements = [line.strip() for line in f.readlines() if line.strip() and not line.startswith('#')]
     return requirements
 
-def generate_pyproject_toml(requirements, project_name, description, authors, python_version, opensource:bool=False):
+def generate_pyproject_toml(
+    requirements: list[str],
+    project_name: str,
+    description: str,
+    authors: list[str],
+    python_version: str,
+    opensource: bool = False,
+) -> str:
+    """Render a Poetry-style ``pyproject.toml`` as a string.
 
+    Parameters
+    ----------
+    requirements : list[str]
+        Dependency lines (as returned by :func:`read_requirements`).
+    project_name : str
+        Value written to ``[tool.poetry].name``.
+    description : str
+        Short project description.
+    authors : list[str]
+        Author entries, each formatted as ``"Name <email>"``.
+    python_version : str
+        Python constraint for ``[tool.poetry.dependencies].python``
+        (e.g. ``'^3.10'``).
+    opensource : bool, optional
+        When True, stamp a ``BSD-2-Clause`` license; otherwise leave the
+        license field empty (default False).
+
+    Returns
+    -------
+    str
+        The full ``pyproject.toml`` content, ready to write to disk.
+    """
+    # An open-source project gets a permissive license stamped in; a
+    # private one is left blank so it is never mislabelled as OSS.
     if opensource:
         license = 'BSD-2-Clause'
     else:
@@ -61,8 +111,30 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 """
 
-def format_dependencies(requirements):
+def format_dependencies(requirements: list[str]) -> str:
+    """Translate pip requirement lines into Poetry dependency syntax.
+
+    Parameters
+    ----------
+    requirements : list[str]
+        Dependency lines using pip operators (``==``, ``>=``, ``<=``,
+        ``@ git+``) or bare package names.
+
+    Returns
+    -------
+    str
+        The indented ``[tool.poetry.dependencies]`` body, one dependency
+        per line, terminated by newlines.
+
+    Notes
+    -----
+    Version operators are mapped to Poetry's caret/inequality style; a
+    bare package with no constraint falls back to the ``"*"`` wildcard.
+    """
     dependencies = ""
+    # Inspect each requirement in turn and branch on the pinning operator
+    # it uses — the order matters because a line may contain several
+    # substrings, so the most specific constraints are tested first.
     for requirement in requirements:
         # Handle specific version constraints
         if '==' in requirement:
@@ -85,7 +157,24 @@ def format_dependencies(requirements):
             dependencies += f'    {requirement.strip()} = "*"\n'
     return dependencies
 
-def write_pyproject_toml(content, file_path='pyproject.toml'):
+def write_pyproject_toml(content: str, file_path: str = 'pyproject.toml') -> None:
+    """Write rendered TOML content to disk.
+
+    Parameters
+    ----------
+    content : str
+        The ``pyproject.toml`` text (as produced by
+        :func:`generate_pyproject_toml`).
+    file_path : str, optional
+        Destination path (default ``'pyproject.toml'``). An existing file
+        at this path is overwritten.
+
+    Returns
+    -------
+    None
+    """
+    # Truncating write: this utility owns the output file, so replacing
+    # any previous content is the intended behaviour.
     with open(file_path, 'w') as f:
         f.write(content)
 
