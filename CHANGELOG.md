@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-20
+
+### Added
+
+- **Minimal browser GUI ("video bench")** served by the FastAPI app at
+  `GET /gui`, with `GET /` redirecting to it. Drop a clip, pick one of
+  the fourteen operations, run it against the existing HTTP endpoints,
+  preview input vs output in an in-browser `<video>` / `<img>` /
+  `<audio>` player (JSON for the read-only probes), and download the
+  result (single file, or a `.zip` for `extract-frames` / `srt2vtt`).
+  Self-contained page (Tailwind via CDN + vanilla JS, no build step) in
+  the new `video_helper/gui.py` module.
+- **Agent skill** (`skills/video-helper/`): a Claude Skill and OpenCode
+  skill (`SKILL.md` + `references/{cli-reference,surfaces,triggers}.md`
+  + `skills/README.md`) so an agent can discover and drive video-helper
+  without a terminal.
+- Repo-root **`TRIGGERS.md`** — exhaustive, auditable catalogue of the
+  natural-language phrasings, commands, functions, and file types that
+  should invoke each operation; referenced from README and LISEZMOI.
+- **Local-first privacy badge** and a **The Promise / La promesse**
+  section in README / LISEZMOI.
+
+### Changed
+
+- The FastAPI `version` field is now read from installed package
+  metadata (`importlib.metadata`) instead of a hard-coded string, which
+  had drifted to `1.6.2`; it now always matches `pyproject.toml`.
+- README / LISEZMOI "Multi-surface exposure" now documents the shipped
+  `/gui` bench (previously only referenced the GUI.md design roadmap).
+
+### Notes
+
+- Public library API is unchanged and fully backward-compatible — no
+  function in `video_helper.__all__` was touched (youtube-helper's
+  dependency on these names is unaffected). All changes are additive.
+
 ## [1.6.5] - 2026-07-15
 
 ### Documentation

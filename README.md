@@ -2,7 +2,7 @@
 
 [🇫🇷](https://github.com/warith-harchaoui/video-helper/blob/main/LISEZMOI.md) · [🇬🇧](https://github.com/warith-harchaoui/video-helper/blob/main/README.md)
 
-[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#)
+[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
 
 `Video Helper` belongs to a collection of libraries called `AI Helpers` developed for building Artificial Intelligence.
 
@@ -11,6 +11,10 @@
 [![logo](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
 
 Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats.
+
+## The Promise
+
+**Local-first by design.** video-helper runs entirely on your machine. Everything is processed locally with open-source tooling (ffmpeg) — your data is never uploaded to a third-party service, no telemetry, no account, no cloud lock-in. You own the whole pipeline. Part of the [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) suite: sovereignty over your data through local-first Open Source.
 
 ## Documentation
 
@@ -135,15 +139,34 @@ systematically wired (nothing is CLI-only or library-only):
 | Python library | `pip install video-helper` | `import video_helper as vh` |
 | Argparse CLI (stdlib) | `pip install video-helper` | `video-helper --help` |
 | Click CLI | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
-| FastAPI HTTP | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
+| FastAPI HTTP + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
 | MCP server | `pip install 'video-helper[api,mcp]'` | `video-helper-mcp` |
 
-The `Dockerfile` at the repo root ships `.[api,mcp,pyav]` by default on
-`python:3.11-slim` with `ffmpeg` and `libass` — one `docker build && docker run -p 8000:8000` gives you the HTTP + MCP surfaces immediately.
+The FastAPI app also serves a **minimal browser GUI** ("video bench") at
+`GET /gui` (and `GET /` redirects there): drop a clip, pick one operation,
+run it against the same HTTP endpoints, preview input vs output in an
+in-browser `<video>` / `<img>` player, and download the result. It is a
+single self-contained page (Tailwind via CDN + vanilla JS, no build step)
+defined in `video_helper/gui.py`.
 
-See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the innovative GUI design plan (Recipe
-Canvas + frame-first comparator + batch drop zone — not a CLI mirror)
-and [LANDSCAPE.md](https://github.com/warith-harchaoui/video-helper/blob/main/LANDSCAPE.md) for how `video-helper` compares with
+```bash
+pip install 'video-helper[api]'
+uvicorn video_helper.api:app --port 8000
+# open http://localhost:8000/gui  (or just http://localhost:8000/)
+```
+
+The `Dockerfile` at the repo root ships `.[api,mcp,pyav]` by default on
+`python:3.11-slim` with `ffmpeg` and `libass` — one `docker build && docker run -p 8000:8000` gives you the HTTP + MCP + GUI surfaces immediately.
+
+For the exhaustive catalogue of what triggers each operation (natural-language
+phrasings, commands, functions, file types), see
+[TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
+`video-helper` also ships as a Claude / OpenCode **agent skill** — see
+[skills/README.md](https://github.com/warith-harchaoui/video-helper/blob/main/skills/README.md).
+
+See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe
+Canvas + frame-first comparator + batch drop zone — the minimal `/gui` bench
+above is the first step) and [LANDSCAPE.md](https://github.com/warith-harchaoui/video-helper/blob/main/LANDSCAPE.md) for how `video-helper` compares with
 moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV, and friends.
 
 ## Features

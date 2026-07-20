@@ -51,6 +51,7 @@ def test_openapi_lists_expected_endpoints(client) -> None:
     paths = r.json()["paths"]
     expected = {
         "/health",
+        "/gui",
         "/validate",
         "/dimensions",
         "/duration",
@@ -74,3 +75,25 @@ def test_docs_endpoint_is_served(client) -> None:
     r = client.get("/docs")
     assert r.status_code == 200
     assert "swagger" in r.text.lower() or "openapi" in r.text.lower()
+
+
+def test_gui_returns_200_html(client) -> None:
+    """``GET /gui`` should return 200 with a self-contained HTML page."""
+    r = client.get("/gui")
+    assert r.status_code == 200
+    # It must be an HTML document (correct content type + a doctype).
+    assert r.headers["content-type"].startswith("text/html")
+    body = r.text.lower()
+    assert "<!doctype html>" in body
+    # Sanity-check it is the video bench and offers the real operations
+    # (the JS builds endpoint URLs from these op names, so assert on them).
+    assert "video bench" in body
+    assert 'value="convert"' in r.text and 'value="extract-frames"' in r.text
+
+
+def test_root_redirects_to_gui(client) -> None:
+    """``GET /`` should redirect (or resolve) to the GUI page."""
+    # follow_redirects defaults True in the TestClient; assert we land on HTML.
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "video bench" in r.text.lower()

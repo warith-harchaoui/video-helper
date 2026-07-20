@@ -47,11 +47,19 @@ import io
 import shutil
 import tempfile
 import zipfile
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 try:
     from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-    from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+    from fastapi.responses import (
+        FileResponse,
+        HTMLResponse,
+        JSONResponse,
+        RedirectResponse,
+        StreamingResponse,
+    )
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The FastAPI HTTP surface requires the [api] extra. "
@@ -80,14 +88,38 @@ from . import (
 # ---------------------------------------------------------------------------
 
 
+def _resolve_version() -> str:
+    """Return the installed ``video-helper`` version, or a dev fallback.
+
+    Reading the version from installed package metadata keeps the FastAPI
+    ``version`` field in lock-step with ``pyproject.toml`` — a hard-coded
+    string here drifted from the real version in the past (it sat at
+    ``1.6.2`` while the package had moved on).
+
+    Returns
+    -------
+    str
+        The distribution version (e.g. ``"1.7.0"``), or ``"0+unknown"``
+        when the package is not installed (running straight from a source
+        checkout without an editable install).
+    """
+    # importlib.metadata raises PackageNotFoundError when the dist is not
+    # installed; degrade gracefully rather than crashing app construction.
+    try:
+        return _pkg_version("video-helper")
+    except PackageNotFoundError:  # pragma: no cover — source-only checkout
+        return "0+unknown"
+
+
 app = FastAPI(
     title="Video Helper API",
     description=(
         "HTTP surface for the video-helper utilities: validate, dimensions, "
         "duration, convert, chunk, black-video, image-loop, concat, overlay, "
-        "extract-audio, mux-audio, burn-subtitles, srt2vtt, extract-frames."
+        "extract-audio, mux-audio, burn-subtitles, srt2vtt, extract-frames. "
+        "A minimal browser 'bench' is served at GET /gui (GET / redirects there)."
     ),
-    version="1.6.2",
+    version=_resolve_version(),
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -172,6 +204,37 @@ def _zip_folder(folder: Path) -> io.BytesIO:
 def health() -> dict:
     """Simple liveness probe — no dependency check, just proves the app is up."""
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Redirect the bare root to the GUI so opening the server just works."""
+    # A human hitting http://host:port/ almost always wants the bench, not a
+    # 404. Machines use the documented endpoints directly, so this is safe.
+    return RedirectResponse(url="/gui")
+
+
+@app.get("/gui", response_class=HTMLResponse, tags=["meta"])
+def gui() -> HTMLResponse:
+    """Serve the self-contained single-page 'video bench' GUI.
+
+    The page (defined in :mod:`video_helper.gui`) is a build-step-free
+    HTML + Tailwind-CDN + vanilla-JS client that calls the very same
+    ``/convert`` / ``/chunk`` / ``/extract-frames`` / … endpoints defined
+    below. It adds no server-side logic — it is purely a friendlier front
+    door to the API: upload a clip, run one operation, preview the result
+    in an in-browser ``<video>`` / ``<img>`` player, and download it.
+
+    Returns
+    -------
+    HTMLResponse
+        The complete HTML document (status 200, ``text/html``).
+    """
+    # Import here so the (large) HTML string is only loaded when the route is
+    # actually hit, and so importing the API module stays cheap.
+    from .gui import GUI_HTML
+
+    return HTMLResponse(content=GUI_HTML)
 
 
 # ---------------------------------------------------------------------------

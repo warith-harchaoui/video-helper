@@ -2,7 +2,7 @@
 
 [🇫🇷](LISEZMOI.md) · [🇬🇧](README.md)
 
-[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#)
+[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#la-promesse)
 
 `Video Helper` fait partie d'une collection de bibliothèques appelée `AI Helpers`, développée pour bâtir des applications d'intelligence artificielle.
 
@@ -11,6 +11,10 @@
 [![logo](assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
 
 Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires pour le traitement de fichiers vidéo. Elle inclut le chargement, la conversion, l'extraction de frames ainsi que la manipulation de formats de sous-titres.
+
+## La promesse
+
+**Local d'abord, par conception.** video-helper s'exécute entièrement sur votre machine. Tout est traité localement avec des outils open source (ffmpeg) — vos données ne sont jamais envoyées à un service tiers, aucune télémétrie, aucun compte, aucun verrouillage propriétaire dans le cloud. Vous êtes maître de toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'Open Source local d'abord.
 
 ## Documentation
 
@@ -136,17 +140,37 @@ bibliothèque) :
 | Bibliothèque Python | `pip install video-helper` | `import video_helper as vh` |
 | CLI argparse (stdlib) | `pip install video-helper` | `video-helper --help` |
 | CLI click | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
-| HTTP FastAPI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
+| HTTP FastAPI + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
 | Serveur MCP | `pip install 'video-helper[api,mcp]'` | `video-helper-mcp` |
 
-Le `Dockerfile` à la racine embarque `.[api,mcp,pyav]` par défaut sur
-`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + MCP.
+L'application FastAPI sert aussi une **interface graphique minimale**
+(« video bench ») à `GET /gui` (et `GET /` y redirige) : déposez un clip,
+choisissez une opération, exécutez-la contre les mêmes endpoints HTTP,
+prévisualisez l'entrée et la sortie dans un lecteur `<video>` / `<img>`
+intégré au navigateur, puis téléchargez le résultat. C'est une page
+autonome unique (Tailwind via CDN + JS vanilla, sans étape de build)
+définie dans `video_helper/gui.py`.
 
-Voir [GUI.md](GUI.md) pour le plan de conception GUI innovant (canvas
-de recette + comparateur frame-first + zone de dépôt par lots — pas un
-miroir de la CLI) et [LANDSCAPE.md](LANDSCAPE.md) pour la comparaison
-avec moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV et
-consorts.
+```bash
+pip install 'video-helper[api]'
+uvicorn video_helper.api:app --port 8000
+# ouvrez http://localhost:8000/gui  (ou simplement http://localhost:8000/)
+```
+
+Le `Dockerfile` à la racine embarque `.[api,mcp,pyav]` par défaut sur
+`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + MCP + GUI.
+
+Pour le catalogue exhaustif de ce qui déclenche chaque opération
+(formulations en langage naturel, commandes, fonctions, types de
+fichiers), voir [TRIGGERS.md](TRIGGERS.md). `video-helper` est aussi
+disponible comme **skill** d'agent Claude / OpenCode — voir
+[skills/README.md](skills/README.md).
+
+Voir [GUI.md](GUI.md) pour la feuille de route vers une GUI plus riche
+(canvas de recette + comparateur frame-first + zone de dépôt par lots —
+le bench minimal `/gui` ci-dessus en est la première étape) et
+[LANDSCAPE.md](LANDSCAPE.md) pour la comparaison avec moviepy, PyAV,
+decord, torchvision.io, VidGear, OpenCV et consorts.
 
 ## Fonctionnalités
 - **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
