@@ -3,6 +3,10 @@ video_tests/
 yt_tests/
 m.sh
 
+# Landscape positioning-map CSVs (generated from LANDSCAPE.md / PAYSAGE.md)
+assets/landscape.csv
+assets/paysage.csv
+
 # Video files
 *.mp4
 *.avi
