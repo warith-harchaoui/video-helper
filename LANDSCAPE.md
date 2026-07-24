@@ -32,7 +32,7 @@ penalised — the score just reflects fit to *this* niche.
 
 ![Positioning map](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/landscape.png)
 
-The map is a 2-D summary of the eight criteria, so read it as a shape, not a scoreboard. `video-helper` is at the top-right corner. The axes read **Horizontal — Versatile ↔ Adaptable** and **Vertical — Lightweight ↔ Efficient**.
+The map is a 2-D summary of the eight criteria, so read it as a shape, not a scoreboard. `video-helper` is at the top-right corner. The axes read **Horizontal — Destination ↔ Convert** and **Vertical — Install ↔ Extraction**.
 
 ## Positioning
 

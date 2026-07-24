@@ -33,7 +33,7 @@ Représentation 2D du tableau ci-dessus.
 
 ![Carte de positionnement](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/paysage.png)
 
-La carte est un résumé en 2D des 8 critères : à lire comme une forme, pas comme un classement. « video-helper » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Polyvalent ↔ Efficace** et **Vertical — Léger ↔ Performant**.
+La carte est un résumé en 2D des 8 critères : à lire comme une forme, pas comme un classement. « video-helper » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Destination ↔ Rembourrage** et **Vertical — Installation ↔ Extraction**.
 
 ## Positionnement
 
