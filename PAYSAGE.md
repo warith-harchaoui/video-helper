@@ -14,6 +14,7 @@ n'est pas pénalisée — la note reflète seulement l'adéquation à *ce* crén
 
 ## En un coup d'œil
 
+<!-- TABLE:START -->
 | Analyse vidéo | E/S multi-formats | Conversion / mise à l'échelle et rembourrage | Découpage / concaténation / incrustation | Extraction d'images | Sous-titres | Décodage GPU | Multi-destination | Installation légère |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **video-helper** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -26,14 +27,17 @@ n'est pas pénalisée — la note reflète seulement l'adéquation à *ce* crén
 | ffmpeg-python | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ |
 | imageio | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | scenedetect | ⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ |
+<!-- TABLE:END -->
 
 ## Carte de positionnement
 
+<!-- FIGURE:START -->
 Représentation 2D du tableau ci-dessus.
 
 ![Carte de positionnement](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/paysage.png)
 
-La carte est un résumé en 2D des 8 critères : à lire comme une forme, pas comme un classement. « video-helper » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Destination ↔ Rembourrage** et **Vertical — Installation ↔ Extraction**.
+La carte est un résumé en 2D des 8 critères : à lire comme une forme, pas comme un classement. « video-helper » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Polyvalent ↔ Efficace** et **Vertical — Léger ↔ Performant**.
+<!-- FIGURE:END -->
 
 ## Positionnement
 

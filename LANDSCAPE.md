@@ -13,6 +13,7 @@ penalised — the score just reflects fit to *this* niche.
 
 ## At a glance
 
+<!-- TABLE:START -->
 | Video Parsing | Multi-format I/O | Convert / scale-and-pad | Chunk / concat / overlay | Frame extraction | Subtitles | GPU decode | Multi-destination | Light install |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **video-helper** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -25,14 +26,17 @@ penalised — the score just reflects fit to *this* niche.
 | ffmpeg-python | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ |
 | imageio | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | scenedetect | ⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ |
+<!-- TABLE:END -->
 
 ## Positioning map
 
+<!-- FIGURE:START -->
 2D representation of the table above.
 
 ![Positioning map](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/landscape.png)
 
-The map is a 2-D summary of the eight criteria, so read it as a shape, not a scoreboard. `video-helper` is at the top-right corner. The axes read **Horizontal — Destination ↔ Convert** and **Vertical — Install ↔ Extraction**.
+The map is a 2-D summary of the eight criteria, so read it as a shape, not a scoreboard. `video-helper` is at the top-right corner. The axes read **Horizontal — Versatile ↔ Adaptable** and **Vertical — Lightweight ↔ Efficient**.
+<!-- FIGURE:END -->
 
 ## Positioning
 
