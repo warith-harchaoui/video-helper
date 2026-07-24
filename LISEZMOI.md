@@ -170,10 +170,7 @@ disponible comme **skill** d'agent Claude / OpenCode — voir
 
 Voir [GUI.md](GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette + comparateur frame-first + zone de dépôt par lots —
-le bench minimal `/gui` ci-dessus en est la première étape) et
-[PAYSAGE.md](PAYSAGE.md), avec une carte de positionnement, pour la
-comparaison avec moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV
-et consorts.
+le bench minimal `/gui` ci-dessus en est la première étape).
 
 ## Fonctionnalités
 - **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.

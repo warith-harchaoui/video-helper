@@ -168,8 +168,7 @@ phrasings, commands, functions, file types), see
 
 See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe
 Canvas + frame-first comparator + batch drop zone — the minimal `/gui` bench
-above is the first step) and [LANDSCAPE.md](https://github.com/warith-harchaoui/video-helper/blob/main/LANDSCAPE.md), with a positioning map, for how `video-helper` compares with
-moviepy, PyAV, decord, torchvision.io, VidGear, OpenCV, and friends.
+above is the first step).
 
 ## Features
 - **Video validation**: `is_valid_video_file` — extension + `ffmpeg.probe` round-trip.
