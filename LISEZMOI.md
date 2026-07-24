@@ -14,7 +14,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 ## La promesse
 
-**Local d'abord, par conception.** video-helper s'exécute entièrement sur votre machine. Tout est traité localement avec des outils open source (ffmpeg) — vos données ne sont jamais envoyées à un service tiers, aucune télémétrie, aucun compte, aucun verrouillage propriétaire dans le cloud. Vous êtes maître de toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'Open Source local d'abord.
+**Local-first, par conception.** video-helper s'exécute entièrement sur votre machine, avec des outils open source (ffmpeg). Vos données ne partent jamais vers un service tiers : aucune télémétrie, aucun compte, aucun verrouillage cloud. Vous gardez la main sur toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'open source local-first.
 
 ## Documentation
 
@@ -32,7 +32,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 - 🐧 **Ubuntu/Debian** : `sudo apt update && sudo apt install -y python3 python3-pip git ffmpeg`
 - 🪟 **Windows** (PowerShell) : `winget install Python.Python.3.12 Git.Git Gyan.FFmpeg`
 
-Nous recommandons l'utilisation d'environnements Python. Consultez ce lien si vous ne savez pas comment faire : [🥸 Conseils techniques](https://harchaoui.org/warith/4ml/#install).
+On recommande de travailler dans un environnement Python. Si vous ne savez pas comment en créer un : [🥸 Conseils techniques](https://harchaoui.org/warith/4ml/#install).
 
 ### Depuis PyPI (recommandé)
 
@@ -64,7 +64,7 @@ pip install "video-helper[api,mcp] @ git+https://github.com/warith-harchaoui/vid
 
 Pour le catalogue complet d'exemples, voir [📋 EXAMPLES.md](EXAMPLES.md).
 
-Voici un exemple d'utilisation de Video Helper pour charger, convertir et extraire des frames d'une vidéo :
+Exemple : charger, convertir et extraire des frames d'une vidéo.
 
 ```python
 import video_helper as vh
