@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-08-01
+
+### Removed
+
+- **Agent skill dropped from the public repo.** Without an MCP surface,
+  the Claude/OpenCode skill (`skills/`) no longer earns its keep as public
+  distribution — moved to the gitignored `.private/skills/` (kept locally
+  as reference, never published). `TRIGGERS.md` stays public; its
+  skill-specific framing and dead `skills/` links are removed.
+
 ## [1.8.0] - 2026-08-01
 
 ### Removed

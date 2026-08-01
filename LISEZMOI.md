@@ -161,9 +161,7 @@ Le `Dockerfile` à la racine embarque `.[api,pyav]` par défaut sur
 
 Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
-fichiers), voir [TRIGGERS.md](TRIGGERS.md). `video-helper` est aussi
-disponible comme **skill** d'agent Claude / OpenCode — voir
-[skills/README.md](skills/README.md).
+fichiers), voir [TRIGGERS.md](TRIGGERS.md).
 
 Voir [GUI.md](GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette + comparateur frame-first + zone de dépôt par lots —

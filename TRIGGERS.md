@@ -2,9 +2,7 @@
 
 This is the user-facing, exhaustive catalogue of what `video-helper` can do and
 the natural-language phrasings, commands, functions, and file types that should
-invoke it — whether you call it yourself or drive it as a Claude / OpenCode
-**skill** (see [`skills/video-helper/SKILL.md`](skills/video-helper/SKILL.md)
-and its [`references/triggers.md`](skills/video-helper/references/triggers.md)).
+invoke it.
 
 `video-helper` transforms video **files** (and reads/burns subtitle files). It
 is local-first and ffmpeg-backed. It does **not** transcribe, download, colour-
@@ -73,4 +71,3 @@ same flags) and the browser GUI at `GET /gui`.
   richer Recipe-Canvas product.
 - [`LANDSCAPE.md`](LANDSCAPE.md) — how video-helper compares with moviepy, PyAV,
   torchvision.io, VidGear, OpenCV, and friends.
-- [`skills/README.md`](skills/README.md) — installing this as an agent skill.

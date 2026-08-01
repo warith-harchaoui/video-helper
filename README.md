@@ -160,8 +160,6 @@ The `Dockerfile` at the repo root ships `.[api,pyav]` by default on
 For the exhaustive catalogue of what triggers each operation (natural-language
 phrasings, commands, functions, file types), see
 [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
-`video-helper` also ships as a Claude / OpenCode **agent skill** — see
-[skills/README.md](https://github.com/warith-harchaoui/video-helper/blob/main/skills/README.md).
 
 See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe
 Canvas + frame-first comparator + batch drop zone — the minimal `/gui` bench
