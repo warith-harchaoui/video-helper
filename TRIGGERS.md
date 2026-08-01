@@ -12,7 +12,7 @@ grade, or run models on frames.
 
 ## The fourteen operations → how to invoke
 
-| Intent | CLI | Library | API / MCP |
+| Intent | CLI | Library | API |
 |--------|-----|---------|-----------|
 | Validate a video (ext + ffprobe) | `video-helper validate` | `is_valid_video_file` | `POST /validate` |
 | Probe dimensions / duration / fps | `video-helper dimensions` | `video_dimensions` | `POST /dimensions` |
@@ -45,7 +45,7 @@ same flags) and the browser GUI at `GET /gui`.
 - **Burn-subs / srt2vtt**: "hardcode the subtitles", "SRT to WebVTT".
 - **Extract-frames**: "sample frames as images", "one frame every N", "keyframes".
 - **Probe**: "how long is this", "what resolution / fps", "is this a valid video".
-- **Surfaces**: "run the video API / MCP server", "open the video GUI", "install
+- **Surfaces**: "run the video API server", "open the video GUI", "install
   video-helper".
 
 ## File types it accepts

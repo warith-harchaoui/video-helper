@@ -53,7 +53,7 @@ human-reviewable full list). Keep the two in sync, and mirror the repo-root
 - "sample frames to build a dataset", "keyframes / thumbnails from the video"
 
 **Explicit command / function mentions**
-- `video-helper`, `video-helper-click`, `video-helper-mcp`
+- `video-helper`, `video-helper-click`
 - subcommands `validate dimensions duration convert chunk black image-loop
   concat overlay extract-audio mux-audio burn-subs srt2vtt extract-frames`
 - functions `extract_frames dump_frames video_converter video_dimensions
@@ -62,7 +62,7 @@ human-reviewable full list). Keep the two in sync, and mirror the repo-root
   mux_audio_video burn_subtitles srt2vtt extract_unique_colors`
 
 **Surfaces**
-- "run the video API / video-helper server", "expose these as HTTP / MCP tools"
+- "run the video API / video-helper server", "expose these as HTTP"
 - "open the video GUI / drag-and-drop bench", "video bench"
 - "how do I install / run video-helper"
 

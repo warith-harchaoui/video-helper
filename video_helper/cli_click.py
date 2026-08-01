@@ -11,7 +11,7 @@ the ``video-helper-click`` entry point in ``pyproject.toml``.
 Design notes
 ------------
 - Subcommands mirror ``video-helper`` (the argparse twin) so both CLIs
-  can be introspected identically by higher layers (FastAPI, MCP).
+  can be introspected identically by higher layers (FastAPI).
 - Flags reuse the argparse names (``--input`` / ``--output`` / …) rather
   than the more idiomatic click positional style — consistency across
   the two CLIs beats micro-idiomaticity here.

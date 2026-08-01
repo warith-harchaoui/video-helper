@@ -13,7 +13,7 @@ skills/video-helper/
 ├── SKILL.md                 # name + trigger-rich description + instructions
 └── references/
     ├── cli-reference.md      # full subcommand + flag matrix, output contract
-    ├── surfaces.md           # library, CLIs, API, MCP, and the /gui bench
+    ├── surfaces.md           # library, CLIs, API, and the /gui bench
     └── triggers.md           # exhaustive, auditable trigger catalogue
 ```
 

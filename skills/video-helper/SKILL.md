@@ -9,8 +9,8 @@ description: >-
   frames, convert SRT to WebVTT (+ CSS), and extract frames as images (multi-
   backend dispatcher: VidGear / PyAV / ffmpeg-pipe). Exposed as a Python library
   (`import video_helper as vh`), two CLIs (`video-helper` argparse and
-  `video-helper-click`), a FastAPI HTTP surface, an MCP tool set, and a minimal
-  browser GUI at `/gui`. Local-first, ffmpeg-backed, no SaaS.
+  `video-helper-click`), a FastAPI HTTP surface, and a minimal browser GUI at
+  `/gui`. Local-first, ffmpeg-backed, no SaaS.
 
   TRIGGER — any of: the user names a video operation on a file ("convert this mov
   to mp4 / resize to 720p / strip the audio", "re-encode / transcode this video",
@@ -21,7 +21,7 @@ description: >-
   "burn / hardcode subtitles into the video", "convert this SRT to VTT / WebVTT",
   "extract / dump / sample frames from this video", "how long is this video / what
   are its dimensions / is this a valid video"); the user types or references a
-  command (`video-helper`, `video-helper-click`, `video-helper-mcp`, subcommands
+  command (`video-helper`, `video-helper-click`, subcommands
   `validate|dimensions|duration|convert|chunk|black|image-loop|concat|overlay|
   extract-audio|mux-audio|burn-subs|srt2vtt|extract-frames`) or a library
   function (`extract_frames`, `dump_frames`, `video_converter`, `video_dimensions`,
@@ -30,7 +30,7 @@ description: >-
   `mux_audio_video`, `burn_subtitles`, `srt2vtt`, `extract_unique_colors`); the
   user points at a video file (`.mp4 .mkv .mov .webm .avi .m4v .mpeg .mpg .ts .3gp`)
   or a subtitle file (`.srt .vtt .ass`) and wants it transformed; the user wants
-  the video API/MCP server run, or the drag-and-drop GUI; the user asks to
+  the video API server run, or the drag-and-drop GUI; the user asks to
   install/run video-helper.
 
   SKIP when: the task is speech-to-text / transcription / caption GENERATION from
@@ -48,7 +48,7 @@ description: >-
 `video-helper` is a small, local-first Python toolkit for preparing video for
 AI and media pipelines. Everything is ffmpeg-backed and file-oriented: you give
 it paths, it writes paths (frame extraction yields arrays). The same operations
-are reachable five ways (library, two CLIs, HTTP API, MCP, GUI) so an agent can
+are reachable four ways (library, two CLIs, HTTP API, GUI) so an agent can
 pick whichever fits.
 
 ## Before anything: verify it is installed
@@ -64,7 +64,7 @@ If missing, install it (ffmpeg is a hard system dependency):
 pip install video-helper                 # core (validate/convert/chunk/frames/…)
 pip install 'video-helper[pyav]'         # + PyAV frame backend (best sparse access)
 pip install 'video-helper[cli]'          # + click CLI twin
-pip install 'video-helper[api,mcp]'      # + FastAPI HTTP surface + MCP tools + GUI
+pip install 'video-helper[api]'          # + FastAPI HTTP surface + GUI
 pip install 'video-helper[torch]'        # + destination="torch" frames
 pip install 'video-helper[pil]'          # + destination="pil" frames
 ```
@@ -76,7 +76,7 @@ ffmpeg must be on PATH (libass build needed for `burn-subs`):
 
 ## The fourteen operations
 
-Same names across the library, both CLIs, the API, and the MCP tools:
+Same names across the library, both CLIs, and the API:
 
 | Operation | CLI | Library function |
 |-----------|-----|------------------|
@@ -117,7 +117,7 @@ for frame in vh.extract_frames("in.mp4", frame_step=5):  # BGR HWC uint8 numpy b
 ```
 
 For the full flag matrix and every option, read `references/cli-reference.md`.
-For the API / MCP / GUI surfaces (endpoints, ports, the `/gui` bench), read
+For the API / GUI surfaces (endpoints, ports, the `/gui` bench), read
 `references/surfaces.md`. For the exhaustive, auditable trigger list, read
 `references/triggers.md`.
 

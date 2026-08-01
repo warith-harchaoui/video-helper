@@ -4,14 +4,14 @@
 #
 # Two-stage build: the base stage pulls system deps (ffmpeg is
 # mandatory for the whole toolkit) and installs the package with the
-# [api,mcp] extras so the container can serve the HTTP + MCP surfaces
-# out of the box. PyAV is included by default so the frame-extraction
-# dispatcher picks the fastest backend (windowed / sparse reads).
+# [api] extra so the container can serve the HTTP surface out of the
+# box. PyAV is included by default so the frame-extraction dispatcher
+# picks the fastest backend (windowed / sparse reads).
 #
 # Build:
 #   docker build -t video-helper .
 #
-# Run (HTTP + MCP on 0.0.0.0:8000):
+# Run (HTTP on 0.0.0.0:8000):
 #   docker run --rm -p 8000:8000 video-helper
 #
 # Run CLI one-shot:
@@ -39,11 +39,11 @@ WORKDIR /app
 COPY --chown=app:app pyproject.toml README.md LICENSE ./
 COPY --chown=app:app video_helper ./video_helper
 
-# Install core + api + mcp + pyav (dispatcher's best backend for windowed /
+# Install core + api + pyav (dispatcher's best backend for windowed /
 # sparse reads). torch / pillow stay out of the default image — they are
 # optional and drag in ~2 GB.
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir '.[api,mcp,pyav]'
+ && pip install --no-cache-dir '.[api,pyav]'
 
 # --- runtime ----------------------------------------------------------------
 USER app
@@ -54,5 +54,5 @@ ENV PYTHONUNBUFFERED=1 \
 
 # tini reaps orphan children (ffmpeg subprocesses) cleanly on SIGTERM.
 ENTRYPOINT ["/usr/bin/tini", "--"]
-# Default: serve FastAPI + MCP. Override for one-shot CLI usage.
-CMD ["video-helper-mcp"]
+# Default: serve the FastAPI surface. Override for one-shot CLI usage.
+CMD ["uvicorn", "video_helper.api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -44,20 +44,18 @@ pip install video-helper
 pip install "video-helper[pyav]"      # backend de frames PyAV
 pip install "video-helper[cli]"       # CLI click jumelle
 pip install "video-helper[api]"       # surface HTTP FastAPI
-pip install "video-helper[api,mcp]"   # outils MCP au-dessus de FastAPI
 ```
 
 ### Depuis les sources (sans PyPI)
 
 ```bash
 # Utilitaires vidéo de base (bibliothèque + CLI argparse)
-pip install "git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+pip install "git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
 
 # Surfaces et backends optionnels
-pip install "video-helper[pyav] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
-pip install "video-helper[cli] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
-pip install "video-helper[api] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
-pip install "video-helper[api,mcp] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.6.5"
+pip install "video-helper[pyav] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
+pip install "video-helper[cli] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
+pip install "video-helper[api] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
 ```
 
 ## Utilisation
@@ -133,7 +131,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Exposition multi-surface
 
-Chaque fonction publique est accessible depuis cinq surfaces, toutes
+Chaque fonction publique est accessible depuis quatre surfaces, toutes
 câblées systématiquement (rien n'est réservé à la CLI ou à la
 bibliothèque) :
 
@@ -143,7 +141,6 @@ bibliothèque) :
 | CLI argparse (stdlib) | `pip install video-helper` | `video-helper --help` |
 | CLI click | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
 | HTTP FastAPI + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
-| Serveur MCP | `pip install 'video-helper[api,mcp]'` | `video-helper-mcp` |
 
 L'application FastAPI sert aussi une **interface graphique minimale**
 (« video bench ») à `GET /gui` (et `GET /` y redirige) : déposez un clip,
@@ -159,8 +156,8 @@ uvicorn video_helper.api:app --port 8000
 # ouvrez http://localhost:8000/gui  (ou simplement http://localhost:8000/)
 ```
 
-Le `Dockerfile` à la racine embarque `.[api,mcp,pyav]` par défaut sur
-`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + MCP + GUI.
+Le `Dockerfile` à la racine embarque `.[api,pyav]` par défaut sur
+`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + GUI.
 
 Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de

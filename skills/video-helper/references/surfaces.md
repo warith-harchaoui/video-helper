@@ -69,19 +69,7 @@ Uploads stream to a temp file; temp dirs are cleaned via `BackgroundTasks`. The
 FastAPI `version` field is read from installed package metadata, so it always
 matches `pyproject.toml`.
 
-## 4. MCP server — FastAPI-MCP (`video-helper[api,mcp]`)
-
-```bash
-pip install 'video-helper[api,mcp]'
-video-helper-mcp                 # serves FastAPI + MCP on :8000
-# or: python -m video_helper.mcp
-```
-
-Wraps the exact FastAPI app with `fastapi_mcp` — the same endpoints become MCP
-tools (`convert`, `chunk`, `concat`, `burn-subs`, `extract-frames`, …) for any
-MCP-aware host. Host via `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` env vars.
-
-## 5. GUI — minimal video bench (`GET /gui`)
+## 4. GUI — minimal video bench (`GET /gui`)
 
 Served by the FastAPI app; no build step, no framework — a single self-contained
 HTML page (Tailwind via CDN + vanilla ES-module JS) defined in
