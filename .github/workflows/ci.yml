@@ -56,7 +56,11 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: an unpinned install let ruff 0.16 make Markdown code-fence
+        # formatting the default, which started flagging README/EXAMPLES code
+        # blocks as unformatted overnight with zero local change. Bump this
+        # deliberately, not by surprise.
+        run: pip install "ruff==0.15.21"
       - name: Ruff lint (PEP 8 + import order + more)
         run: ruff check .
       - name: Ruff format check (no unformatted files)
