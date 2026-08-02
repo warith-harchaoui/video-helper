@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.0] - 2026-08-02
 
 ### Added
 
@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `FaceRecognizer` — SFace 128-d embeddings (`cv2.FaceRecognizerSF`).
   - `track_faces` — IoU/ByteTrack-family tracking into `FaceTrack`s (pure NumPy).
   - `mouth_roi` — lip-centred ROI for the ASD visual stream.
+  - **Active Speaker Detection** — `get_engine` / `active_speaker_map`: the
+    accurate **LightASD** engine runs the real Light-ASD net (CVPR 2023) in
+    PyTorch with an exact `python_speech_features` MFCC front-end (no fragile
+    ONNX export), with a weights-free lip-motion proxy fallback. Model weights
+    (YuNet / SFace / `light_asd.pth`) are fetched on first use from the shared
+    `ai-helpers` model mirror.
   - `get_engine` — an `ASDEngine`: a zero-weight lip-motion proxy (always
     available) or `LightASD` via ONNX Runtime.
   - `active_speaker_map` — the **smart-sampling harness**: PySceneDetect shots +
