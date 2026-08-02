@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`video_helper.faces` — face-anchored speaker-identity primitives** (install
+  with the `[faces]` extra: `onnxruntime` + `scenedetect`; `opencv-python` is
+  already core). Reusable, HuggingFace-free, ONNX-portable CV building blocks:
+  - `FaceDetector` — YuNet detection + 5 landmarks (`cv2.FaceDetectorYN`).
+  - `FaceRecognizer` — SFace 128-d embeddings (`cv2.FaceRecognizerSF`).
+  - `track_faces` — IoU/ByteTrack-family tracking into `FaceTrack`s (pure NumPy).
+  - `mouth_roi` — lip-centred ROI for the ASD visual stream.
+  - `get_engine` — an `ASDEngine`: a zero-weight lip-motion proxy (always
+    available) or `LightASD` via ONNX Runtime.
+  - `active_speaker_map` — the **smart-sampling harness**: PySceneDetect shots +
+    speaker-turns + a cheap face census pick a small clip set, heavy ASD runs
+    only there and grows until every speaker is covered with certainty.
+  - `ensure_model` — sovereign model downloader: fetches from your own mirror
+    (`AI_HELPERS_MODEL_BASE_URL`), falling back to OpenCV Zoo GitHub (Apache-2.0);
+    never HuggingFace at runtime. `scripts/seed_model_mirror.py` seeds the mirror.
+
 ## [1.8.1] - 2026-08-01
 
 ### Removed

@@ -42,6 +42,19 @@ pyav = ["av>=12,<18"]
 torch = ["torch>=2.0,<3"]
 # Pillow unlocks destination="pil" (PIL.Image RGB, size=(W, H)).
 pil = ["pillow>=10,<12"]
+# Face stack: face-anchored speaker identity (video_helper.faces). ONNX Runtime
+# for the YuNet detector / SFace recognizer and PySceneDetect for shot
+# segmentation. The accurate ASD engine (LightASD) runs the real Light-ASD net
+# in PyTorch with an exact python_speech_features MFCC front-end (no fragile
+# ONNX export). Weights (YuNet / SFace / light_asd.pth) are fetched on first use
+# (see video_helper.faces.models); opencv-python is already a core dependency.
+# HuggingFace-free at runtime.
+faces = [
+    "onnxruntime>=1.16,<2",
+    "scenedetect>=0.6,<1",
+    "torch>=2,<3",
+    "python_speech_features>=0.6",
+]
 # CLI-only-with-click extra. The argparse variant needs no runtime dep
 # and is always available.
 cli = ["click>=8.1,<9"]
