@@ -50,12 +50,12 @@ pip install "video-helper[api]"       # surface HTTP FastAPI
 
 ```bash
 # Utilitaires vidéo de base (bibliothèque + CLI argparse)
-pip install "git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
+pip install video-helper
 
 # Surfaces et backends optionnels
-pip install "video-helper[pyav] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
-pip install "video-helper[cli] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
-pip install "video-helper[api] @ git+https://github.com/warith-harchaoui/video-helper.git@v1.8.0"
+pip install "video-helper[pyav]"
+pip install "video-helper[cli]"
+pip install "video-helper[api]"
 ```
 
 ## Utilisation

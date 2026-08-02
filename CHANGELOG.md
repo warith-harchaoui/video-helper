@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-08-02
+
+Documentation-only follow-up. The install commands now point at PyPI
+(`pip install video-helper`) instead of a pinned git tag, so the rendered PyPI
+project page never drifts to an old version.
+
+### Fixed
+
+- README / LISEZMOI / EXAMPLES install commands no longer self-pin to a git tag
+  (`@v1.8.0`); they use `pip install video-helper` (and the `[extra]` forms),
+  which always resolves to the latest published release.
+
+### Added
+
+- `tests/test_readme_install_pin.py` guards against the stale git self-pin ever
+  returning to any Markdown file.
+
 ## [2.0.0] - 2026-08-02
 
 ### Added
