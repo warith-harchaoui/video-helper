@@ -32,6 +32,15 @@ Author
 Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 """
 
+import os as _os
+
+# Enable Apple-Silicon MPS with a CPU fallback for the few ops lacking an MPS kernel (the
+# faces/Light-ASD ``max_pool3d``, some RNNs). Must be set BEFORE torch is first imported, so it
+# lives at package import — the earliest hook a ``video_helper`` caller runs. With it, Light-ASD
+# runs on MPS ~2.5x faster than CPU with bit-identical scores; without it a missing op hard-errors.
+# ``setdefault`` lets an explicit ``PYTORCH_ENABLE_MPS_FALLBACK=0`` still win.
+_os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
 # Package-level metadata — kept in sync with pyproject.toml on release.
 __author__ = "Warith Harchaoui, Ph.D."
 __email__ = "warithmetics@deraison.ai"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-helper"
-version = "1.9.0"
+version = "2.0.0"
 description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, and FastAPI HTTP surface. Validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Multimedia :: Video :: Conversion",
 ]
 dependencies = [
-    "os-helper>=1.5.0",
+    "os-helper>=2.0.0,<3",
     "opencv-python>=4.10.0.84,<5",
     "ffmpeg-python>=0.2.0,<0.3",
     "vidgear>=0.3.3,<1",
@@ -95,7 +95,9 @@ exclude = ["tests*", "assets*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["assets", "tests"]
+# _lightasd is vendored upstream Light-ASD code (tabs, its own style); lint/format
+# our own sources, not third-party we don't own.
+extend-exclude = ["assets", "tests", "_lightasd"]
 
 [tool.ruff.lint]
 # Conservative starter set: pyflakes (F), pycodestyle errors (E), warnings (W),

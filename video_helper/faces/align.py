@@ -17,7 +17,9 @@ import numpy as np
 from .detect import Face
 
 
-def mouth_roi(frame_bgr: np.ndarray, face: Face, *, size: int = 112, pad: float = 1.6) -> np.ndarray:
+def mouth_roi(
+    frame_bgr: np.ndarray, face: Face, *, size: int = 112, pad: float = 1.6
+) -> np.ndarray:
     """Crop a square, lip-centred grayscale ROI for the ASD visual stream.
 
     The crop is centred on the mouth-corner midpoint, sized to ``pad`` times the

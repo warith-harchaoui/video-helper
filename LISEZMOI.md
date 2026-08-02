@@ -1,14 +1,14 @@
 # Video Helper
 
-[🇫🇷](LISEZMOI.md) · [🇬🇧](README.md)
+[🇫🇷](https://github.com/warith-harchaoui/video-helper/blob/main/LISEZMOI.md) · [🇬🇧](https://github.com/warith-harchaoui/video-helper/blob/main/README.md)
 
-[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#la-promesse)
+[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#la-promesse)
 
 `Video Helper` fait partie d'une collection de bibliothèques appelée `AI Helpers`, développée pour bâtir des applications d'intelligence artificielle.
 
 [🌍 AI Helpers](https://harchaoui.org/warith/ai-helpers)
 
-[![logo](assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
+[![logo](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
 
 Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires pour le traitement de fichiers vidéo. Elle inclut le chargement, la conversion, l'extraction de frames ainsi que la manipulation de formats de sous-titres.
 
@@ -60,7 +60,7 @@ pip install "video-helper[api] @ git+https://github.com/warith-harchaoui/video-h
 
 ## Utilisation
 
-Pour le catalogue complet d'exemples, voir [📋 EXAMPLES.md](EXAMPLES.md).
+Pour le catalogue complet d'exemples, voir [📋 EXAMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md).
 
 Exemple : charger, convertir et extraire des frames d'une vidéo.
 
@@ -161,9 +161,9 @@ Le `Dockerfile` à la racine embarque `.[api,pyav]` par défaut sur
 
 Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
-fichiers), voir [TRIGGERS.md](TRIGGERS.md).
+fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
-Voir [GUI.md](GUI.md) pour la feuille de route vers une GUI plus riche
+Voir [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette + comparateur frame-first + zone de dépôt par lots —
 le bench minimal `/gui` ci-dessus en est la première étape).
 
@@ -183,7 +183,7 @@ le bench minimal `/gui` ci-dessus en est la première étape).
 | `video_dimensions` | `(video_file: str) -> dict` | Retourne `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
 | `video_duration` | `(input_video: str) -> float` | Durée en secondes (wrapper léger sur `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Ré-encode avec fps optionnel, redimensionnement (padding noir préservant le ratio quand width et height sont fournis), et suppression de l'audio. |
-| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, http_headers=None, output_width=None, output_height=None, pad_color="black", destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Dispatcher multi-backend (VidGear / PyAV / ffmpeg-pipe). `destination` : `"numpy"` (HWC BGR), `"torch"` (CHW RGB), ou `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout` produisent NHWC/NCHW ou THWC/CTHW. `frame_indices`/`frame_times` = accès clairsemé via le seek par keyframes de PyAV. `http_headers` transmet User-Agent/Referer/Cookie à PyAV / ffmpeg-pipe (nécessaire pour YouTube live résolu par yt-dlp, contenus members-only, contenus age-gated). `output_width`+`output_height` → taille exacte avec letterbox/pillarbox `pad_color` ; l'un des deux seul → mise à l'échelle avec préservation du ratio. `pad_color="transparent"` → v1.6.0. Voir [SPEED_ANALYSIS.md](SPEED_ANALYSIS.md) et [EXAMPLES.md](EXAMPLES.md#frame-access). |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, http_headers=None, output_width=None, output_height=None, pad_color="black", destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Dispatcher multi-backend (VidGear / PyAV / ffmpeg-pipe). `destination` : `"numpy"` (HWC BGR), `"torch"` (CHW RGB), ou `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout` produisent NHWC/NCHW ou THWC/CTHW. `frame_indices`/`frame_times` = accès clairsemé via le seek par keyframes de PyAV. `http_headers` transmet User-Agent/Referer/Cookie à PyAV / ffmpeg-pipe (nécessaire pour YouTube live résolu par yt-dlp, contenus members-only, contenus age-gated). `output_width`+`output_height` → taille exacte avec letterbox/pillarbox `pad_color` ; l'un des deux seul → mise à l'échelle avec préservation du ratio. `pad_color="transparent"` → v1.6.0. Voir [SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md) et [EXAMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md#frame-access). |
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Écrit une liste de frames BGR (convention OpenCV, identique à ce que `extract_frames` produit) dans un fichier vidéo. |
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video)` | Coupe temporelle de `sample_start` à `sample_end` (secondes). |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Génère une vidéo noire silencieuse. Les dimensions impaires sont arrondies au pair inférieur. |
@@ -196,7 +196,7 @@ le bench minimal `/gui` ci-dessus en est la première étape).
 | `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None)` | Convertit SRT → WebVTT en sortant les balises `<font color>` dans un fichier CSS compagnon. |
 | `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Ensemble des couleurs hexadécimales uniques trouvées dans les balises `<font color>` d'un SRT. |
 
-Par défaut les frames sont des `numpy.ndarray` BGR de forme `(H, W, 3)` avec des valeurs de pixels dans `[0, 255]`. Voir [EXAMPLES.md → Destination](EXAMPLES.md#destination-numpy-torch-or-pil) pour la table complète forme × colorimétrie incluant torch (CHW/NCHW/CTHW RGB) et PIL (RGB, `size=(W, H)`).
+Par défaut les frames sont des `numpy.ndarray` BGR de forme `(H, W, 3)` avec des valeurs de pixels dans `[0, 255]`. Voir [EXAMPLES.md → Destination](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md#destination-numpy-torch-or-pil) pour la table complète forme × colorimétrie incluant torch (CHW/NCHW/CTHW RGB) et PIL (RGB, `size=(W, H)`).
 
 ## Auteur
  - [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
@@ -206,4 +206,4 @@ Remerciements chaleureux à [Mohamed Chelali](https://mchelali.github.io) et [Ba
 
 ## Licence
 
-Ce projet est distribué sous licence BSD-3-Clause — voir le fichier [LICENSE](LICENSE) pour les détails.
+Ce projet est distribué sous licence BSD-3-Clause — voir le fichier [LICENSE](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) pour les détails.

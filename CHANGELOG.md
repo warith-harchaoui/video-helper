@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-08-02
+
+### Added
+
+- **GPU/MPS acceleration for Light-ASD.** Active-speaker detection now auto-selects
+  a discrete NVIDIA **CUDA** GPU as well as Apple-Silicon **MPS** (was MPS-only),
+  falling back to CPU. `NH_ASD_DEVICE=cpu|cuda|mps|auto` overrides; an explicit but
+  unavailable backend warns and auto-selects. The CPU-demote-on-forward-error guard
+  is unchanged.
+
+### Changed
+
+- **Working-resolution cap for the whole faces pipeline.** Extracted frames are now
+  downscaled to a reasonable max height (default 720, `NH_FACES_MAX_HEIGHT` to
+  override), preserving aspect ratio and never upscaling, before face detection and
+  the ASD mouth-crop pipeline. A 4K recording no longer forces YuNet and Light-ASD
+  to chew through needlessly large frames; decode memory and detection/ASD compute
+  drop sharply. Detection, tracking, ASD, recognition and the emitted crops all
+  share the same reduced, self-consistent coordinate space, so results stay correct.
+- Adopt the os-helper 2.0.0 foundation: pin `os-helper>=2.0.0,<3`. The face-model
+  mirror already downloads through `osh.download_file`, now on the resumable,
+  atomic, integrity-checked 2.x primitive. Major bump because the shared foundation
+  crossed a major boundary.
+- README / LISEZMOI use absolute github.com / raw.githubusercontent URLs so they
+  render on PyPI. CI trimmed to a super-light single-Python blocking gate.
+
+### Fixed
+
+- The 1.9.0 CI was red (vendored Light-ASD code + un-formatted sources + a
+  torch-only test). Now green: `_lightasd/` (vendored upstream) is excluded from
+  ruff lint/format, the first-party sources are formatted ruff-clean, and the ASD
+  device test carries a `torch` `importorskip` so it skips in the light CI env and
+  runs locally where the `[faces]` extra is installed.
+
 ## [1.9.0] - 2026-08-02
 
 ### Added

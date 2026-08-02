@@ -204,4 +204,4 @@ Special thanks to [Mohamed Chelali](https://mchelali.github.io) and [Bachir Zerr
 
 ## License
 
-This project is licensed under the BSD-3-Clause License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD-3-Clause License — see the [LICENSE](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) file for details.

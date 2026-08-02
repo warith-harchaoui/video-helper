@@ -71,9 +71,7 @@ class FaceDetector:
             osh.warning("faces.detect: YuNet weights unavailable — detection disabled")
             return False
         # input_size is a placeholder; reset per frame in detect().
-        self._det = cv2.FaceDetectorYN.create(
-            path, "", (320, 320), self.score_threshold, 0.3, 5000
-        )
+        self._det = cv2.FaceDetectorYN.create(path, "", (320, 320), self.score_threshold, 0.3, 5000)
         self._model_path = path
         return True
 

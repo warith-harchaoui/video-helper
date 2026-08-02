@@ -28,6 +28,7 @@ the video again).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -39,6 +40,46 @@ from .recognize import FaceRecognizer
 from .track import track_faces
 
 _SR = 16000  # audio sample rate the harness expects for slicing
+
+# Cap the working resolution of the faces pipeline. Face detection (YuNet) and the
+# ASD mouth-crop pipeline gain nothing from 4K frames: a reasonable max height
+# keeps faces well-resolved while cutting decode memory and detection/ASD compute.
+# Every extracted frame is downscaled to this height (aspect preserved, never
+# upscaled) BEFORE detection, so all downstream stages — detection, tracking, ASD,
+# recognition, and the emitted crops — share one reduced, self-consistent
+# coordinate space. Override with NH_FACES_MAX_HEIGHT (e.g. 1080 for more detail).
+_MAX_FACE_HEIGHT = int(os.environ.get("NH_FACES_MAX_HEIGHT", "720"))
+
+
+def _cap_frame(frame: np.ndarray, max_height: int = _MAX_FACE_HEIGHT) -> np.ndarray:
+    """Downscale a BGR frame to ``max_height``, preserving aspect; never upscale.
+
+    Returns the frame untouched when it is already short enough. ``INTER_AREA`` is
+    the correct interpolation for shrinking (it avoids the aliasing a linear
+    resize introduces), which matters for the small facial features YuNet and the
+    ASD mouth-ROI rely on.
+
+    Parameters
+    ----------
+    frame : np.ndarray
+        A ``(H, W, 3)`` BGR uint8 frame.
+    max_height : int, optional
+        Maximum output height in pixels (default :data:`_MAX_FACE_HEIGHT`).
+
+    Returns
+    -------
+    np.ndarray
+        The frame, downscaled to ``max_height`` rows when it was taller.
+    """
+    h = frame.shape[0]
+    if h <= max_height:
+        return frame
+    import cv2
+
+    # Scale width by the same factor so the aspect ratio is preserved exactly.
+    scale = max_height / float(h)
+    new_w = max(1, int(round(frame.shape[1] * scale)))
+    return cv2.resize(frame, (new_w, max_height), interpolation=cv2.INTER_AREA)
 
 
 @dataclass
@@ -107,10 +148,11 @@ def _census(
 
     regions: list[tuple[float, float]] = []
     try:
-        frames = extract_frames(
-            video_path, frame_interval=period, destination="numpy"
-        )
+        frames = extract_frames(video_path, frame_interval=period, destination="numpy")
         for k, frame in enumerate(frames):
+            # Cap resolution before YuNet: the census only needs to know a face is
+            # present, so full 4K frames would waste decode + detection time.
+            frame = _cap_frame(frame)
             t = k * period
             if detector.detect(frame):
                 regions.append((max(0.0, t - period / 2), t + period / 2))
@@ -228,7 +270,6 @@ def active_speaker_map(
     coverage_floor: float = 0.3,
     asd_tau: float = 0.4,
     rescue_budget: int | None = None,
-    allow_noncommercial: bool = False,
 ) -> list[SpeakerFaceAssignment]:
     """Assign each diarization cluster to a global on-screen face via sampled ASD.
 
@@ -258,7 +299,7 @@ def active_speaker_map(
 
     detector = FaceDetector()
     recognizer = FaceRecognizer()
-    engine: ASDEngine = get_engine(asd_engine, allow_noncommercial=allow_noncommercial)
+    engine: ASDEngine = get_engine(asd_engine)
     gallery = _FaceGallery(recognizer)
 
     shots = _detect_shots(video_path)
@@ -288,15 +329,21 @@ def active_speaker_map(
     def _process_window(spk: int, w0: float, w1: float) -> None:
         nonlocal spent
         try:
-            frames = list(
-                extract_frames(
+            # Cap the working resolution once, here: detection, tracking, ASD
+            # mouth-crops and recognition all run on these frames, so a single
+            # aspect-preserving downscale bounds the whole window's compute and
+            # memory. Coordinates stay self-consistent (every stage sees the same
+            # reduced frames), and the emitted crops are these same frames.
+            frames = [
+                _cap_frame(fr)
+                for fr in extract_frames(
                     video_path,
                     start_instant=w0,
                     end_instant=w1,
                     frame_interval=1.0 / asd_fps,
                     destination="numpy",
                 )
-            )
+            ]
         except Exception as exc:  # noqa: BLE001
             osh.warning(f"faces.sampling: decode window [{w0:.1f},{w1:.1f}] failed ({exc})")
             return
@@ -441,9 +488,7 @@ def active_speaker_map(
         margin = (top - second) / (top + 1e-9)
         cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
         if cov < coverage_floor:
-            osh.info(
-                f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted"
-            )
+            osh.info(f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted")
             continue
         crops = [(fr, face) for _s, fr, face in best_crops.get(fid, [])]
         results.append(

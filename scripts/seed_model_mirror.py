@@ -75,7 +75,9 @@ def main() -> int:
             )
             continue
         if "huggingface.co" in url and not args.allow_hf:
-            osh.warning(f"{name}: upstream is HuggingFace; re-run with --allow-hf to fetch it once.")
+            osh.warning(
+                f"{name}: upstream is HuggingFace; re-run with --allow-hf to fetch it once."
+            )
             continue
         dest = osh.join(args.out, spec.filename)
         osh.info(f"{name}: fetching {url}")

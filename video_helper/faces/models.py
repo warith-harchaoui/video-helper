@@ -45,9 +45,7 @@ def _base_url() -> str:
 
 def model_dir() -> str:
     """Return (creating if needed) the local model cache directory."""
-    d = os.environ.get("VIDEO_HELPER_MODEL_DIR") or os.path.expanduser(
-        "~/.cache/ai-helpers/models"
-    )
+    d = os.environ.get("VIDEO_HELPER_MODEL_DIR") or os.path.expanduser("~/.cache/ai-helpers/models")
     osh.make_directory(d)
     return d
 
@@ -121,32 +119,23 @@ def _verify(path: str, sha256: str) -> bool:
     return ok
 
 
-def ensure_model(name: str, *, allow_noncommercial: bool = False) -> str | None:
+def ensure_model(name: str) -> str | None:
     """Resolve a model to a local path, downloading + caching on first use.
 
     Parameters
     ----------
     name : str
         A key in :data:`REGISTRY`.
-    allow_noncommercial : bool, optional
-        Gate for research/non-commercial weights. A model whose license is not
-        clearly permissive is refused unless this is set.
 
     Returns
     -------
     str or None
-        Local filesystem path to the ready weight, or ``None`` if the model is
-        gated-off or could not be fetched from any source (caller degrades).
+        Local filesystem path to the ready weight, or ``None`` if the model could
+        not be fetched from any source (the caller degrades gracefully).
     """
     spec = REGISTRY.get(name)
     if spec is None:
         osh.warning(f"faces.models: unknown model {name!r}")
-        return None
-
-    if spec.license not in ("Apache-2.0", "MIT", "BSD-3-Clause") and not allow_noncommercial:
-        osh.warning(
-            f"faces.models: {name!r} is '{spec.license}' — pass allow_noncommercial=True to use it"
-        )
         return None
 
     dest = osh.join(model_dir(), spec.filename)
