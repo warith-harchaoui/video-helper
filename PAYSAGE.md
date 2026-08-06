@@ -48,7 +48,7 @@ pipelines d'IA** (répartiteur d'extraction d'images multi-backend,
 accélération matérielle, destination torch à la demande, transmission des
 en-têtes HTTP pour les flux résolus par yt-dlp). Il ne cherche
 délibérément **pas** à concurrencer `PyAV` sur l'API paquet de bas niveau
-ni `torchvision.io` sur les tenseurs torch natifs, et il garde `torch` et
+ni `torchvision.io` sur les tenseurs torch natifs et il garde `torch` et
 `PIL` **optionnels** — vous n'en payez le coût d'installation que si vous
 appelez réellement `destination="torch"` / `destination="pil"`. Ce
 compromis est le principal facteur de différenciation face à
