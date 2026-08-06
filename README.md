@@ -131,7 +131,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Multi-surface exposure
 
-Every public function is reachable from four surfaces, all
+Every public function is reachable from five surfaces, all
 systematically wired (nothing is CLI-only or library-only):
 
 | Surface | Install | Entry point |
@@ -140,6 +140,7 @@ systematically wired (nothing is CLI-only or library-only):
 | Argparse CLI (stdlib) | `pip install video-helper` | `video-helper --help` |
 | Click CLI | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
 | FastAPI HTTP + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
+| MCP | `pip install 'video-helper[mcp]'` | `video-helper-mcp` (same app + `/mcp`) |
 
 The FastAPI app also serves a **minimal browser GUI** ("video bench") at
 `GET /gui` (and `GET /` redirects there): drop a clip, pick one operation,

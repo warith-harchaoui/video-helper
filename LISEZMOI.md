@@ -131,7 +131,7 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Exposition multi-surface
 
-Chaque fonction publique est accessible depuis quatre surfaces, toutes
+Chaque fonction publique est accessible depuis cinq surfaces, toutes
 câblées systématiquement (rien n'est réservé à la CLI ou à la
 bibliothèque) :
 
@@ -141,6 +141,7 @@ bibliothèque) :
 | CLI argparse (stdlib) | `pip install video-helper` | `video-helper --help` |
 | CLI click | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
 | HTTP FastAPI + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
+| MCP | `pip install 'video-helper[mcp]'` | `video-helper-mcp` (même app + `/mcp`) |
 
 L'application FastAPI sert aussi une **interface graphique minimale**
 (« video bench ») à `GET /gui` (et `GET /` y redirige) : déposez un clip,

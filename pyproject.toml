@@ -66,8 +66,19 @@ api = [
     "python-multipart>=0.0.9,<1",
 ]
 all = ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12"]
+# MCP extra (video_helper.mcp) — exposes the SAME FastAPI app from `[api]` as
+# MCP tools via fastapi-mcp; needs the api extra's runtime deps too.
+mcp = [
+    "video-helper[api]",
+    "fastapi-mcp>=0.3,<1",
+    # Cap the MCP SDK below 2.0: fastapi-mcp 0.4.0 declares only `mcp>=1.12`
+    # (no upper bound), but mcp 2.0.0 changed the low-level `Server.__init__`
+    # signature and breaks fastapi-mcp at import. Pin to the 1.x line until
+    # fastapi-mcp ships a 2.x-compatible release (same issue hit md2star).
+    "mcp>=1.12,<2",
+]
 # `dev` keeps the bar low for CI — pytest + httpx (for FastAPI TestClient)
-# + click (so the click CLI import always resolves in tests) + api
+# + click (so the click CLI import always resolves in tests) + api/mcp
 # so smoke tests exercise every surface.
 dev = [
     "pytest>=8",
@@ -76,6 +87,8 @@ dev = [
     "click>=8.1,<9",
     "fastapi>=0.111,<1",
     "python-multipart>=0.0.9,<1",
+    "fastapi-mcp>=0.3,<1",
+    "mcp>=1.12,<2",
 ]
 
 [project.scripts]
@@ -83,6 +96,8 @@ dev = [
 video-helper = "video_helper.cli_argparse:main"
 # click-based twin — install with [cli] extra.
 video-helper-click = "video_helper.cli_click:cli"
+# MCP server — install with [mcp] extra.
+video-helper-mcp = "video_helper.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/warith-harchaoui/video-helper"
