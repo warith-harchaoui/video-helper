@@ -24,6 +24,14 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 [📋 Exemples](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
 
+## Fonctionnalités
+- **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
+- **Conversion** : `video_converter` — ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
+- **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
+- **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
+- **Primitives de pipeline** : `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
+
 ## Installation
 
 **Prérequis** — **Python 3.10–3.13** et **git**, **ffmpeg**, multiplateforme :
@@ -167,14 +175,6 @@ fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/b
 Voir [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette + comparateur frame-first + zone de dépôt par lots —
 le bench minimal `/gui` ci-dessus en est la première étape).
-
-## Fonctionnalités
-- **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
-- **Conversion** : `video_converter` — ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
-- **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
-- **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
-- **Primitives de pipeline** : `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
-- **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
 
 ## Référence d'API
 

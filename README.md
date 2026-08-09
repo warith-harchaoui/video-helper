@@ -24,6 +24,14 @@ Video Helper is a Python library that provides utility functions for processing 
 
 [📋 Examples](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
 
+## Features
+- **Video validation**: `is_valid_video_file` — extension + `ffmpeg.probe` round-trip.
+- **Conversion**: `video_converter` — re-encode, resample fps, resize (aspect-preserving), strip audio.
+- **Frame access**: `extract_frames` (generator with time/index range, stabilization, sampling) and `dump_frames` (list → video).
+- **Temporal crop**: `extract_video_chunk`, `video_duration`.
+- **Pipeline primitives**: `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
+
 ## Installation
 
 **Prerequisites** — **Python 3.10–3.13** and **git**, **ffmpeg**, cross-platform:
@@ -165,14 +173,6 @@ phrasings, commands, functions, file types), see
 See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe
 Canvas + frame-first comparator + batch drop zone — the minimal `/gui` bench
 above is the first step).
-
-## Features
-- **Video validation**: `is_valid_video_file` — extension + `ffmpeg.probe` round-trip.
-- **Conversion**: `video_converter` — re-encode, resample fps, resize (aspect-preserving), strip audio.
-- **Frame access**: `extract_frames` (generator with time/index range, stabilization, sampling) and `dump_frames` (list → video).
-- **Temporal crop**: `extract_video_chunk`, `video_duration`.
-- **Pipeline primitives**: `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
-- **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
 
 ## API Reference
 
