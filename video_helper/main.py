@@ -389,6 +389,12 @@ def video_converter(
         output_video = osh.join(fi, bi + "-converted" + "." + input_ext)
 
     fo, bo, output_ext = osh.folder_name_ext(output_video)
+    if osh.emptystring(output_ext):
+        # A caller-supplied output_video with no extension leaves ffmpeg unable
+        # to infer a muxer. Default to mp4, the one container every downstream
+        # tool in the suite can always read back.
+        output_ext = "mp4"
+        output_video = osh.join(fo, bo + "." + output_ext)
 
     # If no conversion is required, just copy the streams — but only when
     # the container does not change. Cross-container stream copy (e.g.

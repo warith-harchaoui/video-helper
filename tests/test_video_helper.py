@@ -83,6 +83,22 @@ def test_video_conversion(tmp_path) -> None:
     assert d["duration"] > 0
 
 
+def test_video_conversion_defaults_extensionless_output_to_mp4(tmp_path) -> None:
+    """An output path with no extension gets one (mp4) instead of failing.
+
+    Regression test: ffmpeg cannot infer a muxer from an extensionless path,
+    and folder_name_ext().ext would be "" in that case, so video_converter
+    used to hand ffmpeg an unusable target.
+    """
+    video_file = _require(VIDEO_WITH_AUDIO)
+    output_video_file = str(tmp_path / "converted")  # no extension
+
+    video_converter(video_file, output_video_file, without_sound=True)
+
+    assert not osh.file_exists(output_video_file)
+    assert osh.file_exists(output_video_file + ".mp4")
+
+
 def test_frame_extraction() -> None:
     """Frame extraction honors time range and frame_step."""
     video_file = _require(VIDEO_NO_AUDIO)
