@@ -22,7 +22,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 [🗺️ Paysage](https://github.com/warith-harchaoui/video-helper/blob/main/PAYSAGE.md)
 
-[📋 Exemples](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
+[📋 Exemples](https://github.com/warith-harchaoui/video-helper/blob/main/EXEMPLES.md)
 
 ## Fonctionnalités
 - **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
