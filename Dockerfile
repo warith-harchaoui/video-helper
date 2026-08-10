@@ -34,16 +34,20 @@ RUN useradd --create-home --shell /bin/bash app
 WORKDIR /app
 
 # --- deps -------------------------------------------------------------------
-# Copy the package first so pip picks up pyproject.toml before we invalidate
-# the layer with source changes.
+# requirements.txt first (core deps only) so this layer caches independently
+# of source changes; the package itself (with its extras) is installed once
+# the source is in place, right below.
+COPY --chown=app:app requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
+
 COPY --chown=app:app pyproject.toml README.md LICENSE ./
 COPY --chown=app:app video_helper ./video_helper
 
 # Install core + api + pyav (dispatcher's best backend for windowed /
 # sparse reads). torch / pillow stay out of the default image — they are
 # optional and drag in ~2 GB.
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir '.[api,pyav]'
+RUN pip install --no-cache-dir '.[api,pyav]'
 
 # --- runtime ----------------------------------------------------------------
 USER app

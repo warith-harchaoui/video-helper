@@ -78,6 +78,7 @@ logs/
 # json and yaml
 *.json
 *.yaml
+!environment.yaml
 # *.yml
 
 # Distribution / packaging
