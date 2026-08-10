@@ -894,7 +894,13 @@ def _extract_via_pyav(
         )
     try:
         stream = container.streams.video[0]
-        stream.thread_type = "AUTO"
+        # Deliberately NOT stream.thread_type = "AUTO": this function seeks then breaks the
+        # decode loop early once it has the wanted frame(s) (both the sparse-indices and the
+        # sequential-range path below), and closing a multithreaded libavcodec context that
+        # was never fully drained is a known PyAV/FFmpeg deadlock — container.close() can hang
+        # forever joining decoder threads still holding in-flight frames. Sampling call sites
+        # (smart face sampling, seek-heavy by design) gain little from frame-threading anyway
+        # since most of the video is skipped via seek, not decoded.
 
         def _seek_to_seconds(seconds: float) -> None:
             """Seek the container to the keyframe at-or-before ``seconds``.
