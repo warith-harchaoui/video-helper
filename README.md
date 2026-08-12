@@ -57,13 +57,14 @@ pip install "video-helper[api]"       # FastAPI HTTP surface
 ### From source (no PyPI)
 
 ```bash
-# Core video utilities (library + argparse CLI)
-pip install video-helper
+git clone https://github.com/warith-harchaoui/video-helper.git
+cd video-helper
+pip install -e .
 
 # Optional surfaces and backends
-pip install "video-helper[pyav]"
-pip install "video-helper[cli]"
-pip install "video-helper[api]"
+pip install -e ".[pyav]"
+pip install -e ".[cli]"
+pip install -e ".[api]"
 ```
 
 ## Usage
