@@ -581,6 +581,9 @@ def extract_frames_route(
     start: float | None = Form(None),
     end: float | None = Form(None),
     backend: str = Form("auto"),
+    output_width: int | None = Form(None),
+    output_height: int | None = Form(None),
+    pad_color: str = Form("black"),
 ) -> StreamingResponse:
     """Extract frames as PNGs; response is a ZIP archive."""
     # cv2 import is deferred to request time: importing OpenCV at module load
@@ -602,6 +605,9 @@ def extract_frames_route(
                 start_instant=start,
                 end_instant=end,
                 backend=backend,
+                output_width=output_width,
+                output_height=output_height,
+                pad_color=pad_color,
             )
         ):
             cv2.imwrite(str(frames_dir / f"frame_{i:09d}.png"), frame)

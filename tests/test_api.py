@@ -97,3 +97,19 @@ def test_root_redirects_to_gui(client) -> None:
     r = client.get("/")
     assert r.status_code == 200
     assert "video bench" in r.text.lower()
+
+
+def test_extract_frames_route_exposes_pad_color_params(client) -> None:
+    """``/extract-frames`` request-body schema lists the pad_color CLI-parity fields."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    schema = r.json()
+    body_schema_ref = schema["paths"]["/extract-frames"]["post"]["requestBody"]["content"][
+        "multipart/form-data"
+    ]["schema"]["$ref"]
+    body_schema_name = body_schema_ref.rsplit("/", 1)[-1]
+    props = schema["components"]["schemas"][body_schema_name]["properties"]
+    assert "output_width" in props
+    assert "output_height" in props
+    assert "pad_color" in props
+    assert props["pad_color"]["default"] == "black"

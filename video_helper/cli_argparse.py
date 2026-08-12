@@ -443,6 +443,9 @@ def _handle_extract_frames(ns: argparse.Namespace) -> int:
         start_instant=ns.start,
         end_instant=ns.end,
         backend=ns.backend,
+        output_width=ns.width,
+        output_height=ns.height,
+        pad_color=ns.pad_color,
     )
     for i, frame in enumerate(iterator):
         path = os.path.join(ns.output_dir, f"frame_{i:09d}.png")
@@ -786,6 +789,15 @@ def _add_extract_frames(sub: argparse._SubParsersAction) -> None:
         default="auto",
         choices=["auto", "vidgear", "pyav", "ffmpeg-pipe"],
         help="Frame-extraction backend (default auto).",
+    )
+    p.add_argument("--width", type=int, default=None, help="Scale-fit target width in pixels.")
+    p.add_argument("--height", type=int, default=None, help="Scale-fit target height in pixels.")
+    p.add_argument(
+        "--pad-color",
+        default="black",
+        dest="pad_color",
+        help="Padding color when --width/--height don't match the source aspect "
+        "ratio: a common name (default 'black') or '#RRGGBB'.",
     )
     p.set_defaults(func=_handle_extract_frames)
 

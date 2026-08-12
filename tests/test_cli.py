@@ -102,3 +102,74 @@ def test_click_subcommand_help_exits_zero(sub) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, [sub, "--help"])
     assert result.exit_code == 0
+
+
+def test_argparse_extract_frames_exposes_pad_color_flags(capsys) -> None:
+    """``extract-frames --help`` (argparse) lists --width/--height/--pad-color."""
+    from video_helper.cli_argparse import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["extract-frames", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--width" in out
+    assert "--height" in out
+    assert "--pad-color" in out
+
+
+def test_click_extract_frames_exposes_pad_color_flags() -> None:
+    """``extract-frames --help`` (click) lists --width/--height/--pad-color."""
+    from video_helper.cli_click import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["extract-frames", "--help"])
+    assert result.exit_code == 0
+    assert "--width" in result.output
+    assert "--height" in result.output
+    assert "--pad-color" in result.output
+
+
+def test_argparse_extract_frames_parses_pad_color_flags() -> None:
+    """The argparse ``extract-frames`` subparser parses width/height/pad-color."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(
+        [
+            "extract-frames",
+            "--input",
+            "in.mp4",
+            "--output-dir",
+            "out",
+            "--width",
+            "320",
+            "--height",
+            "240",
+            "--pad-color",
+            "#FF0000",
+        ]
+    )
+    assert ns.width == 320
+    assert ns.height == 240
+    assert ns.pad_color == "#FF0000"
+
+
+def test_argparse_extract_frames_pad_color_defaults_to_black() -> None:
+    """Omitting --pad-color defaults to 'black', matching the library default."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(
+        ["extract-frames", "--input", "in.mp4", "--output-dir", "out"]
+    )
+    assert ns.width is None
+    assert ns.height is None
+    assert ns.pad_color == "black"
+
+
+def test_click_extract_frames_pad_color_defaults_to_black() -> None:
+    """The click ``extract-frames`` command defaults --pad-color to 'black'."""
+    from video_helper.cli_click import extract_frames_cmd
+
+    defaults = {p.name: p.default for p in extract_frames_cmd.params}
+    assert defaults["width"] is None
+    assert defaults["height"] is None
+    assert defaults["pad_color"] == "black"

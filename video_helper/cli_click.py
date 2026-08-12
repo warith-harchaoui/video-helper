@@ -421,6 +421,16 @@ def srt2vtt_cmd(input_: str, output: str | None, css: str | None) -> None:
     type=click.Choice(["auto", "vidgear", "pyav", "ffmpeg-pipe"]),
     show_default=True,
 )
+@click.option("--width", "width", type=int, default=None, help="Scale-fit target width in pixels.")
+@click.option("--height", "height", type=int, default=None, help="Scale-fit target height in pixels.")
+@click.option(
+    "--pad-color",
+    "pad_color",
+    default="black",
+    show_default=True,
+    help="Padding color when --width/--height don't match the source aspect "
+    "ratio: a common name (default 'black') or '#RRGGBB'.",
+)
 def extract_frames_cmd(
     input_: str,
     output_dir: str,
@@ -429,6 +439,9 @@ def extract_frames_cmd(
     start: float | None,
     end: float | None,
     backend: str,
+    width: int | None,
+    height: int | None,
+    pad_color: str,
 ) -> None:
     """Stream frames to disk as one PNG per sampled frame."""
     import cv2  # noqa: WPS433 — deferred so `--help` stays cheap
@@ -443,6 +456,9 @@ def extract_frames_cmd(
             start_instant=start,
             end_instant=end,
             backend=backend,
+            output_width=width,
+            output_height=height,
+            pad_color=pad_color,
         )
     ):
         path = os.path.join(output_dir, f"frame_{i:09d}.png")
