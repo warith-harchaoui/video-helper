@@ -14,7 +14,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 ## La promesse
 
-**Local-first, par conception.** video-helper s'exécute entièrement sur votre machine, avec des outils open source (ffmpeg). Vos données ne partent jamais vers un service tiers : aucune télémétrie, aucun compte, aucun verrouillage cloud. Vous gardez la main sur toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'open source local-first.
+**Local-first, par conception.** video-helper s'exécute entièrement sur votre machine, avec des outils open source (ffmpeg). Vos données ne quittent jamais votre machine : aucune télémétrie, aucun compte, aucun verrouillage cloud. Vous gardez la main sur toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'open source local-first.
 
 ## Documentation
 
@@ -25,8 +25,8 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 [📋 Exemples](https://github.com/warith-harchaoui/video-helper/blob/main/EXEMPLES.md)
 
 ## Fonctionnalités
-- **Validation vidéo** : `is_valid_video_file` — extension + aller-retour `ffmpeg.probe`.
-- **Conversion** : `video_converter` — ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
+- **Validation vidéo** : `is_valid_video_file`, extension et aller-retour `ffmpeg.probe`.
+- **Conversion** : `video_converter`, ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
 - **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
 - **Primitives de pipeline** : `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
@@ -34,7 +34,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 ## Installation
 
-**Prérequis** — **Python 3.10–3.13** et **git**, **ffmpeg**, multiplateforme :
+**Prérequis :** **Python 3.10–3.13** et **git**, **ffmpeg**, multiplateforme :
 
 - 🍎 **macOS** ([Homebrew](https://brew.sh)) : `brew install python git ffmpeg`
 - 🐧 **Ubuntu/Debian** : `sudo apt update && sudo apt install -y python3 python3-pip git ffmpeg`
@@ -166,7 +166,7 @@ uvicorn video_helper.api:app --port 8000
 ```
 
 Le `Dockerfile` à la racine embarque `.[api,pyav]` par défaut sur
-`python:3.11-slim` avec `ffmpeg` et `libass` — un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + GUI.
+`python:3.11-slim` avec `ffmpeg` et `libass` : un `docker build && docker run -p 8000:8000` donne immédiatement les surfaces HTTP + GUI.
 
 Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
@@ -181,12 +181,12 @@ le bench minimal `/gui` ci-dessus en est la première étape).
 | Fonction | Signature | Description |
 | --- | --- | --- |
 | `is_valid_video_file` | `(video_file: str) -> bool` | Vrai si le fichier existe, a une extension vidéo reconnue et que `ffmpeg.probe` y trouve un flux vidéo. |
-| `video_dimensions` | `(video_file: str) -> dict` | Retourne `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. |
+| `video_dimensions` | `(video_file: str, http_headers: dict \| None = None) -> dict` | Retourne `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. `video_file` accepte une URL ; `http_headers` transmet les en-têtes à ffprobe pour les URL qui en ont besoin. |
 | `video_duration` | `(input_video: str) -> float` | Durée en secondes (wrapper léger sur `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Ré-encode avec fps optionnel, redimensionnement (padding noir préservant le ratio quand width et height sont fournis) et suppression de l'audio. |
-| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, http_headers=None, output_width=None, output_height=None, pad_color="black", destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Dispatcher multi-backend (VidGear / PyAV / ffmpeg-pipe). `destination` : `"numpy"` (HWC BGR), `"torch"` (CHW RGB) ou `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout` produisent NHWC/NCHW ou THWC/CTHW. `frame_indices`/`frame_times` = accès clairsemé via le seek par keyframes de PyAV. `http_headers` transmet User-Agent/Referer/Cookie à PyAV / ffmpeg-pipe (nécessaire pour YouTube live résolu par yt-dlp, contenus members-only, contenus age-gated). `output_width`+`output_height` → taille exacte avec letterbox/pillarbox `pad_color` ; l'un des deux seul → mise à l'échelle avec préservation du ratio. `pad_color="transparent"` → v1.6.0. Voir [SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md) et [EXAMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md#frame-access). |
+| `extract_frames` | `(video_path, start_index=None, end_index=None, start_instant=None, end_instant=None, stabilize=False, frame_step=1, frame_interval=None, frame_indices=None, frame_times=None, backend="auto", hwaccel=None, http_headers=None, output_width=None, output_height=None, pad_color="black", destination="numpy", device="cpu", batch_size=None, layout="image") -> Iterator` | Dispatcher multi-backend (VidGear / PyAV / ffmpeg-pipe). `destination` : `"numpy"` (HWC BGR), `"torch"` (CHW RGB) ou `"pil"` (PIL.Image RGB, `size=(W, H)`). `batch_size`+`layout` produisent NHWC/NCHW ou THWC/CTHW. `frame_indices`/`frame_times` = accès clairsemé via le seek par keyframes de PyAV. `http_headers` transmet User-Agent/Referer/Cookie à PyAV / ffmpeg-pipe (nécessaire pour YouTube live résolu par yt-dlp, contenus members-only, contenus age-gated). `output_width`+`output_height` → taille exacte avec letterbox/pillarbox `pad_color` ; l'un des deux seul → mise à l'échelle avec préservation du ratio. `pad_color="transparent"` n'est pas encore implémenté : il lève une erreur, une sortie à 4 canaux (BGRA/RGBA) serait nécessaire et casserait le contrat `(H, W, 3)` sur chaque destination. Voir [SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md) et [EXAMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md#frame-access). |
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Écrit une liste de frames BGR (convention OpenCV, identique à ce que `extract_frames` produit) dans un fichier vidéo. |
-| `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video)` | Coupe temporelle de `sample_start` à `sample_end` (secondes). |
+| `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video, *, copy=False)` | Coupe temporelle de `sample_start` à `sample_end` (secondes). `copy=True` copie le flux au lieu de ré-encoder : rapide et sans perte, mais l'exactitude à la frame près exige que chaque frame de l'entrée soit déjà une image clé. |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Génère une vidéo noire silencieuse. Les dimensions impaires sont arrondies au pair inférieur. |
 | `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Boucle une image fixe en vidéo silencieuse ; letterboxing optionnel. |
 | `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatène des clips bout-à-bout via le demuxer concat de ffmpeg. |
@@ -207,4 +207,4 @@ Remerciements chaleureux à [Mohamed Chelali](https://mchelali.github.io) et [Ba
 
 ## Licence
 
-Ce projet est distribué sous licence BSD-3-Clause — voir le fichier [LICENSE](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) pour les détails.
+Ce projet est distribué sous licence BSD-3-Clause : voir le fichier [LICENSE](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) pour les détails.

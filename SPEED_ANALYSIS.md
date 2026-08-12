@@ -1,14 +1,18 @@
-# `extract_frames` — Backend Speed Analysis
+# `extract_frames`: Backend Speed Analysis
 
 Empirical benchmark of the backends exposed by `video_helper.extract_frames`,
 to drive the dispatcher's defaults. Updated whenever the bench script
 gets re-run on a meaningfully different machine or after a non-trivial
-implementation change.
+implementation change. This snapshot dates from the v1.4.0 decode-backend
+redesign (hwaccel wiring fix, `decord` removal); nothing in the "Decisions
+applied" or "Pending work" sections below has changed since, per the
+CHANGELOG, but the numbers themselves were not re-measured on later
+releases.
 
 Reproduce with:
 
 ```bash
-pip install --upgrade git+https://github.com/warith-harchaoui/os-helper.git@v1.3.0
+pip install --upgrade os-helper
 PYTHONPATH=. python scripts/benchmark_extract_frames.py
 # Or subset: --resolutions 720p,1080p --codecs h264
 ```
@@ -43,7 +47,7 @@ Test clips are generated on the fly with `ffmpeg`'s `testsrc2` source
   expected weak spot (sparse access).
 - **v1.4 hwaccel-wiring fix.** The first version of the PyAV backend
   passed `options={"hwaccel": "videotoolbox"}` to `av.open()`, which
-  the AVFormatContext silently ignored — every `hwaccel="auto"` cell
+  the AVFormatContext silently ignored, so every `hwaccel="auto"` cell
   was effectively a no-op. The corrected wiring uses
   `av.codec.hwaccel.HWAccel(device_type="videotoolbox")` and is what
   the numbers below reflect.
@@ -74,7 +78,7 @@ Test clips are generated on the fly with `ffmpeg`'s `testsrc2` source
 
 **Headline:**
 - **VidGear wins the full-sequential case up to 720p**; at **1080p, PyAV (no hwaccel) wins** in both H.264 and HEVC.
-- **hwaccel="auto" via VideoToolbox actually offloads the CPU now** — CPU/Wall ratio drops from ~4× to ~0.8× (the CPU is mostly idle), confirming the decode work moved to the media engine.
+- **hwaccel="auto" via VideoToolbox actually offloads the CPU now:** CPU/Wall ratio drops from ~4× to ~0.8× (the CPU is mostly idle), confirming the decode work moved to the media engine.
 - **But wall time is 2-3× WORSE with hwaccel** in every cell. Reason: the frames still have to come back as `bgr24` numpy arrays, and the GPU→CPU + swscale conversion eats more than the decode savings.
 
 **Take-away on hwaccel for the `numpy` destination:** the engine works,
@@ -118,7 +122,7 @@ hwaccel again drops CPU dramatically but worsens wall.
 | 1080p HEVC  | pyav     | auto | 1 219 | **564** | 0.46× |
 
 **Headline:** PyAV wins everywhere thanks to keyframe seek (decodes
-only ~12 frames vs VidGear's 300). hwaccel: same pattern — CPU drops
+only ~12 frames vs VidGear's 300). hwaccel: same pattern, CPU drops
 ~10×, wall gets worse.
 
 ### ffmpeg-pipe is non-competitive
@@ -127,10 +131,10 @@ only ~12 frames vs VidGear's 300). hwaccel: same pattern — CPU drops
 (~300 ms minimum) and pipe-byte overhead dominate. Keep only as a
 no-PyAV last-resort fallback. CPU/Wall ratio sits at 0.5-0.6× because
 the actual decode work lives in the ffmpeg subprocess and isn't
-counted by `osh.cpu_timer` — the parent Python process is idle waiting
+counted by `osh.cpu_timer`: the parent Python process is idle waiting
 on the pipe.
 
-## Decisions applied to v1.4.0 — default destination = `numpy`
+## Decisions applied to v1.4.0: default destination = `numpy`
 
 - **decord backend removed** (build pain, zero observed win).
 - **`hwaccel` default → `None`** for the numpy destination. The
@@ -157,13 +161,13 @@ on the pipe.
 - **`batch_size=` parameter** (works with both destinations). Yields
   shape `(N, H, W, 3)` per batch. With `destination="torch"` + GPU
   device, **one host→device transfer per batch** instead of one per
-  frame — typical 5-20× win over the manual `from_numpy().to(...)`
+  frame, typically a 5-20× win over the manual `from_numpy().to(...)`
   loop.
 - **Bench script extended** with `--torch-device` flag and `--resolutions 4k`
   opt-in (HEVC encoding at 3840×2160 is slow, kept out of the default
   matrix).
 
-## Pending work — true zero-copy (vNext / v1.5+)
+## Pending work: true zero-copy (vNext / v1.5+)
 
 Even with PyAV + hwaccel correctly wired, **the torch destination today
 still goes through a numpy intermediate**: PyAV decoded frame
@@ -187,14 +191,14 @@ Cython, per design choice):
   `__cuda_array_interface__` is a few lines. BGR conversion can stay
   a CUDA kernel or be deferred to the caller.
 - **Estimated effort**: 1-2 weeks for both paths + tests + a clean
-  build system. The C++ build will be the painful part — needs
+  build system. The C++ build will be the painful part: it needs
   `setuptools.Extension` with platform-specific compiler flags
   (`-framework Metal -framework CoreVideo` on macOS, `-lcudart` on
   Linux+CUDA) plus install-time detection of which paths to build.
 - **Expected payoff**: hwaccel finally wins on wall time too —
   somewhere between 2× (Apple Silicon NV12) and 5-10× (CUDA NVDEC).
 
-Parked for v1.5+ — not in the v1.4.0 scope.
+Parked for v1.5+, not in the v1.4.0 scope.
 
 ## Pending non-vNext follow-ups
 

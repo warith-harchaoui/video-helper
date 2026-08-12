@@ -1,4 +1,4 @@
-# TRIGGERS — video-helper
+# TRIGGERS: video-helper
 
 This is the user-facing, exhaustive catalogue of what `video-helper` can do and
 the natural-language phrasings, commands, functions, and file types that should
@@ -59,15 +59,15 @@ same flags) and the browser GUI at `GET /gui`.
   `vocal-helper` / a whisper skill (video-helper burns/converts subtitle FILES).
 - Downloading a video from YouTube or a URL → use `youtube-helper`.
 - NLE / DAW timeline editing, colour grading, keyframed effects, motion graphics.
-- Deep-learning inference on frames (classify / detect / track) — video-helper
+- Deep-learning inference on frames (classify / detect / track): video-helper
   extracts frames, it does not run models on them.
 - Audio-only editing with no video in play → use `audio-helper`.
 
 ## See also
 
-- [`README.md`](README.md) — features, install, quick start.
-- [`EXAMPLES.md`](EXAMPLES.md) — runnable recipes.
-- [`GUI.md`](GUI.md) — the shipped minimal `/gui` bench + the roadmap for a
+- [`README.md`](README.md): features, install, quick start.
+- [`EXAMPLES.md`](EXAMPLES.md): runnable recipes.
+- [`GUI.md`](GUI.md): the shipped minimal `/gui` bench and the roadmap for a
   richer Recipe-Canvas product.
-- [`LANDSCAPE.md`](LANDSCAPE.md) — how video-helper compares with moviepy, PyAV,
+- [`LANDSCAPE.md`](LANDSCAPE.md): how video-helper compares with moviepy, PyAV,
   torchvision.io, VidGear, OpenCV, and friends.

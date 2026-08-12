@@ -81,6 +81,12 @@ duration_seconds = vh.video_duration("clip.mp4")
 `is_valid_video_file` rejette les faux fichiers `.mp4` (sans flux vidéo)
 **et** les vidéos valides portant une extension non vidéo.
 
+`video_dimensions` accepte aussi une URL à la place d'un chemin local,
+avec un dictionnaire `http_headers` optionnel transmis à ffprobe : utile
+pour un contenu résolu par yt-dlp (YouTube en direct, réservé aux
+abonnés ou soumis à vérification d'âge) qui exige des en-têtes
+spécifiques pour être lisible.
+
 ## Convertir & redimensionner
 
 `video_converter` ré-encode une vidéo avec des changements optionnels de
@@ -251,7 +257,7 @@ for frame in vh.extract_frames(
 | Aucun | défini | Redimensionne à cette hauteur, préserve le ratio, **sans padding** |
 | Aucun | Aucun | Dimensions natives (par défaut) |
 
-`pad_color` accepte `"black"` (par défaut), `"white"`, `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"gray"` / `"grey"`, ou un hex `"#RRGGBB"`. `"transparent"` lève une `ValueError` jusqu'à la v1.6.0 (il faudrait une sortie à 4 canaux).
+`pad_color` accepte `"black"` (par défaut), `"white"`, `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"gray"` / `"grey"`, ou un hex `"#RRGGBB"`. `"transparent"` n'est pas implémenté : il lève une `ValueError`, une sortie à 4 canaux serait nécessaire.
 
 Composable avec tout le reste : destinations, hwaccel, accès épars :
 
@@ -348,9 +354,15 @@ vh.dump_frames(frames, "buffer.mp4", fps=15)
 `extract_video_chunk(input, start_s, end_s, output)` découpe une tranche
 `[start, end]`. Des bornes hors plage lèvent une `AssertionError`. Le
 conteneur de sortie est dicté par l'extension du fichier de sortie.
+Passez `copy=True` pour copier le flux au lieu de ré-encoder : rapide et
+sans perte, mais l'exactitude à la frame près exige que chaque frame de
+l'entrée soit déjà une image clé.
 
 ```python
 vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4")
+
+# Copie de flux : rapide, sans ré-encodage, exige des bornes alignées sur les images clés.
+vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4", copy=True)
 ```
 
 ## Primitives de pipeline
