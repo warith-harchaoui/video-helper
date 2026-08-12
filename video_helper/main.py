@@ -742,14 +742,14 @@ def _parse_pad_color(pad_color: str) -> tuple[int, int, int]:
     - common names: ``"black"`` / ``"white"`` / ``"red"`` / ``"green"`` / ``"blue"``
     - hex: ``"#RRGGBB"``
     - ``"transparent"`` → :class:`ValueError` (would require 4-channel
-      BGRA output, breaking the ``(H, W, 3)`` contract — planned for v1.6.0).
+      BGRA output, breaking the ``(H, W, 3)`` contract; not implemented).
     """
     name = pad_color.lower().strip()
     if name == "transparent":
         raise ValueError(
-            "pad_color='transparent' is not supported in v1.5.0 — it would "
-            "require 4-channel BGRA / RGBA output, breaking the (H, W, 3) "
-            "contract on every destination. Planned for v1.6.0."
+            "pad_color='transparent' is not supported: it would require "
+            "4-channel BGRA / RGBA output, breaking the (H, W, 3) contract "
+            "on every destination."
         )
     named = {
         "black": (0, 0, 0),
@@ -775,7 +775,7 @@ def _parse_pad_color(pad_color: str) -> tuple[int, int, int]:
             pass
     raise ValueError(
         f"Unknown pad_color {pad_color!r}; expected one of "
-        f"{sorted(named)} / '#RRGGBB' / 'transparent' (transparent → v1.6.0)"
+        f"{sorted(named)} / '#RRGGBB' ('transparent' is not supported)"
     )
 
 
@@ -1430,9 +1430,9 @@ def extract_frames(
           ``"green"``, ``"blue"``, ``"yellow"``, ``"cyan"``, ``"magenta"``,
           ``"gray"`` / ``"grey"``
         - ``"#RRGGBB"`` hex
-        - ``"transparent"`` raises ``ValueError`` in v1.5.0 — it would
-          require 4-channel BGRA output, breaking the ``(H, W, 3)``
-          contract. Planned for v1.6.0.
+        - ``"transparent"`` raises ``ValueError``: it would require
+          4-channel BGRA output, breaking the ``(H, W, 3)`` contract; not
+          implemented.
     destination : str, optional
         Where frames land. Default ``"numpy"``.
 

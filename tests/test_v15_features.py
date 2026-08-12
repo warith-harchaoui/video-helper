@@ -81,9 +81,9 @@ def test_parse_pad_color_hex() -> None:
     assert _parse_pad_color("#FFFFFF") == (255, 255, 255)
 
 
-def test_parse_pad_color_transparent_raises_with_v16_hint() -> None:
-    """'transparent' pad color raises ValueError pointing at the v1.6.0 feature."""
-    with pytest.raises(ValueError, match="v1.6.0"):
+def test_parse_pad_color_transparent_raises_not_implemented() -> None:
+    """'transparent' pad color raises ValueError explaining it isn't supported."""
+    with pytest.raises(ValueError, match="not supported"):
         _parse_pad_color("transparent")
 
 
@@ -253,9 +253,9 @@ def test_extract_frames_rejects_negative_output_dimensions() -> None:
 
 
 @pytest.mark.skipif(not _has_fixture(), reason="example_converted.mp4 missing")
-def test_extract_frames_rejects_transparent_pad_color_in_v15() -> None:
-    """extract_frames rejects a transparent pad_color in v1.5 (v1.6.0 hint)."""
-    with pytest.raises(ValueError, match="v1.6.0"):
+def test_extract_frames_rejects_transparent_pad_color() -> None:
+    """extract_frames rejects a transparent pad_color as not supported."""
+    with pytest.raises(ValueError, match="not supported"):
         list(
             extract_frames(
                 VIDEO_NO_AUDIO,
