@@ -69,6 +69,7 @@ except ImportError as exc:  # pragma: no cover
 from . import (
     black_video,
     burn_subtitles,
+    compress_video,
     concat_videos,
     extract_audio_track,
     extract_frames,
@@ -313,6 +314,32 @@ def convert(
     background.add_task(_cleanup, tmp)
     # Generic octet-stream: the client already knows the format it asked for,
     # and this avoids guessing a MIME type per container.
+    return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
+
+
+@app.post("/compress", tags=["actions"])
+def compress(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    target_size_mb: float = Form(97.0),
+    audio_bitrate: str = Form("128k"),
+    vcodec: str = Form("libx265"),
+    min_video_bitrate_kbps: int = Form(200),
+) -> FileResponse:
+    """Two-pass compress the uploaded video to a target file size (HEVC by default)."""
+    tmp = _new_tmpdir()
+    src = _spool(file, tmp)
+    dst = tmp / "compressed.mp4"
+    compress_video(
+        input_video=str(src),
+        output_video=str(dst),
+        target_size_mb=target_size_mb,
+        audio_bitrate=audio_bitrate,
+        vcodec=vcodec,
+        min_video_bitrate_kbps=min_video_bitrate_kbps,
+        overwrite=True,
+    )
+    background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
 

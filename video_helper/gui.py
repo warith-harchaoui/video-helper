@@ -17,8 +17,8 @@ What the page does
 ------------------
 - Drop / pick a local video (kept entirely client-side until "Run").
 - Choose one operation (validate / dimensions / duration / convert / chunk /
-  black / image-loop / concat / overlay / extract-audio / mux-audio /
-  burn-subs / srt2vtt / extract-frames).
+  black / compress / image-loop / concat / overlay / extract-audio /
+  mux-audio / burn-subs / srt2vtt / extract-frames).
 - Reveal only the fields (and any extra file inputs) that operation needs.
 - POST a ``multipart/form-data`` request to the SAME FastAPI endpoints the
   CLI surface uses — the GUI adds zero new server logic.
@@ -90,6 +90,7 @@ GUI_HTML: str = r"""<!doctype html>
         <option value="convert" selected>convert — re-encode / resize / drop audio</option>
         <option value="chunk">chunk — extract a [start, end] slice</option>
         <option value="black">black — synthesize a solid-black clip</option>
+        <option value="compress">compress — two-pass compress to a target file size</option>
         <option value="image-loop">image-loop — loop a still image into a clip</option>
         <option value="concat">concat — join multiple clips head-to-tail</option>
         <option value="overlay">overlay — burn a still image onto the video</option>
@@ -162,6 +163,28 @@ GUI_HTML: str = r"""<!doctype html>
       <div data-ops="extract-audio">
         <label class="block text-xs font-medium mb-1">audio format</label>
         <input id="audio_format" value="wav"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="compress">
+        <label class="block text-xs font-medium mb-1">target_size_mb</label>
+        <input id="target_size_mb" type="number" step="0.1" value="97"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="compress">
+        <label class="block text-xs font-medium mb-1">audio_bitrate</label>
+        <input id="compress_audio_bitrate" value="128k"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="compress">
+        <label class="block text-xs font-medium mb-1">vcodec</label>
+        <select id="vcodec" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="libx265" selected>libx265 (HEVC)</option>
+          <option value="libx264">libx264</option>
+        </select>
+      </div>
+      <div data-ops="compress">
+        <label class="block text-xs font-medium mb-1">min_video_bitrate_kbps</label>
+        <input id="min_video_bitrate_kbps" type="number" value="200"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <!-- Secondary file inputs, revealed per operation. -->
@@ -276,7 +299,7 @@ GUI_HTML: str = r"""<!doctype html>
     // Endpoint path per op (a few differ from the raw op name).
     const URL_FOR = {
       "validate": "/validate", "dimensions": "/dimensions", "duration": "/duration",
-      "convert": "/convert", "chunk": "/chunk", "black": "/black",
+      "convert": "/convert", "chunk": "/chunk", "black": "/black", "compress": "/compress",
       "image-loop": "/image-loop", "concat": "/concat", "overlay": "/overlay",
       "extract-audio": "/extract-audio", "mux-audio": "/mux-audio",
       "burn-subs": "/burn-subs", "srt2vtt": "/srt2vtt", "extract-frames": "/extract-frames",
@@ -333,6 +356,12 @@ GUI_HTML: str = r"""<!doctype html>
         fd.append("height", $("height").value || "720");
         appendIf(fd, "frame_rate", "frame_rate");
         fd.append("output_format", $("output_format").value);
+      } else if (op === "compress") {
+        fd.append("file", inputFile);
+        fd.append("target_size_mb", $("target_size_mb").value || "97");
+        fd.append("audio_bitrate", $("compress_audio_bitrate").value || "128k");
+        fd.append("vcodec", $("vcodec").value);
+        fd.append("min_video_bitrate_kbps", $("min_video_bitrate_kbps").value || "200");
       } else if (op === "image-loop") {
         fd.append("image", inputFile);
         fd.append("duration", $("duration").value);
@@ -406,6 +435,9 @@ GUI_HTML: str = r"""<!doctype html>
         } else if (AUDIO_OPS.has(op)) {
           dl.download = "output." + ($("audio_format").value || "wav");
           $("out-audio").src = objUrl; $("out-audio").hidden = false;
+        } else if (op === "compress") {
+          dl.download = "compressed.mp4";
+          $("out-video").src = objUrl; $("out-video").hidden = false;
         } else {
           // Single video file: play it inline and offer the download.
           dl.download = "output." + ($("output_format").value || "mp4");

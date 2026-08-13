@@ -58,6 +58,7 @@ def test_openapi_lists_expected_endpoints(client) -> None:
         "/convert",
         "/chunk",
         "/black",
+        "/compress",
         "/image-loop",
         "/concat",
         "/overlay",
@@ -89,6 +90,7 @@ def test_gui_returns_200_html(client) -> None:
     # (the JS builds endpoint URLs from these op names, so assert on them).
     assert "video bench" in body
     assert 'value="convert"' in r.text and 'value="extract-frames"' in r.text
+    assert 'value="compress"' in r.text
 
 
 def test_root_redirects_to_gui(client) -> None:
@@ -113,3 +115,19 @@ def test_extract_frames_route_exposes_pad_color_params(client) -> None:
     assert "output_height" in props
     assert "pad_color" in props
     assert props["pad_color"]["default"] == "black"
+
+
+def test_compress_route_exposes_expected_params(client) -> None:
+    """``/compress`` request-body schema matches compress_video()'s defaults."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    schema = r.json()
+    body_schema_ref = schema["paths"]["/compress"]["post"]["requestBody"]["content"][
+        "multipart/form-data"
+    ]["schema"]["$ref"]
+    body_schema_name = body_schema_ref.rsplit("/", 1)[-1]
+    props = schema["components"]["schemas"][body_schema_name]["properties"]
+    assert props["target_size_mb"]["default"] == 97.0
+    assert props["audio_bitrate"]["default"] == "128k"
+    assert props["vcodec"]["default"] == "libx265"
+    assert props["min_video_bitrate_kbps"]["default"] == 200

@@ -33,6 +33,7 @@ EXPECTED_SUBCOMMANDS = {
     "convert",
     "chunk",
     "black",
+    "compress",
     "image-loop",
     "concat",
     "overlay",
@@ -157,9 +158,7 @@ def test_argparse_extract_frames_pad_color_defaults_to_black() -> None:
     """Omitting --pad-color defaults to 'black', matching the library default."""
     from video_helper.cli_argparse import build_parser
 
-    ns = build_parser().parse_args(
-        ["extract-frames", "--input", "in.mp4", "--output-dir", "out"]
-    )
+    ns = build_parser().parse_args(["extract-frames", "--input", "in.mp4", "--output-dir", "out"])
     assert ns.width is None
     assert ns.height is None
     assert ns.pad_color == "black"
@@ -173,3 +172,59 @@ def test_click_extract_frames_pad_color_defaults_to_black() -> None:
     assert defaults["width"] is None
     assert defaults["height"] is None
     assert defaults["pad_color"] == "black"
+
+
+def test_argparse_compress_parses_all_flags() -> None:
+    """The argparse ``compress`` subparser parses every documented flag."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(
+        [
+            "compress",
+            "--input",
+            "in.mp4",
+            "--output",
+            "out.mp4",
+            "--target-size-mb",
+            "50",
+            "--audio-bitrate",
+            "96k",
+            "--vcodec",
+            "libx264",
+            "--min-video-bitrate-kbps",
+            "300",
+            "--no-overwrite",
+        ]
+    )
+    assert ns.output == "out.mp4"
+    assert ns.target_size_mb == 50.0
+    assert ns.audio_bitrate == "96k"
+    assert ns.vcodec == "libx264"
+    assert ns.min_video_bitrate_kbps == 300
+    assert ns.no_overwrite is True
+
+
+def test_argparse_compress_defaults_match_library() -> None:
+    """Omitted ``compress`` flags default to the same values as compress_video()."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(["compress", "--input", "in.mp4"])
+    assert ns.output is None
+    assert ns.target_size_mb == 97.0
+    assert ns.audio_bitrate == "128k"
+    assert ns.vcodec == "libx265"
+    assert ns.min_video_bitrate_kbps == 200
+    assert ns.no_overwrite is False
+
+
+def test_click_compress_defaults_match_library() -> None:
+    """The click ``compress`` command defaults match compress_video()'s signature."""
+    from video_helper.cli_click import compress
+
+    defaults = {p.name: p.default for p in compress.params}
+    assert defaults["output"] is None
+    assert defaults["target_size_mb"] == 97.0
+    assert defaults["audio_bitrate"] == "128k"
+    assert defaults["vcodec"] == "libx265"
+    assert defaults["min_video_bitrate_kbps"] == 200
+    assert defaults["no_overwrite"] is False

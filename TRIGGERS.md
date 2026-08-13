@@ -8,7 +8,7 @@ invoke it.
 is local-first and ffmpeg-backed. It does **not** transcribe, download, colour-
 grade, or run models on frames.
 
-## The fourteen operations → how to invoke
+## The fifteen operations → how to invoke
 
 | Intent | CLI | Library | API |
 |--------|-----|---------|-----------|
@@ -18,6 +18,7 @@ grade, or run models on frames.
 | Re-encode / resize / drop audio | `video-helper convert` | `video_converter` | `POST /convert` |
 | Extract a `[start, end]` slice | `video-helper chunk` | `extract_video_chunk` | `POST /chunk` |
 | Synthesize a solid-black clip | `video-helper black` | `black_video` | `POST /black` |
+| Two-pass compress to a target file size | `video-helper compress` | `compress_video` | `POST /compress` |
 | Loop a still image into a clip | `video-helper image-loop` | `image_loop_to_video` | `POST /image-loop` |
 | Concatenate clips head-to-tail | `video-helper concat` | `concat_videos` | `POST /concat` |
 | Overlay a still image (watermark) | `video-helper overlay` | `overlay_image` | `POST /overlay` |
@@ -36,6 +37,8 @@ same flags) and the browser GUI at `GET /gui`.
   "re-encode / transcode", "change the frame rate".
 - **Chunk**: "cut from 10s to 20s", "keep the first minute", "trim / crop".
 - **Black**: "make a black / blank clip", "generate a filler / spacer video".
+- **Compress**: "shrink this video", "get it under 100 MB", "compress for
+  upload / attachment / embedding", "reduce file size".
 - **Image-loop**: "turn this image into a video", "loop this still", "title card".
 - **Concat**: "merge / join / stitch these clips", "combine into one".
 - **Overlay**: "watermark a logo", "add a badge in the corner".

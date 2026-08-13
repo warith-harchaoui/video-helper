@@ -60,6 +60,7 @@ import os_helper as osh
 from . import (
     black_video,
     burn_subtitles,
+    compress_video,
     concat_videos,
     extract_audio_track,
     extract_frames,
@@ -224,6 +225,33 @@ def _handle_black(ns: argparse.Namespace) -> int:
         frame_rate=ns.frame_rate,
     )
     print(ns.output)
+    return 0
+
+
+def _handle_compress(ns: argparse.Namespace) -> int:
+    """
+    Compress a video to a target file size, then print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
+    output = compress_video(
+        input_video=ns.input,
+        output_video=ns.output,
+        target_size_mb=ns.target_size_mb,
+        audio_bitrate=ns.audio_bitrate,
+        vcodec=ns.vcodec,
+        min_video_bitrate_kbps=ns.min_video_bitrate_kbps,
+        overwrite=not ns.no_overwrite,
+    )
+    print(output)
     return 0
 
 
@@ -595,6 +623,60 @@ def _add_black(sub: argparse._SubParsersAction) -> None:
     p.set_defaults(func=_handle_black)
 
 
+def _add_compress(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``compress`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
+    p = sub.add_parser(
+        "compress", help="Two-pass compress a video to a target file size (HEVC by default)."
+    )
+    p.add_argument("--input", required=True, help="Input video path.")
+    p.add_argument(
+        "--output",
+        default=None,
+        help="Output video path (default: <input>-compressed.mp4).",
+    )
+    p.add_argument(
+        "--target-size-mb",
+        type=float,
+        default=97.0,
+        dest="target_size_mb",
+        help="Target output file size in megabytes (default 97).",
+    )
+    p.add_argument(
+        "--audio-bitrate",
+        default="128k",
+        dest="audio_bitrate",
+        help="Audio bitrate, ffmpeg syntax (default '128k').",
+    )
+    p.add_argument(
+        "--vcodec",
+        default="libx265",
+        choices=["libx265", "libx264"],
+        help="Video codec (default libx265/HEVC).",
+    )
+    p.add_argument(
+        "--min-video-bitrate-kbps",
+        type=int,
+        default=200,
+        dest="min_video_bitrate_kbps",
+        help="Floor on the solved video bitrate in kbps (default 200).",
+    )
+    p.add_argument(
+        "--no-overwrite",
+        action="store_true",
+        default=False,
+        dest="no_overwrite",
+        help="Skip re-encoding if the output already exists.",
+    )
+    p.set_defaults(func=_handle_compress)
+
+
 def _add_image_loop(sub: argparse._SubParsersAction) -> None:
     """
     Register the ``image-loop`` subcommand on the parser.
@@ -842,6 +924,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_convert(subparsers)
     _add_chunk(subparsers)
     _add_black(subparsers)
+    _add_compress(subparsers)
     _add_image_loop(subparsers)
     _add_concat(subparsers)
     _add_overlay(subparsers)

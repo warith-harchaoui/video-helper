@@ -29,7 +29,7 @@ Video Helper is a Python library that provides utility functions for processing 
 - **Conversion**: `video_converter`, re-encode, resample fps, resize (aspect-preserving), strip audio.
 - **Frame access**: `extract_frames` (generator with time/index range, stabilization, sampling) and `dump_frames` (list → video).
 - **Temporal crop**: `extract_video_chunk`, `video_duration`.
-- **Pipeline primitives**: `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Pipeline primitives**: `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
 
 ## Installation
@@ -187,6 +187,7 @@ above is the first step).
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Write a list of BGR frames (OpenCV convention, same as `extract_frames` yields) to a video file. |
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video, *, copy=False)` | Temporal crop from `sample_start` to `sample_end` (seconds). `copy=True` stream-copies instead of re-encoding: fast and lossless, but only frame-accurate when every frame of the input is a keyframe. |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Generate a silent solid-black video. Odd dimensions are rounded down. |
+| `compress_video` | `(input_video, output_video=None, *, target_size_mb=97.0, audio_bitrate="128k", vcodec="libx265", min_video_bitrate_kbps=200, overwrite=True) -> str` | Two-pass ffmpeg encode that solves for the video bitrate needed to hit `target_size_mb` given the source duration, then encodes at that bitrate. Defaults to HEVC (`libx265`) tagged `hvc1` (ffmpeg's default `hev1` tag is not recognized by QuickTime/Apple players) with `+faststart`. Built for "the compressed file that gets embedded in a web video player", not an archival master. |
 | `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Loop a still image into a silent video; optional letterboxing. |
 | `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatenate clips end-to-end via the ffmpeg concat demuxer. |
 | `overlay_image` | `(input_video, image, output_video, x="0", y="0", scale_width=None)` | Overlay a PNG/JPG (alpha supported); `x` / `y` accept ffmpeg expressions for time-varying motion. |

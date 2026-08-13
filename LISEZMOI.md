@@ -29,7 +29,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 - **Conversion** : `video_converter`, ré-encodage, rééchantillonnage fps, redimensionnement (avec préservation du ratio), suppression de l'audio.
 - **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
-- **Primitives de pipeline** : `black_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
 
 ## Installation
@@ -189,6 +189,7 @@ le bench minimal `/gui` ci-dessus en est la première étape).
 | `dump_frames` | `(frames_list, output_movie, fps=30)` | Écrit une liste de frames BGR (convention OpenCV, identique à ce que `extract_frames` produit) dans un fichier vidéo. |
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video, *, copy=False)` | Coupe temporelle de `sample_start` à `sample_end` (secondes). `copy=True` copie le flux au lieu de ré-encoder : rapide et sans perte, mais l'exactitude à la frame près exige que chaque frame de l'entrée soit déjà une image clé. |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Génère une vidéo noire silencieuse. Les dimensions impaires sont arrondies au pair inférieur. |
+| `compress_video` | `(input_video, output_video=None, *, target_size_mb=97.0, audio_bitrate="128k", vcodec="libx265", min_video_bitrate_kbps=200, overwrite=True) -> str` | Encodage ffmpeg en deux passes qui résout le bitrate vidéo nécessaire pour atteindre `target_size_mb` étant donné la durée de la source, puis encode à ce bitrate. Par défaut HEVC (`libx265`) tagué `hvc1` (le tag `hev1` par défaut de ffmpeg n'est pas reconnu par QuickTime/les lecteurs Apple) avec `+faststart`. Conçu pour "le fichier compressé intégré dans un lecteur vidéo web", pas pour un master d'archive. |
 | `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Boucle une image fixe en vidéo silencieuse ; letterboxing optionnel. |
 | `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatène des clips bout-à-bout via le demuxer concat de ffmpeg. |
 | `overlay_image` | `(input_video, image, output_video, x="0", y="0", scale_width=None)` | Superpose un PNG/JPG (alpha supporté) ; `x` / `y` acceptent des expressions ffmpeg pour un mouvement temporel. |

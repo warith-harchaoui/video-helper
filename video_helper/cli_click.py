@@ -49,6 +49,7 @@ except ImportError as exc:  # pragma: no cover
 from . import (
     black_video,
     burn_subtitles,
+    compress_video,
     concat_videos,
     extract_audio_track,
     extract_frames,
@@ -218,6 +219,64 @@ def black(duration_: float, width: int, height: int, output: str, frame_rate: in
         frame_rate=frame_rate,
     )
     click.echo(output)
+
+
+# ---------------------------------------------------------------------------
+# compress
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--input", "input_", required=True, type=click.Path(exists=True))
+@click.option("--output", default=None, type=click.Path())
+@click.option(
+    "--target-size-mb",
+    "target_size_mb",
+    type=float,
+    default=97.0,
+    show_default=True,
+)
+@click.option("--audio-bitrate", "audio_bitrate", default="128k", show_default=True)
+@click.option(
+    "--vcodec",
+    default="libx265",
+    type=click.Choice(["libx265", "libx264"]),
+    show_default=True,
+)
+@click.option(
+    "--min-video-bitrate-kbps",
+    "min_video_bitrate_kbps",
+    type=int,
+    default=200,
+    show_default=True,
+)
+@click.option(
+    "--no-overwrite",
+    "no_overwrite",
+    is_flag=True,
+    default=False,
+    help="Skip re-encoding if the output already exists.",
+)
+def compress(
+    input_: str,
+    output: str | None,
+    target_size_mb: float,
+    audio_bitrate: str,
+    vcodec: str,
+    min_video_bitrate_kbps: int,
+    no_overwrite: bool,
+) -> None:
+    """Two-pass compress a video to a target file size (HEVC by default)."""
+    result = compress_video(
+        input_video=input_,
+        output_video=output,
+        target_size_mb=target_size_mb,
+        audio_bitrate=audio_bitrate,
+        vcodec=vcodec,
+        min_video_bitrate_kbps=min_video_bitrate_kbps,
+        overwrite=not no_overwrite,
+    )
+    click.echo(result)
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +481,9 @@ def srt2vtt_cmd(input_: str, output: str | None, css: str | None) -> None:
     show_default=True,
 )
 @click.option("--width", "width", type=int, default=None, help="Scale-fit target width in pixels.")
-@click.option("--height", "height", type=int, default=None, help="Scale-fit target height in pixels.")
+@click.option(
+    "--height", "height", type=int, default=None, help="Scale-fit target height in pixels."
+)
 @click.option(
     "--pad-color",
     "pad_color",
