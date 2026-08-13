@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-08-13
+
+### Added
+
+- **`compress_video`**: two-pass ffmpeg encode that solves for the video
+  bitrate needed to hit a target file size (HEVC/`libx265` by default,
+  tagged `hvc1` for QuickTime/Apple compatibility, `+faststart`). Ships
+  with full CLI (`video-helper compress` / `video-helper-click compress`),
+  API (`POST /compress`), and GUI parity, matching every other operation
+  in the suite.
+- `extract_frames`'s `output_width` / `output_height` / `pad_color`
+  parameters (previously library-only) are now also exposed on the CLI
+  `extract-frames` subcommand and the `/extract-frames` API endpoint.
+
+### Fixed
+
+- PyAV decoder deadlock risk in `_extract_via_pyav`.
+- `pad_color='transparent'` error message hardcoded a stale version string.
+
+### Changed
+
+- Added a conda `environment.yaml`; the Dockerfile now installs
+  `requirements.txt` as its own cached layer.
+- `requirements-dev.txt` is now derived from `pyproject.toml`'s `[dev]`
+  extra instead of maintained by hand.
+
 ## [2.1.1] - 2026-08-09
 
 ### Fixed
