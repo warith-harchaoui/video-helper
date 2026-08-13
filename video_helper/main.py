@@ -1815,6 +1815,142 @@ def video_duration(input_video: str) -> float:
     return float(video_dimensions(input_video)["duration"])
 
 
+def compress_video(
+    input_video: str,
+    output_video: str | None = None,
+    *,
+    target_size_mb: float = 97.0,
+    audio_bitrate: str = "128k",
+    vcodec: str = "libx265",
+    min_video_bitrate_kbps: int = 200,
+    overwrite: bool = True,
+) -> str:
+    """
+    Compress a video to a target file size via two-pass encoding.
+
+    Solves for the video bitrate that makes video + audio together fit inside
+    ``target_size_mb``, given the source duration, then runs a standard ffmpeg
+    two-pass encode at that bitrate. Defaults to HEVC (``libx265``), tagged
+    ``hvc1`` (ffmpeg's default HEVC tag, ``hev1``, is not recognized by
+    QuickTime / Apple players), and moves the moov atom to the front of the
+    file (``+faststart``) so playback can start before the download finishes.
+    Built for "the compressed file that gets embedded in a web video player",
+    not an archival master.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the source video.
+    output_video : str, optional
+        Path to write the compressed video to. Defaults to
+        ``<input>-compressed.mp4`` next to the source.
+    target_size_mb : float, optional
+        Target output file size in megabytes (default 97 — comfortably under
+        the 100 MB caps common on chat apps and code-hosting attachments).
+    audio_bitrate : str, optional
+        Audio bitrate passed to the AAC encoder, ffmpeg syntax (default
+        ``"128k"``). Subtracted from the size budget before solving for the
+        video bitrate.
+    vcodec : str, optional
+        Video codec (default ``"libx265"`` — HEVC compresses noticeably
+        better than H.264 at the same target size). Pass ``"libx264"`` for
+        maximum legacy-player compatibility at a larger file for the same
+        quality; the ``hvc1`` tag is only applied when encoding HEVC.
+    min_video_bitrate_kbps : int, optional
+        Floor on the solved video bitrate (default 200) — guards against a
+        near-zero bitrate when a long source is squeezed into a small target
+        size, which would otherwise silently produce an unwatchable file
+        instead of a clear error.
+    overwrite : bool, optional
+        Overwrite ``output_video`` if it already exists (default True); when
+        False and the file already exists, that path is returned as-is with
+        no re-encode.
+
+    Returns
+    -------
+    str
+        Path to the compressed video (``output_video``).
+
+    Raises
+    ------
+    AssertionError
+        If ``input_video`` is not a valid video file, or if the solved video
+        bitrate would fall below ``min_video_bitrate_kbps``.
+    ffmpeg.Error
+        If either encoding pass fails.
+
+    Examples
+    --------
+    >>> compress_video("meeting.mp4", "meeting-compressed.mp4", target_size_mb=97)
+    'meeting-compressed.mp4'
+    """
+    osh.info(f"Compressing video file (target {target_size_mb} MB):\n\t{input_video}")
+    assert is_valid_video_file(input_video), f"Input video file not okay:\n\t{input_video}"
+
+    quiet = osh.verbosity() <= 0
+
+    fi, bi, input_ext = osh.folder_name_ext(input_video)
+    if osh.emptystring(output_video):
+        output_video = osh.join(fi, bi + "-compressed.mp4")
+    fo, bo, output_ext = osh.folder_name_ext(output_video)
+    if osh.emptystring(output_ext):
+        output_video = osh.join(fo, bo + ".mp4")
+
+    if not overwrite and osh.file_exists(output_video):
+        osh.info(f"Compressed video already exists, skipping:\n\t{output_video}")
+        return output_video
+
+    duration = video_duration(input_video)
+    assert duration > 0, f"Cannot compress a zero-duration video:\n\t{input_video}"
+
+    audio_kbps = float(audio_bitrate.lower().rstrip("k"))
+    total_kbps_budget = (target_size_mb * 1024 * 1024 * 8) / duration / 1000
+    video_kbps = round(total_kbps_budget - audio_kbps)
+    assert video_kbps >= min_video_bitrate_kbps, (
+        f"Target size {target_size_mb} MB over {osh.time2str(duration)} leaves only "
+        f"{video_kbps} kbps for video (floor is {min_video_bitrate_kbps} kbps) — raise "
+        f"target_size_mb or lower audio_bitrate."
+    )
+
+    # Real ffmpeg CLI flags only: ffmpeg-python's kwargs pass straight through to
+    # `-{key} {value}` with no name translation (see `convert_kwargs_to_cmd_line_args`
+    # in the ffmpeg-python package), so e.g. a plausible-looking `video_bitrate=`
+    # kwarg is a silent no-op — ffmpeg rejects "-video_bitrate" outright. Bitrate
+    # must be the real flag names, `b:v` / `b:a`.
+    common = {"c:v": vcodec, "b:v": f"{video_kbps}k"}
+
+    with osh.temporary_folder(prefix="video_helper-2pass-") as passdir:
+        passlog = osh.join(passdir, "pass")
+
+        pass1_kwargs = dict(common)
+        pass1_kwargs.update({"pass": 1, "passlogfile": passlog, "an": None, "f": "null"})
+        ffmpeg.input(input_video).output(os.devnull, **pass1_kwargs).run(
+            overwrite_output=True, quiet=quiet
+        )
+
+        pass2_kwargs = dict(common)
+        pass2_kwargs.update(
+            {
+                "pass": 2,
+                "passlogfile": passlog,
+                "c:a": "aac",
+                "b:a": audio_bitrate,
+                "movflags": "+faststart",
+            }
+        )
+        if vcodec == "libx265":
+            # Without this, ffmpeg tags HEVC output "hev1", which QuickTime and
+            # other Apple players refuse to play back (silently show a black frame).
+            pass2_kwargs["tag:v"] = "hvc1"
+        ffmpeg.input(input_video).output(output_video, **pass2_kwargs).run(
+            overwrite_output=True, quiet=quiet
+        )
+
+    assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
+    osh.info(f"Video file compressed successfully:\n\t{output_video}")
+    return output_video
+
+
 def black_video(
     duration: float,
     width: int,

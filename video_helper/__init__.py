@@ -51,6 +51,7 @@ __email__ = "warithmetics@deraison.ai"
 from .main import (
     black_video,
     burn_subtitles,
+    compress_video,
     concat_videos,
     dump_frames,
     extract_audio_track,
@@ -78,6 +79,7 @@ __all__ = [
     "dump_frames",
     "extract_video_chunk",
     "video_duration",
+    "compress_video",
     "black_video",
     "image_loop_to_video",
     "concat_videos",
