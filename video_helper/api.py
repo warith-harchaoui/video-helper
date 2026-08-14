@@ -34,6 +34,9 @@ Usage Example
 >>> # Extract PNG frames as a ZIP:
 >>> #   curl -F 'file=@clip.mp4' -F 'frame_step=5' \\
 >>> #        -o frames.zip http://localhost:8000/extract-frames
+>>> # Dense optical flow as an HSV-visualization mp4:
+>>> #   curl -F 'file=@clip.mp4' -F 'method=dis' \\
+>>> #        -o flow.mp4 http://localhost:8000/extract-flow
 >>> # Full OpenAPI docs at http://localhost:8000/docs
 
 Author
@@ -73,6 +76,7 @@ from . import (
     concat_videos,
     extract_audio_track,
     extract_frames,
+    extract_optical_flow,
     extract_video_chunk,
     image_loop_to_video,
     is_valid_video_file,
@@ -117,7 +121,8 @@ app = FastAPI(
     description=(
         "HTTP surface for the video-helper utilities: validate, dimensions, "
         "duration, convert, chunk, black-video, image-loop, concat, overlay, "
-        "extract-audio, mux-audio, burn-subtitles, srt2vtt, extract-frames. "
+        "extract-audio, mux-audio, burn-subtitles, srt2vtt, extract-frames, "
+        "extract-flow. "
         "A minimal browser 'bench' is served at GET /gui (GET / redirects there)."
     ),
     version=_resolve_version(),
@@ -648,3 +653,62 @@ def extract_frames_route(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="frames.zip"'},
     )
+
+
+@app.post("/extract-flow", tags=["actions"])
+def extract_flow_route(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    output_format: str = Form(
+        "video", description="'video' (HSV-visualization mp4) or 'npy' (raw flow array)."
+    ),
+    method: str = Form(
+        "dis", description="'dis', 'farneback', or 'raft' (needs the [flow] extra)."
+    ),
+    dis_preset: str = Form("fast", description="'ultrafast', 'fast', or 'medium'."),
+    raft_variant: str = Form("small", description="'small' or 'large'."),
+    device: str = Form("cpu", description="Torch device for method='raft': cpu/mps/cuda/auto."),
+    clip_flow: float | None = Form(None),
+    start: float | None = Form(None),
+    end: float | None = Form(None),
+    frame_step: int = Form(1),
+    frame_interval: float | None = Form(None),
+    fps: float | None = Form(None),
+    output_width: int | None = Form(
+        None, description="Resize the flow field to this width (needs output_height too)."
+    ),
+    output_height: int | None = Form(None, description="Resize the flow field to this height."),
+    wavelet: str = Form("db2", description="PyWavelets wavelet name for the resize above."),
+) -> FileResponse:
+    """Dense optical flow for the uploaded video: HSV-visualization mp4 (default) or raw .npy."""
+    if output_format not in ("video", "npy"):
+        raise HTTPException(
+            status_code=400, detail=f"output_format must be 'video' or 'npy', got {output_format!r}"
+        )
+    tmp = _new_tmpdir()
+    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+    dst = tmp / ("flow.npy" if output_format == "npy" else "flow.mp4")
+    try:
+        extract_optical_flow(
+            input_video=str(src),
+            output_path=str(dst),
+            method=method,
+            dis_preset=dis_preset,
+            raft_variant=raft_variant,
+            device=device,
+            clip_flow=clip_flow,
+            start_instant=start,
+            end_instant=end,
+            frame_step=frame_step,
+            frame_interval=frame_interval,
+            fps=fps,
+            output_width=output_width,
+            output_height=output_height,
+            wavelet=wavelet,
+            overwrite=True,
+        )
+    except Exception as exc:
+        _cleanup(tmp)
+        raise HTTPException(status_code=500, detail=f"extract-flow failed: {exc}") from exc
+    background.add_task(_cleanup, tmp)
+    return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")

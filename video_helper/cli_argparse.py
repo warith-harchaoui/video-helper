@@ -23,6 +23,7 @@ Subcommands
 - ``burn-subs``     — burn ``.srt`` / ``.vtt`` / ``.ass`` into the frames
 - ``srt2vtt``       — SRT → WebVTT with color-preserving CSS
 - ``extract-frames``— stream frames to disk (one PNG per sampled frame)
+- ``extract-flow``  — dense optical flow: HSV-visualization video or raw ``.npy``
 
 Usage Example
 -------------
@@ -40,6 +41,7 @@ Usage Example
 >>> #   video-helper burn-subs     --input clip.mp4 --subs subs.srt --output captioned.mp4
 >>> #   video-helper srt2vtt       --input subs.srt
 >>> #   video-helper extract-frames --input clip.mp4 --output-dir frames/ --frame-step 5
+>>> #   video-helper extract-flow  --input clip.mp4 --output clip-flow.mp4 --method dis
 
 Author
 ------
@@ -64,6 +66,7 @@ from . import (
     concat_videos,
     extract_audio_track,
     extract_frames,
+    extract_optical_flow,
     extract_video_chunk,
     image_loop_to_video,
     is_valid_video_file,
@@ -485,6 +488,42 @@ def _handle_extract_frames(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_extract_flow(ns: argparse.Namespace) -> int:
+    """
+    Compute dense optical flow for a video and print the output path.
+
+    Parameters
+    ----------
+    ns : argparse.Namespace
+        Parsed arguments for this subcommand.
+
+    Returns
+    -------
+    int
+        Process exit code (``0`` on success).
+    """
+    output = extract_optical_flow(
+        input_video=ns.input,
+        output_path=ns.output,
+        method=ns.method,
+        dis_preset=ns.dis_preset,
+        raft_variant=ns.raft_variant,
+        device=ns.device,
+        clip_flow=ns.clip_flow,
+        start_instant=ns.start,
+        end_instant=ns.end,
+        frame_step=ns.frame_step,
+        frame_interval=ns.frame_interval,
+        fps=ns.fps,
+        output_width=ns.output_width,
+        output_height=ns.output_height,
+        wavelet=ns.wavelet,
+        overwrite=not ns.no_overwrite,
+    )
+    print(output)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -884,6 +923,107 @@ def _add_extract_frames(sub: argparse._SubParsersAction) -> None:
     p.set_defaults(func=_handle_extract_frames)
 
 
+def _add_extract_flow(sub: argparse._SubParsersAction) -> None:
+    """
+    Register the ``extract-flow`` subcommand on the parser.
+
+    Parameters
+    ----------
+    sub : argparse._SubParsersAction
+        The subparser collection to attach this command to.
+    """
+    p = sub.add_parser(
+        "extract-flow",
+        help="Dense optical flow: HSV-visualization video (default) or raw '.npy'.",
+    )
+    p.add_argument("--input", required=True, help="Input video path.")
+    p.add_argument(
+        "--output",
+        default=None,
+        help="Output path (default: <input>-flow.mp4). '.npy' writes the raw "
+        "(T, H, W, 2) float32 flow array instead of a visualization video.",
+    )
+    p.add_argument(
+        "--method",
+        default="dis",
+        choices=["dis", "farneback", "raft"],
+        help="Optical-flow backend (default dis). 'raft' needs the [flow] extra.",
+    )
+    p.add_argument(
+        "--dis-preset",
+        default="fast",
+        dest="dis_preset",
+        choices=["ultrafast", "fast", "medium"],
+        help="Speed/quality preset for --method dis (default fast).",
+    )
+    p.add_argument(
+        "--raft-variant",
+        default="small",
+        dest="raft_variant",
+        choices=["small", "large"],
+        help="RAFT network variant for --method raft (default small).",
+    )
+    p.add_argument(
+        "--device",
+        default="cpu",
+        help="Torch device for --method raft: cpu/mps/cuda/auto (default cpu).",
+    )
+    p.add_argument(
+        "--clip-flow",
+        type=float,
+        default=None,
+        dest="clip_flow",
+        help="Symmetric pixel clip for outlier suppression (default: no clipping).",
+    )
+    p.add_argument("--start", type=float, default=None, help="Start instant in seconds.")
+    p.add_argument("--end", type=float, default=None, help="End instant in seconds.")
+    p.add_argument(
+        "--frame-step", type=int, default=1, dest="frame_step", help="Sampling stride (default 1)."
+    )
+    p.add_argument(
+        "--frame-interval",
+        type=float,
+        default=None,
+        dest="frame_interval",
+        help="Sampling period in seconds (mutually exclusive with --frame-step).",
+    )
+    p.add_argument(
+        "--fps",
+        type=float,
+        default=None,
+        help="Frame rate for the visualization video output (default: source frame "
+        "rate / --frame-step). Ignored for '.npy' output.",
+    )
+    p.add_argument(
+        "--output-width",
+        type=int,
+        default=None,
+        dest="output_width",
+        help="Resize the flow field to this width (needs --output-height too). "
+        "Wavelet-based, discontinuity-aware — needs the [flow] extra.",
+    )
+    p.add_argument(
+        "--output-height",
+        type=int,
+        default=None,
+        dest="output_height",
+        help="Resize the flow field to this height (needs --output-width too).",
+    )
+    p.add_argument(
+        "--wavelet",
+        default="db2",
+        help="PyWavelets wavelet name for --output-width/--output-height resizing (default db2).",
+    )
+    p.add_argument(
+        "--no-overwrite",
+        action="store_true",
+        default=False,
+        dest="no_overwrite",
+        help="Skip recomputing if the output already exists.",
+    )
+    p.set_defaults(func=_handle_extract_flow)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """
     Assemble the top-level ``video-helper`` argument parser.
@@ -898,7 +1038,8 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Video Helper — utility CLI for validate / dimensions / duration / "
             "convert / chunk / black / image-loop / concat / overlay / "
-            "extract-audio / mux-audio / burn-subs / srt2vtt / extract-frames."
+            "extract-audio / mux-audio / burn-subs / srt2vtt / extract-frames / "
+            "extract-flow."
         ),
     )
     # Every non-trivial CLI benefits from `--version` — cheap to add and
@@ -933,6 +1074,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_burn_subs(subparsers)
     _add_srt2vtt(subparsers)
     _add_extract_frames(subparsers)
+    _add_extract_flow(subparsers)
 
     return parser
 

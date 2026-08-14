@@ -28,6 +28,7 @@ from __future__ import annotations
 from .align import mouth_openness, mouth_roi
 from .asd import ASDEngine, LightASD, LipMotionASD, get_engine
 from .detect import Face, FaceDetector
+from .digest import DigestSegment, build_asd_digest, load_manifest, source_to_digest_window
 from .models import REGISTRY, ensure_model, model_dir
 from .recognize import FaceRecognizer
 from .sampling import SpeakerFaceAssignment, active_speaker_map
@@ -47,6 +48,10 @@ __all__ = [
     "get_engine",
     "active_speaker_map",
     "SpeakerFaceAssignment",
+    "build_asd_digest",
+    "DigestSegment",
+    "load_manifest",
+    "source_to_digest_window",
     "ensure_model",
     "model_dir",
     "REGISTRY",

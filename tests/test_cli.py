@@ -42,6 +42,7 @@ EXPECTED_SUBCOMMANDS = {
     "burn-subs",
     "srt2vtt",
     "extract-frames",
+    "extract-flow",
 }
 
 
@@ -227,4 +228,114 @@ def test_click_compress_defaults_match_library() -> None:
     assert defaults["audio_bitrate"] == "128k"
     assert defaults["vcodec"] == "libx265"
     assert defaults["min_video_bitrate_kbps"] == 200
+    assert defaults["no_overwrite"] is False
+
+
+def test_argparse_extract_flow_parses_all_flags() -> None:
+    """The argparse ``extract-flow`` subparser parses every documented flag."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(
+        [
+            "extract-flow",
+            "--input",
+            "in.mp4",
+            "--output",
+            "flow.npy",
+            "--method",
+            "raft",
+            "--dis-preset",
+            "medium",
+            "--raft-variant",
+            "large",
+            "--device",
+            "mps",
+            "--clip-flow",
+            "20",
+            "--start",
+            "1.5",
+            "--end",
+            "3.5",
+            "--frame-step",
+            "2",
+            "--frame-interval",
+            "0.5",
+            "--fps",
+            "24",
+            "--no-overwrite",
+        ]
+    )
+    assert ns.output == "flow.npy"
+    assert ns.method == "raft"
+    assert ns.dis_preset == "medium"
+    assert ns.raft_variant == "large"
+    assert ns.device == "mps"
+    assert ns.clip_flow == 20.0
+    assert ns.start == 1.5
+    assert ns.end == 3.5
+    assert ns.frame_step == 2
+    assert ns.frame_interval == 0.5
+    assert ns.fps == 24.0
+    assert ns.no_overwrite is True
+
+
+def test_argparse_extract_flow_defaults_match_library() -> None:
+    """Omitted ``extract-flow`` flags default to the same values as extract_optical_flow()."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(["extract-flow", "--input", "in.mp4"])
+    assert ns.output is None
+    assert ns.method == "dis"
+    assert ns.dis_preset == "fast"
+    assert ns.raft_variant == "small"
+    assert ns.device == "cpu"
+    assert ns.clip_flow is None
+    assert ns.frame_step == 1
+    assert ns.frame_interval is None
+    assert ns.fps is None
+    assert ns.output_width is None
+    assert ns.output_height is None
+    assert ns.wavelet == "db2"
+    assert ns.no_overwrite is False
+
+
+def test_argparse_extract_flow_parses_resize_flags() -> None:
+    """The argparse ``extract-flow`` subparser parses --output-width/--output-height/--wavelet."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(
+        [
+            "extract-flow",
+            "--input",
+            "in.mp4",
+            "--output-width",
+            "320",
+            "--output-height",
+            "240",
+            "--wavelet",
+            "haar",
+        ]
+    )
+    assert ns.output_width == 320
+    assert ns.output_height == 240
+    assert ns.wavelet == "haar"
+
+
+def test_click_extract_flow_defaults_match_library() -> None:
+    """The click ``extract-flow`` command defaults match extract_optical_flow()'s signature."""
+    from video_helper.cli_click import extract_flow_cmd
+
+    defaults = {p.name: p.default for p in extract_flow_cmd.params}
+    assert defaults["output"] is None
+    assert defaults["method"] == "dis"
+    assert defaults["dis_preset"] == "fast"
+    assert defaults["raft_variant"] == "small"
+    assert defaults["device"] == "cpu"
+    assert defaults["clip_flow"] is None
+    assert defaults["frame_step"] == 1
+    assert defaults["frame_interval"] is None
+    assert defaults["fps"] is None
+    assert defaults["output_width"] is None
+    assert defaults["output_height"] is None
+    assert defaults["wavelet"] == "db2"
     assert defaults["no_overwrite"] is False

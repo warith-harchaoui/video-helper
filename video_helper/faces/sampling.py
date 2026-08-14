@@ -36,6 +36,7 @@ import os_helper as osh
 
 from .asd import ASDEngine, get_engine
 from .detect import Face, FaceDetector
+from .digest import DigestSegment, build_asd_digest, source_to_digest_window
 from .recognize import FaceRecognizer
 from .track import track_faces
 
@@ -316,191 +317,236 @@ def active_speaker_map(
         osh.info("faces.sampling: no speaker/face co-occurrence windows — nothing to do")
         return []
 
-    # Vote mass W[spk][face_id], covered speaking time, sampled speech time.
-    W: dict[int, dict[int, float]] = {s: {} for s in speakers}
-    covered: dict[int, dict[int, float]] = {s: {} for s in speakers}
-    sampled: dict[int, float] = dict.fromkeys(speakers, 0.0)
-    best_crops: dict[int, list[tuple[float, np.ndarray, Face]]] = {}
-
-    spent = 0
-    cursor: dict[int, int] = dict.fromkeys(speakers, 0)
-    certain: dict[int, bool] = dict.fromkeys(speakers, False)
-
-    def _process_window(spk: int, w0: float, w1: float) -> None:
-        nonlocal spent
-        try:
-            # Cap the working resolution once, here: detection, tracking, ASD
-            # mouth-crops and recognition all run on these frames, so a single
-            # aspect-preserving downscale bounds the whole window's compute and
-            # memory. Coordinates stay self-consistent (every stage sees the same
-            # reduced frames), and the emitted crops are these same frames.
-            frames = [
-                _cap_frame(fr)
-                for fr in extract_frames(
+    with osh.temporary_folder(prefix="asd-digest") as tmp_dir:
+        # Build a compact digest once, anchored on raw diarization speaker-change
+        # instants (turn boundaries) and shot-change instants, so the many small
+        # per-window ASD reads below hit one small, uniformly-encoded file instead
+        # of repeatedly seeking into the long, fragile original — the same
+        # repeated-seek pattern that has triggered real decoder instability on long
+        # recordings (see video_helper.faces.digest's module docstring). The digest
+        # is an optimisation, never a hard requirement: any window it does not
+        # cover, or any failure building it at all, falls back to reading the
+        # original directly.
+        diar_anchors = {float(t["t0"]) for t in speaker_turns} | {
+            float(t["t1"]) for t in speaker_turns
+        }
+        shot_anchors = {a for a, b in shots if 0.0 < a < duration} | {
+            b for a, b in shots if 0.0 < b < duration
+        }
+        anchor_times = sorted(diar_anchors | shot_anchors)
+        digest_segments: list[DigestSegment] | None = None
+        digest_path = osh.join(tmp_dir, "asd_digest.mp4")
+        if anchor_times:
+            try:
+                digest_segments = build_asd_digest(
                     video_path,
-                    start_instant=w0,
-                    end_instant=w1,
-                    frame_interval=1.0 / asd_fps,
-                    destination="numpy",
+                    anchor_times,
+                    digest_path,
+                    window=max(6.0, clip_len),
+                    merge_gap=12.0,
                 )
-            ]
-        except Exception as exc:  # noqa: BLE001
-            osh.warning(f"faces.sampling: decode window [{w0:.1f},{w1:.1f}] failed ({exc})")
-            return
-        if not frames:
-            return
-        frame_dets = [(i, detector.detect(fr)) for i, fr in enumerate(frames)]
-        tracks = track_faces(frame_dets)
-        if not tracks:
-            return
-        a = (
-            audio_16k[int(w0 * _SR) : int(w1 * _SR)]
-            if audio_16k is not None and audio_16k.size
-            else np.array([], dtype=np.float32)
-        )
-        scores = engine.score_tracks(frames, tracks, a, asd_fps)
-        dur = w1 - w0
-        sampled[spk] += dur
-        spent += 1
-        # Two tracks in one window can map to the SAME global face (a split track, or
-        # the same person in a picture-in-picture). Aggregate per global face id FIRST —
-        # taking that face's best speaking score this window — so one window contributes
-        # at most `dur` to a face's coverage (else coverage could exceed 1.0).
-        per_fid_score: dict[int, float] = {}
-        for tr in tracks:
-            tr_frames = [frames[j] for j in tr.frame_idx]
-            emb = recognizer.embed_track(tr_frames, tr.faces)
-            fid = gallery.assign(emb)
-            if fid is None:
-                continue
-            s = float(scores.get(tr.track_id, 0.0))
-            per_fid_score[fid] = max(per_fid_score.get(fid, 0.0), s)
-            # Keep best crops of this face for the final embedding.
-            bucket = best_crops.setdefault(fid, [])
-            for j, face in zip(tr.frame_idx, tr.faces, strict=True):
-                bucket.append((face.score, frames[j], face))
-            bucket.sort(key=lambda x: x[0], reverse=True)
-            del bucket[15:]
-        for fid, s in per_fid_score.items():
-            W[spk][fid] = W[spk].get(fid, 0.0) + dur * s
-            if s >= asd_tau:
-                covered[spk][fid] = covered[spk].get(fid, 0.0) + dur
+            except Exception as exc:  # noqa: BLE001 — never let the optimisation break ASD
+                osh.warning(
+                    f"faces.sampling: digest build failed ({exc}) — reading the original directly"
+                )
+                digest_segments = None
 
-    def _assess() -> tuple[dict[int, bool], dict[int, float]]:
-        """Per-speaker (is_certain, vote_margin) from the current votes, via a greedy assignment."""
-        assignment = _greedy_assign(W, speakers)
-        is_certain: dict[int, bool] = {}
-        margins: dict[int, float] = {}
-        for spk in speakers:
-            fid = assignment.get(spk)
-            if fid is None:
-                is_certain[spk], margins[spk] = False, 0.0
-                continue
-            votes = W[spk]
-            top = votes.get(fid, 0.0)
-            second = max((v for k, v in votes.items() if k != fid), default=0.0)
-            margin = (top - second) / (top + 1e-9) if top > 0 else 0.0
-            cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
-            is_certain[spk] = margin >= margin_tau and cov >= coverage_floor and top > 0
-            margins[spk] = margin
-        return is_certain, margins
+        # Vote mass W[spk][face_id], covered speaking time, sampled speech time.
+        W: dict[int, dict[int, float]] = {s: {} for s in speakers}
+        covered: dict[int, dict[int, float]] = {s: {} for s in speakers}
+        sampled: dict[int, float] = dict.fromkeys(speakers, 0.0)
+        best_crops: dict[int, list[tuple[float, np.ndarray, Face]]] = {}
 
-    # --- iterative rounds -------------------------------------------------
-    round_no = 0
-    while spent < clip_budget:
-        round_no += 1
-        picked = 0
-        for spk in speakers:
-            if certain[spk]:
-                continue
-            wins = candidates[spk]
-            take = 0
-            while cursor[spk] < len(wins) and take < max(1, per_round // max(1, len(speakers))) + 1:
-                if spent >= clip_budget:
-                    break
-                w0, w1, _shot = wins[cursor[spk]]
-                cursor[spk] += 1
-                _process_window(spk, w0, w1)
-                take += 1
-                picked += 1
-        if picked == 0:
-            break  # no windows left to try
+        spent = 0
+        cursor: dict[int, int] = dict.fromkeys(speakers, 0)
+        certain: dict[int, bool] = dict.fromkeys(speakers, False)
 
-        # Re-assess certainty with a greedy one-to-one assignment on current votes.
-        certain, _ = _assess()
-        if all(certain[s] for s in speakers):
-            break
+        def _process_window(spk: int, w0: float, w1: float) -> None:
+            nonlocal spent
+            # Prefer the compact digest (one small file, no seek into the fragile
+            # original) whenever this window was anchor-driven into it; otherwise
+            # fall back to reading the original video directly.
+            read_path, r0, r1 = video_path, w0, w1
+            if digest_segments is not None:
+                mapped = source_to_digest_window(digest_segments, w0, w1)
+                if mapped is not None:
+                    read_path, r0, r1 = digest_path, mapped[0], mapped[1]
+            try:
+                # Cap the working resolution once, here: detection, tracking, ASD
+                # mouth-crops and recognition all run on these frames, so a single
+                # aspect-preserving downscale bounds the whole window's compute and
+                # memory. Coordinates stay self-consistent (every stage sees the same
+                # reduced frames), and the emitted crops are these same frames.
+                frames = [
+                    _cap_frame(fr)
+                    for fr in extract_frames(
+                        read_path,
+                        start_instant=r0,
+                        end_instant=r1,
+                        frame_interval=1.0 / asd_fps,
+                        destination="numpy",
+                    )
+                ]
+            except Exception as exc:  # noqa: BLE001
+                osh.warning(f"faces.sampling: decode window [{w0:.1f},{w1:.1f}] failed ({exc})")
+                return
+            if not frames:
+                return
+            frame_dets = [(i, detector.detect(fr)) for i, fr in enumerate(frames)]
+            tracks = track_faces(frame_dets)
+            if not tracks:
+                return
+            a = (
+                audio_16k[int(w0 * _SR) : int(w1 * _SR)]
+                if audio_16k is not None and audio_16k.size
+                else np.array([], dtype=np.float32)
+            )
+            scores = engine.score_tracks(frames, tracks, a, asd_fps)
+            dur = w1 - w0
+            sampled[spk] += dur
+            spent += 1
+            # Two tracks in one window can map to the SAME global face (a split track, or
+            # the same person in a picture-in-picture). Aggregate per global face id FIRST —
+            # taking that face's best speaking score this window — so one window contributes
+            # at most `dur` to a face's coverage (else coverage could exceed 1.0).
+            per_fid_score: dict[int, float] = {}
+            for tr in tracks:
+                tr_frames = [frames[j] for j in tr.frame_idx]
+                emb = recognizer.embed_track(tr_frames, tr.faces)
+                fid = gallery.assign(emb)
+                if fid is None:
+                    continue
+                s = float(scores.get(tr.track_id, 0.0))
+                per_fid_score[fid] = max(per_fid_score.get(fid, 0.0), s)
+                # Keep best crops of this face for the final embedding.
+                bucket = best_crops.setdefault(fid, [])
+                for j, face in zip(tr.frame_idx, tr.faces, strict=True):
+                    bucket.append((face.score, frames[j], face))
+                bucket.sort(key=lambda x: x[0], reverse=True)
+                del bucket[15:]
+            for fid, s in per_fid_score.items():
+                W[spk][fid] = W[spk].get(fid, 0.0) + dur * s
+                if s >= asd_tau:
+                    covered[spk][fid] = covered[spk].get(fid, 0.0) + dur
 
-    # --- last-chance rescue: doubt still remains after the shared budget --
-    # A cluster may be uncertain only because the common budget ran out before it converged.
-    # Resume ASD on just the still-uncertain clusters, drawing from their remaining candidate
-    # windows, until each is certain, out of windows, or clearly not improving. The no-progress
-    # guard drops a cluster whose margin has not improved for two rescue rounds — a genuinely
-    # off-screen speaker never converges, however many windows we add, so we stop burning on it.
-    # Bounded by the finite window pool; ``rescue_budget`` caps the extra work when set.
-    _, best_margin = _assess()
-    stalls: dict[int, int] = dict.fromkeys(speakers, 0)
-    gave_up: set[int] = set()
-    rescue_start = spent
-    while not all(certain[s] or s in gave_up for s in speakers):
-        if rescue_budget is not None and spent - rescue_start >= rescue_budget:
-            break
-        picked = 0
-        for spk in speakers:
-            if certain[spk] or spk in gave_up or cursor[spk] >= len(candidates[spk]):
-                continue
+        def _assess() -> tuple[dict[int, bool], dict[int, float]]:
+            """Per-speaker (is_certain, vote_margin) from the current votes, via a greedy assignment."""
+            assignment = _greedy_assign(W, speakers)
+            is_certain: dict[int, bool] = {}
+            margins: dict[int, float] = {}
+            for spk in speakers:
+                fid = assignment.get(spk)
+                if fid is None:
+                    is_certain[spk], margins[spk] = False, 0.0
+                    continue
+                votes = W[spk]
+                top = votes.get(fid, 0.0)
+                second = max((v for k, v in votes.items() if k != fid), default=0.0)
+                margin = (top - second) / (top + 1e-9) if top > 0 else 0.0
+                cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
+                is_certain[spk] = margin >= margin_tau and cov >= coverage_floor and top > 0
+                margins[spk] = margin
+            return is_certain, margins
+
+        # --- iterative rounds -------------------------------------------------
+        round_no = 0
+        while spent < clip_budget:
+            round_no += 1
+            picked = 0
+            for spk in speakers:
+                if certain[spk]:
+                    continue
+                wins = candidates[spk]
+                take = 0
+                while (
+                    cursor[spk] < len(wins)
+                    and take < max(1, per_round // max(1, len(speakers))) + 1
+                ):
+                    if spent >= clip_budget:
+                        break
+                    w0, w1, _shot = wins[cursor[spk]]
+                    cursor[spk] += 1
+                    _process_window(spk, w0, w1)
+                    take += 1
+                    picked += 1
+            if picked == 0:
+                break  # no windows left to try
+
+            # Re-assess certainty with a greedy one-to-one assignment on current votes.
+            certain, _ = _assess()
+            if all(certain[s] for s in speakers):
+                break
+
+        # --- last-chance rescue: doubt still remains after the shared budget --
+        # A cluster may be uncertain only because the common budget ran out before it converged.
+        # Resume ASD on just the still-uncertain clusters, drawing from their remaining candidate
+        # windows, until each is certain, out of windows, or clearly not improving. The no-progress
+        # guard drops a cluster whose margin has not improved for two rescue rounds — a genuinely
+        # off-screen speaker never converges, however many windows we add, so we stop burning on it.
+        # Bounded by the finite window pool; ``rescue_budget`` caps the extra work when set.
+        _, best_margin = _assess()
+        stalls: dict[int, int] = dict.fromkeys(speakers, 0)
+        gave_up: set[int] = set()
+        rescue_start = spent
+        while not all(certain[s] or s in gave_up for s in speakers):
             if rescue_budget is not None and spent - rescue_start >= rescue_budget:
                 break
-            w0, w1, _shot = candidates[spk][cursor[spk]]
-            cursor[spk] += 1
-            _process_window(spk, w0, w1)
-            picked += 1
-        if picked == 0:
-            break  # every still-uncertain cluster is out of windows
-        certain, margins = _assess()
-        for spk in speakers:
-            if certain[spk] or spk in gave_up:
-                continue
-            if margins[spk] > best_margin[spk] + 1e-3:
-                best_margin[spk] = margins[spk]
-                stalls[spk] = 0
-            else:
-                stalls[spk] += 1
-                if stalls[spk] >= 2:  # no progress on two consecutive rescue rounds → give up
-                    gave_up.add(spk)
-    if spent > rescue_start:
-        osh.info(
-            f"faces.sampling: last-chance rescue used {spent - rescue_start} extra ASD windows; "
-            f"{sum(1 for s in speakers if not certain[s])} cluster(s) still uncertain (voice anchors)"
-        )
-
-    # --- finalise ---------------------------------------------------------
-    assignment = _greedy_assign(W, speakers)
-    results: list[SpeakerFaceAssignment] = []
-    for spk in speakers:
-        fid = assignment.get(spk)
-        if fid is None or W[spk].get(fid, 0.0) <= 0:
-            osh.info(f"faces.sampling: speaker {spk} left face-less (voice will anchor)")
-            continue
-        votes = W[spk]
-        top = votes[fid]
-        second = max((v for k, v in votes.items() if k != fid), default=0.0)
-        margin = (top - second) / (top + 1e-9)
-        cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
-        if cov < coverage_floor:
-            osh.info(f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted")
-            continue
-        crops = [(fr, face) for _s, fr, face in best_crops.get(fid, [])]
-        results.append(
-            SpeakerFaceAssignment(
-                speaker=spk, face_id=fid, coverage=float(cov), margin=float(margin), crops=crops
+            picked = 0
+            for spk in speakers:
+                if certain[spk] or spk in gave_up or cursor[spk] >= len(candidates[spk]):
+                    continue
+                if rescue_budget is not None and spent - rescue_start >= rescue_budget:
+                    break
+                w0, w1, _shot = candidates[spk][cursor[spk]]
+                cursor[spk] += 1
+                _process_window(spk, w0, w1)
+                picked += 1
+            if picked == 0:
+                break  # every still-uncertain cluster is out of windows
+            certain, margins = _assess()
+            for spk in speakers:
+                if certain[spk] or spk in gave_up:
+                    continue
+                if margins[spk] > best_margin[spk] + 1e-3:
+                    best_margin[spk] = margins[spk]
+                    stalls[spk] = 0
+                else:
+                    stalls[spk] += 1
+                    if stalls[spk] >= 2:  # no progress on two consecutive rescue rounds → give up
+                        gave_up.add(spk)
+        if spent > rescue_start:
+            osh.info(
+                f"faces.sampling: last-chance rescue used {spent - rescue_start} extra ASD windows; "
+                f"{sum(1 for s in speakers if not certain[s])} cluster(s) still uncertain (voice anchors)"
             )
+
+        # --- finalise ---------------------------------------------------------
+        assignment = _greedy_assign(W, speakers)
+        results: list[SpeakerFaceAssignment] = []
+        for spk in speakers:
+            fid = assignment.get(spk)
+            if fid is None or W[spk].get(fid, 0.0) <= 0:
+                osh.info(f"faces.sampling: speaker {spk} left face-less (voice will anchor)")
+                continue
+            votes = W[spk]
+            top = votes[fid]
+            second = max((v for k, v in votes.items() if k != fid), default=0.0)
+            margin = (top - second) / (top + 1e-9)
+            cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
+            if cov < coverage_floor:
+                osh.info(f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted")
+                continue
+            crops = [(fr, face) for _s, fr, face in best_crops.get(fid, [])]
+            results.append(
+                SpeakerFaceAssignment(
+                    speaker=spk, face_id=fid, coverage=float(cov), margin=float(margin), crops=crops
+                )
+            )
+        osh.info(
+            f"faces.sampling: {len(results)}/{len(speakers)} clusters face-anchored "
+            f"in {spent} ASD windows ({round_no} rounds)"
         )
-    osh.info(
-        f"faces.sampling: {len(results)}/{len(speakers)} clusters face-anchored "
-        f"in {spent} ASD windows ({round_no} rounds)"
-    )
-    return results
+        return results
 
 
 def _greedy_assign(W: dict[int, dict[int, float]], speakers: list[int]) -> dict[int, int]:

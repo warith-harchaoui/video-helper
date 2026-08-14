@@ -94,12 +94,15 @@ REGISTRY: dict[str, ModelSpec] = {
         upstreams=[f"{_ZOO}/face_recognition_sface/face_recognition_sface_2021dec.onnx"],
         license="Apache-2.0",
     ),
-    # Active-speaker detection (Light-ASD), exported to ONNX. No permissive public
-    # mirror we control yet — served only from the user's own mirror once seeded.
-    # Until then ``ensure_model`` returns None and the ASD stack uses the proxy.
+    # Active-speaker detection (Light-ASD), run as a real PyTorch net (see
+    # faces/asd.py — no ONNX export, the MFCC front-end doesn't survive one faithfully).
+    # Seeded on the project's own mirror; falls back to the zero-weight lip-motion
+    # proxy if this and AI_HELPERS_MODEL_BASE_URL both miss.
     "light-asd": ModelSpec(
         name="light-asd",
         filename="light_asd.pth",
+        sha256="efc375833887eefa9d209dc92810e18519b04c3c73ea35a549f2a7f40b7d94d5",
+        upstreams=["https://deraison.ai/4ai/light_asd.pth"],
         license="research",
     ),
 }

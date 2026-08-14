@@ -18,7 +18,7 @@ What the page does
 - Drop / pick a local video (kept entirely client-side until "Run").
 - Choose one operation (validate / dimensions / duration / convert / chunk /
   black / compress / image-loop / concat / overlay / extract-audio /
-  mux-audio / burn-subs / srt2vtt / extract-frames).
+  mux-audio / burn-subs / srt2vtt / extract-frames / extract-flow).
 - Reveal only the fields (and any extra file inputs) that operation needs.
 - POST a ``multipart/form-data`` request to the SAME FastAPI endpoints the
   CLI surface uses — the GUI adds zero new server logic.
@@ -99,6 +99,7 @@ GUI_HTML: str = r"""<!doctype html>
         <option value="burn-subs">burn-subs — burn subtitles into frames</option>
         <option value="srt2vtt">srt2vtt — SRT → WebVTT + CSS (zip)</option>
         <option value="extract-frames">extract-frames — PNG frames (zip)</option>
+        <option value="extract-flow">extract-flow — dense optical flow (mp4 viz or .npy)</option>
       </select>
     </section>
 
@@ -158,6 +159,26 @@ GUI_HTML: str = r"""<!doctype html>
       <div data-ops="extract-frames">
         <label class="block text-xs font-medium mb-1">frame_step</label>
         <input id="frame_step" type="number" value="30"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="extract-flow">
+        <label class="block text-xs font-medium mb-1">method</label>
+        <select id="flow_method" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="dis" selected>dis (fast, CPU, no extra install)</option>
+          <option value="farneback">farneback (CPU, no extra install)</option>
+          <option value="raft">raft (deep learning, needs the [flow] extra)</option>
+        </select>
+      </div>
+      <div data-ops="extract-flow">
+        <label class="block text-xs font-medium mb-1">output_format</label>
+        <select id="flow_output_format" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="video" selected>video — HSV-visualization mp4</option>
+          <option value="npy">npy — raw (T, H, W, 2) flow array</option>
+        </select>
+      </div>
+      <div data-ops="extract-flow">
+        <label class="block text-xs font-medium mb-1">frame_step</label>
+        <input id="flow_frame_step" type="number" value="1"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="extract-audio">
@@ -303,6 +324,7 @@ GUI_HTML: str = r"""<!doctype html>
       "image-loop": "/image-loop", "concat": "/concat", "overlay": "/overlay",
       "extract-audio": "/extract-audio", "mux-audio": "/mux-audio",
       "burn-subs": "/burn-subs", "srt2vtt": "/srt2vtt", "extract-frames": "/extract-frames",
+      "extract-flow": "/extract-flow",
     };
     // Operations whose response is a ZIP (multiple files) — download only.
     const ZIP_OPS = new Set(["srt2vtt", "extract-frames"]);
@@ -403,6 +425,11 @@ GUI_HTML: str = r"""<!doctype html>
       } else if (op === "extract-frames") {
         fd.append("file", inputFile);
         fd.append("frame_step", $("frame_step").value);
+      } else if (op === "extract-flow") {
+        fd.append("file", inputFile);
+        fd.append("method", $("flow_method").value);
+        fd.append("output_format", $("flow_output_format").value);
+        appendIf(fd, "frame_step", "flow_frame_step");
       }
 
       // Fire the request and render the response by response type.
@@ -437,6 +464,13 @@ GUI_HTML: str = r"""<!doctype html>
           $("out-audio").src = objUrl; $("out-audio").hidden = false;
         } else if (op === "compress") {
           dl.download = "compressed.mp4";
+          $("out-video").src = objUrl; $("out-video").hidden = false;
+        } else if (op === "extract-flow" && $("flow_output_format").value === "npy") {
+          // Raw array output: no inline player, download-only (like the zip ops).
+          dl.download = "flow.npy";
+          $("out-extra").textContent = "Raw flow array (.npy) — download only, no inline preview.";
+        } else if (op === "extract-flow") {
+          dl.download = "flow.mp4";
           $("out-video").src = objUrl; $("out-video").hidden = false;
         } else {
           // Single video file: play it inline and offer the download.

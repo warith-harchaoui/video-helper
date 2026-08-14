@@ -24,6 +24,7 @@ et que `ffmpeg` est installé et accessible dans le `PATH`. La recette
    - [Choisir un backend](#choisir-un-backend)
    - [Accélération matérielle](#accélération-matérielle)
    - [Destination : tenseurs numpy ou torch](#destination--tenseurs-numpy-ou-torch)
+   - [Flux optique](#flux-optique)
    - [Écrire des frames vers une vidéo](#écrire-des-frames-vers-une-vidéo)
 5. [Découpe temporelle](#découpe-temporelle)
 6. [Primitives de pipeline](#primitives-de-pipeline)
@@ -338,6 +339,85 @@ device, sans passage par numpy ; voir `SPEED_ANALYSIS.md` pour les
 dernières mesures. Le chemin par lots actuel reste déjà un gain de
 5-20× par rapport à envelopper chaque frame à la main dans
 `torch.from_numpy(...).to(device)`.
+
+### Flux optique
+
+`iter_optical_flow` enveloppe **n'importe quel** itérateur de frames
+`(H, W, 3)` BGR uint8 — la sortie d'`extract_frames`, ou une source live
+partageant le même contrat comme `capture_helper.iter_camera_frames` — et
+réémet des tableaux `(H, W, 5)` float32 : la frame (canaux 0-2) plus le flux
+dense `vx`/`vy` (canaux 3-4) par rapport à la frame précédente. Cette
+composabilité (l'entrée est un itérateur générique, pas un chemin vidéo) est
+tout l'intérêt : le même appel fonctionne pour un fichier ou une caméra live.
+
+```python
+# Par défaut : DIS, aucune dépendance supplémentaire (opencv-python est déjà core).
+frames = vh.extract_frames("clip.mp4", frame_step=1)
+for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+    bgr = flow_frame[..., :3].astype("uint8")        # retour à une frame classique
+    vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # déplacement signé en px
+
+# Se compose avec une caméra live de la même façon (capture-helper, pas
+# video-helper, possède la boucle caméra — aucune dépendance opencv/torch ajoutée là-bas).
+import capture_helper as ch
+for flow_frame in vh.iter_optical_flow(ch.iter_camera_frames(), method="dis"):
+    ...
+
+# Flux optique par deep learning (RAFT via torchvision) — nécessite `pip install "video-helper[flow]"`.
+for flow_frame in vh.iter_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+    ...
+
+# grayscale=True : (H, W, 3) au lieu de (H, W, 5) — intensité + flux uniquement,
+# une représentation plus légère centrée sur le mouvement (ex. alimenter un modèle flux-seul).
+for flow_frame in vh.iter_optical_flow(frames, method="dis", grayscale=True):
+    gray = flow_frame[..., 0].astype("uint8")
+    vx, vy = flow_frame[..., 1], flow_frame[..., 2]
+```
+
+La toute première frame émise a toujours un flux nul (pas de frame
+précédente), donc le nombre de frames reste 1:1 avec l'itérateur d'entrée.
+`method="dis"` (par défaut) et `"farneback"` sont des appels OpenCV CPU
+uniquement ; `method="raft"` privilégie la qualité et est recommandé sur GPU
+(RAFT sur CPU n'est pas censé tourner en temps réel), et nécessite des
+frames d'au moins ~128px par côté (une contrainte propre à RAFT, pas à
+video-helper).
+
+Pour le cas courant « donne-moi juste le flux pour ce fichier vidéo »,
+`extract_optical_flow` enveloppe les deux étapes précédentes en un seul
+appel — pas de plomberie manuelle d'itérateur de frames :
+
+```python
+# Le type de sortie est déduit de l'extension : tout sauf '.npy' -> vidéo
+# de visualisation HSV ; '.npy' -> le tableau brut (T, H, W, 2) float32.
+vh.extract_optical_flow("clip.mp4", "clip-flow.mp4", method="dis")
+vh.extract_optical_flow("clip.mp4", "clip-flow.npy", method="dis")
+```
+
+Même opération sur chaque autre surface, à l'identique de toute autre fonction de la suite :
+
+```bash
+video-helper extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
+video-helper-click extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
+curl -F 'file=@clip.mp4' -F 'method=dis' -o clip-flow.mp4 http://localhost:8000/extract-flow
+# MCP : publié automatiquement comme outil depuis la même route FastAPI, sans configuration supplémentaire.
+```
+
+**Redimensionner un flux calculé** — `output_width`/`output_height` (les deux
+requis ensemble) passent par `resize_flow`, basé sur les ondelettes plutôt
+qu'une simple interpolation bilinéaire/bicubique, pour ne pas étaler une
+frontière de mouvement lors du redimensionnement, et rééchelonne correctement
+la *magnitude* du flux par le même facteur que le redimensionnement spatial
+(nécessite `pip install "video-helper[flow]"` pour `PyWavelets`) :
+
+```python
+# Réduit la sortie de flux pour le stockage — calculé en pleine qualité, puis réduit.
+vh.extract_optical_flow(
+    "clip.mp4", "clip-flow.npy", method="dis", output_width=320, output_height=180,
+)
+
+# Ou redimensionne un flux déjà en main, de façon autonome :
+resized = vh.resize_flow(flow[..., -2:], output_width=320, output_height=180)
+```
 
 ### Écrire des frames vers une vidéo
 

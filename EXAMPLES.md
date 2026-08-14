@@ -24,6 +24,7 @@ recipe additionally requires ffmpeg to be built with `libass`.
    - [Choosing a Backend](#choosing-a-backend)
    - [Hardware Acceleration](#hardware-acceleration)
    - [Destination: numpy or torch tensors](#destination-numpy-or-torch-tensors)
+   - [Optical Flow](#optical-flow)
    - [Dump Frames to a Video](#dump-frames-to-a-video)
 5. [Temporal Crop](#temporal-crop)
 6. [Pipeline Primitives](#pipeline-primitives)
@@ -323,6 +324,82 @@ frames directly to torch on-device without the numpy intermediate —
 see `SPEED_ANALYSIS.md` for the latest measurements. The current
 batched path is already a 5-20× win over manually wrapping each frame
 in `torch.from_numpy(...).to(device)`.
+
+### Optical Flow
+
+`iter_optical_flow` wraps **any** `(H, W, 3)` BGR uint8 frame iterator —
+`extract_frames` output, or a live source sharing the same contract such as
+`capture_helper.iter_camera_frames` — and re-yields `(H, W, 5)` float32
+arrays: the frame (channels 0-2) plus dense flow `vx`/`vy` (channels 3-4)
+relative to the previous frame. This composability (input is a generic
+iterator, not a video path) is the point: the same call works for a file or
+a live camera.
+
+```python
+# Default: DIS, no extra dependency (opencv-python is already core).
+frames = vh.extract_frames("clip.mp4", frame_step=1)
+for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+    bgr = flow_frame[..., :3].astype("uint8")     # back to a plain frame
+    vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # signed px displacement
+
+# Composes with a live camera the exact same way (capture-helper, not
+# video-helper, owns the camera loop — no opencv/torch dependency added there).
+import capture_helper as ch
+for flow_frame in vh.iter_optical_flow(ch.iter_camera_frames(), method="dis"):
+    ...
+
+# Deep-learning flow (RAFT via torchvision) — needs `pip install "video-helper[flow]"`.
+for flow_frame in vh.iter_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+    ...
+
+# grayscale=True: (H, W, 3) instead of (H, W, 5) — intensity + flow only,
+# a smaller motion-focused representation (e.g. feeding a flow-only model).
+for flow_frame in vh.iter_optical_flow(frames, method="dis", grayscale=True):
+    gray = flow_frame[..., 0].astype("uint8")
+    vx, vy = flow_frame[..., 1], flow_frame[..., 2]
+```
+
+The first yielded frame always has zero flow (no previous frame yet), so
+frame count stays 1:1 with the input iterator. `method="dis"` (default) and
+`"farneback"` are CPU-only OpenCV calls; `method="raft"` is quality-first and
+GPU-recommended (CPU RAFT is not expected to be real-time), and requires
+frames at least ~128px per side (an inherent RAFT constraint, not
+video-helper's).
+
+For the common "just give me flow for this video file" case, `extract_optical_flow`
+wraps the two above into a single call — no manual frame-iterator plumbing:
+
+```python
+# Output kind is inferred from the extension: anything but '.npy' -> HSV
+# visualization video; '.npy' -> the raw (T, H, W, 2) float32 flow array.
+vh.extract_optical_flow("clip.mp4", "clip-flow.mp4", method="dis")
+vh.extract_optical_flow("clip.mp4", "clip-flow.npy", method="dis")
+```
+
+Same operation on every other surface, matching every other function in the suite:
+
+```bash
+video-helper extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
+video-helper-click extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
+curl -F 'file=@clip.mp4' -F 'method=dis' -o clip-flow.mp4 http://localhost:8000/extract-flow
+# MCP: auto-published as a tool from the same FastAPI route, no extra setup.
+```
+
+**Resizing a computed flow field** — `output_width`/`output_height` (both required
+together) go through `resize_flow`, wavelet-based instead of plain bilinear/bicubic,
+so a motion boundary isn't smeared across the resize, and the flow *magnitude*
+is correctly rescaled by the same factor as the spatial resize (needs
+`pip install "video-helper[flow]"` for `PyWavelets`):
+
+```python
+# Shrink the flow output for storage — computed at full quality, then downsized.
+vh.extract_optical_flow(
+    "clip.mp4", "clip-flow.npy", method="dis", output_width=320, output_height=180,
+)
+
+# Or resize a flow field you already have, standalone:
+resized = vh.resize_flow(flow[..., -2:], output_width=320, output_height=180)
+```
 
 ### Dump Frames to a Video
 

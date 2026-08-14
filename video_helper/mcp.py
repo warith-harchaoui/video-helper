@@ -4,8 +4,8 @@ A thin adapter that exposes the FastAPI app from :mod:`video_helper.api` as
 MCP tools, so any MCP-aware host (an agent runtime, an IDE integration, a
 custom shell) can call video-helper's operations — validation, dimensions,
 duration, format conversion, chunking, black-video/image-loop generation,
-concat, overlay, audio mux/extraction, subtitle burn/conversion, and frame
-extraction — as first-class tools. Uses `fastapi-mcp`
+concat, overlay, audio mux/extraction, subtitle burn/conversion, frame
+extraction, and dense optical flow — as first-class tools. Uses `fastapi-mcp`
 (https://github.com/tadata-org/fastapi_mcp): one wrapper publishes the whole
 existing HTTP surface, so the routes are never duplicated.
 
@@ -37,7 +37,7 @@ from video_helper.api import app
 
 # Publish the HTTP endpoints (validate / dimensions / duration / convert /
 # chunk / black / image-loop / concat / overlay / extract-audio / mux-audio /
-# burn-subs / srt2vtt / extract-frames) as MCP tools.
+# burn-subs / srt2vtt / extract-frames / extract-flow) as MCP tools.
 mcp = FastApiMCP(
     app,
     name="video-helper",
@@ -45,8 +45,8 @@ mcp = FastApiMCP(
         "Video Helper MCP tools: validate, inspect (dimensions/duration), "
         "convert, chunk, and compose video — black-video/image-loop "
         "generation, concat, overlay, audio mux/extraction, subtitle "
-        "burn/conversion, and frame extraction — entirely on the local "
-        "machine."
+        "burn/conversion, frame extraction, and dense optical flow — "
+        "entirely on the local machine."
     ),
 )
 # Newer fastapi-mcp splits mount() into transport-specific mount_http(); fall back to

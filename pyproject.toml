@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "video-helper"
 version = "2.2.0"
-description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, and FastAPI HTTP surface. Validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), HTTP-headers passthrough, exact-size output with aspect-preserving padding, target-file-size two-pass compression, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
+description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (multi-backend dispatcher: VidGear / PyAV / ffmpeg-pipe), dense optical flow (DIS/Farneback/RAFT), HTTP-headers passthrough, exact-size output with aspect-preserving padding, target-file-size two-pass compression, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = {text = "BSD-3-Clause"}
@@ -55,6 +55,12 @@ faces = [
     "torch>=2,<3",
     "python_speech_features>=0.6",
 ]
+# Advanced optical-flow features (video_helper.flow): RAFT deep-learning flow
+# (method="raft" — torchvision ships pretrained weights itself, auto-downloaded,
+# unlike heavier research-repo models) and resize_flow's wavelet-based,
+# discontinuity-aware resizing (needs PyWavelets). method="dis"/"farneback"
+# without resizing need no extra — opencv-python is already core.
+flow = ["torch>=2,<3", "torchvision>=0.15,<1", "PyWavelets>=1.4,<2"]
 # CLI-only-with-click extra. The argparse variant needs no runtime dep
 # and is always available.
 cli = ["click>=8.1,<9"]
@@ -65,7 +71,7 @@ api = [
     "uvicorn>=0.30,<1",
     "python-multipart>=0.0.9,<1",
 ]
-all = ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12"]
+all = ["av>=12,<18", "torch>=2.0,<3", "pillow>=10,<12", "torchvision>=0.15,<1", "PyWavelets>=1.4,<2"]
 # MCP extra (video_helper.mcp) — exposes the SAME FastAPI app from `[api]` as
 # MCP tools via fastapi-mcp; needs the api extra's runtime deps too.
 mcp = [

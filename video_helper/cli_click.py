@@ -25,6 +25,7 @@ Usage Example
 >>> #   video-helper-click convert       --input in.mov --output out.mp4 --width 640 --height 480
 >>> #   video-helper-click chunk         --input in.mp4 --start 10 --end 20 --output cut.mp4
 >>> #   video-helper-click extract-frames --input clip.mp4 --output-dir frames/ --frame-step 5
+>>> #   video-helper-click extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
 
 Author
 ------
@@ -53,6 +54,7 @@ from . import (
     concat_videos,
     extract_audio_track,
     extract_frames,
+    extract_optical_flow,
     extract_video_chunk,
     image_loop_to_video,
     is_valid_video_file,
@@ -526,6 +528,141 @@ def extract_frames_cmd(
         cv2.imwrite(path, frame)
         written.append(path)
     click.echo(json.dumps({"frames": written, "count": len(written)}, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# extract-flow
+# ---------------------------------------------------------------------------
+
+
+@cli.command("extract-flow")
+@click.option("--input", "input_", required=True)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output path (default: <input>-flow.mp4). '.npy' writes the raw "
+    "(T, H, W, 2) float32 flow array instead of a visualization video.",
+)
+@click.option(
+    "--method",
+    default="dis",
+    type=click.Choice(["dis", "farneback", "raft"]),
+    show_default=True,
+    help="Optical-flow backend. 'raft' needs the [flow] extra.",
+)
+@click.option(
+    "--dis-preset",
+    "dis_preset",
+    default="fast",
+    type=click.Choice(["ultrafast", "fast", "medium"]),
+    show_default=True,
+    help="Speed/quality preset for --method dis.",
+)
+@click.option(
+    "--raft-variant",
+    "raft_variant",
+    default="small",
+    type=click.Choice(["small", "large"]),
+    show_default=True,
+    help="RAFT network variant for --method raft.",
+)
+@click.option(
+    "--device",
+    default="cpu",
+    show_default=True,
+    help="Torch device for --method raft: cpu/mps/cuda/auto.",
+)
+@click.option(
+    "--clip-flow",
+    "clip_flow",
+    type=float,
+    default=None,
+    help="Symmetric pixel clip for outlier suppression (default: no clipping).",
+)
+@click.option("--start", type=float, default=None, help="Start instant in seconds.")
+@click.option("--end", type=float, default=None, help="End instant in seconds.")
+@click.option("--frame-step", "frame_step", type=int, default=1, show_default=True)
+@click.option(
+    "--frame-interval",
+    "frame_interval",
+    type=float,
+    default=None,
+    help="Sampling period in seconds (mutually exclusive with --frame-step).",
+)
+@click.option(
+    "--fps",
+    type=float,
+    default=None,
+    help="Frame rate for the visualization video output (default: source frame "
+    "rate / --frame-step). Ignored for '.npy' output.",
+)
+@click.option(
+    "--output-width",
+    "output_width",
+    type=int,
+    default=None,
+    help="Resize the flow field to this width (needs --output-height too). "
+    "Wavelet-based, discontinuity-aware — needs the [flow] extra.",
+)
+@click.option(
+    "--output-height",
+    "output_height",
+    type=int,
+    default=None,
+    help="Resize the flow field to this height (needs --output-width too).",
+)
+@click.option(
+    "--wavelet",
+    default="db2",
+    show_default=True,
+    help="PyWavelets wavelet name for --output-width/--output-height resizing.",
+)
+@click.option(
+    "--no-overwrite",
+    "no_overwrite",
+    is_flag=True,
+    default=False,
+    help="Skip recomputing if the output already exists.",
+)
+def extract_flow_cmd(
+    input_: str,
+    output: str | None,
+    method: str,
+    dis_preset: str,
+    raft_variant: str,
+    device: str,
+    clip_flow: float | None,
+    start: float | None,
+    end: float | None,
+    frame_step: int,
+    frame_interval: float | None,
+    fps: float | None,
+    output_width: int | None,
+    output_height: int | None,
+    wavelet: str,
+    no_overwrite: bool,
+) -> None:
+    """Dense optical flow: HSV-visualization video (default) or raw '.npy'."""
+    result = extract_optical_flow(
+        input_video=input_,
+        output_path=output,
+        method=method,
+        dis_preset=dis_preset,
+        raft_variant=raft_variant,
+        device=device,
+        clip_flow=clip_flow,
+        start_instant=start,
+        end_instant=end,
+        frame_step=frame_step,
+        frame_interval=frame_interval,
+        fps=fps,
+        output_width=output_width,
+        output_height=output_height,
+        wavelet=wavelet,
+        overwrite=not no_overwrite,
+    )
+    click.echo(result)
 
 
 if __name__ == "__main__":  # pragma: no cover

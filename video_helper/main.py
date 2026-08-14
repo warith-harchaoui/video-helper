@@ -1704,8 +1704,66 @@ def dump_frames(frames_list: list[np.ndarray], output_movie: str, fps: int = 30)
     osh.info(f"Video saved successfully: {output_movie}")
 
 
+def to_editing_intermediate(input_video: str, output_video: str, *, gop: int = 1) -> None:
+    """Transcode to an edit-friendly, all-keyframe intermediate.
+
+    A trim (``extract_video_chunk(..., copy=True)``) or a concatenation
+    (``concat_videos(..., reencode=False)``) done with a plain stream copy is only
+    frame-accurate and safe when every cut point lands on a keyframe — an ordinary
+    delivery-encoded video has keyframes seconds apart (a GOP), so a stream-copy
+    cut anywhere else either snaps to the nearest keyframe or, worse, starts a
+    fragment ffmpeg cannot decode standalone. Re-encoding on *every* trim avoids
+    that but pays a fresh lossy generation each time and is slow.
+
+    This function pays the lossy re-encode exactly **once**, into a format where
+    ``gop=1`` makes every video frame its own keyframe (nothing to snap to — any
+    timestamp is a valid, exact, losslessly-copyable cut point) and PCM audio
+    (``pcm_s16le``) removes the audio-side equivalent (compressed audio frames,
+    e.g. AAC, span multiple samples and have the same cut-alignment problem PCM
+    does not). Everything downstream — arbitrarily many trims and concatenations —
+    is then pure, lossless, fast stream copy. Follow with one final encode to the
+    actual delivery codec (the intermediate is large and not meant to be kept).
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the source video.
+    output_video : str
+        Path to write the intermediate to (``.mp4`` recommended; H.264-in-MP4
+        tolerates ``gop=1`` fine, unlike some containers).
+    gop : int, optional
+        Keyframe interval in frames (default ``1`` — every frame a keyframe).
+        Larger than 1 trades some of the cut-safety back for a smaller
+        intermediate; ``1`` is the only value that guarantees an exact cut at
+        *any* timestamp.
+
+    Examples
+    --------
+    >>> to_editing_intermediate("meeting.mp4", "meeting.edit.mp4")  # doctest: +SKIP
+    """
+    assert is_valid_video_file(input_video), f"Video file not okay:\n\t{input_video}"
+    quiet = osh.verbosity() <= 0
+    ffmpeg.input(input_video).output(
+        output_video,
+        vcodec="libx264",
+        pix_fmt="yuv420p",
+        g=gop,
+        keyint_min=gop,
+        sc_threshold=0,  # disable scene-cut-triggered extra keyframes changing the interval
+        preset="ultrafast",  # speed over compression — this file is a throwaway intermediate
+        acodec="pcm_s16le",  # uncompressed: every sample is independently cuttable, like gop=1
+    ).run(overwrite_output=True, quiet=quiet)
+    assert is_valid_video_file(output_video), f"Failed to write intermediate:\n\t{output_video}"
+    osh.info(f"Editing intermediate written: {output_video}")
+
+
 def extract_video_chunk(
-    input_video: str, sample_start: float, sample_end: float, output_video: str
+    input_video: str,
+    sample_start: float,
+    sample_end: float,
+    output_video: str,
+    *,
+    copy: bool = False,
 ) -> None:
     """
     Extract a chunk of video from the specified start to end time and save it to a new file.
@@ -1720,10 +1778,18 @@ def extract_video_chunk(
         End time in seconds for the extraction.
     output_video : str
         Path to save the extracted video chunk.
+    copy : bool, optional
+        Stream-copy the cut instead of re-encoding (default ``False``, the safe
+        choice for an arbitrary input). Fast and lossless, but only
+        frame-accurate when every frame of ``input_video`` is already a keyframe
+        — i.e. ``input_video`` came from :func:`to_editing_intermediate`. On an
+        ordinary delivery-encoded input, ``copy=True`` silently snaps the cut to
+        the nearest keyframe instead of the exact requested timestamp.
 
     Usage
     -----
     >>> extract_video_chunk("input.mp4", 10.0, 20.0, "output_chunk.mp4")
+    >>> extract_video_chunk("intermediate.mp4", 10.0, 20.0, "chunk.mp4", copy=True)
     """
     assert is_valid_video_file(input_video), f"Video file not okay:\n\t{input_video}"
     metadata = video_dimensions(input_video)
@@ -1732,10 +1798,24 @@ def extract_video_chunk(
         f"Temporal crop is inconsistent (start: {sample_start}, end: {sample_end}, duration: {duration})"
     )
 
+    quiet = True
+
+    if copy:
+        # Pure stream copy: no re-encode, no intermediate normalization pass needed
+        # (the caller is expected to hand us an already-uniform, all-keyframe file).
+        ffmpeg.input(input_video, ss=sample_start, to=sample_end).output(
+            output_video, c="copy"
+        ).run(overwrite_output=True, quiet=quiet)
+        if not is_valid_video_file(output_video):
+            raise RuntimeError(
+                f"Video could not be cropped (original: {input_video}, "
+                f"start: {sample_start}, end: {sample_end}, duration: {duration})"
+            )
+        osh.info(f"Video chunk extracted (stream copy): {output_video}")
+        return
+
     _, _, input_ext = osh.folder_name_ext(input_video)
     _, _, output_ext = osh.folder_name_ext(output_video)
-
-    quiet = True
 
     with (
         osh.temporary_filename(suffix=".mp4", mode="wb") as temp_input,
@@ -1900,17 +1980,38 @@ def compress_video(
         osh.info(f"Compressed video already exists, skipping:\n\t{output_video}")
         return output_video
 
+    if vcodec == "copy":
+        # Escape hatch for a caller that does not want re-encoding at all (source is
+        # already an acceptable size, or re-encoding artifacts are unwanted) — a plain
+        # remux, no bitrate math, no two-pass. Still gets +faststart, so the file plays
+        # from the start on the same surface (web player) this function is built for.
+        ffmpeg.input(input_video).output(
+            output_video, **{"c": "copy", "movflags": "+faststart"}
+        ).run(overwrite_output=True, quiet=osh.verbosity() <= 0)
+        assert is_valid_video_file(output_video), f"Failed to remux video file:\n\t{output_video}"
+        osh.info(f"Video file remuxed (no re-encode):\n\t{output_video}")
+        return output_video
+
     duration = video_duration(input_video)
     assert duration > 0, f"Cannot compress a zero-duration video:\n\t{input_video}"
 
     audio_kbps = float(audio_bitrate.lower().rstrip("k"))
     total_kbps_budget = (target_size_mb * 1024 * 1024 * 8) / duration / 1000
     video_kbps = round(total_kbps_budget - audio_kbps)
-    assert video_kbps >= min_video_bitrate_kbps, (
-        f"Target size {target_size_mb} MB over {osh.time2str(duration)} leaves only "
-        f"{video_kbps} kbps for video (floor is {min_video_bitrate_kbps} kbps) — raise "
-        f"target_size_mb or lower audio_bitrate."
-    )
+    if video_kbps < min_video_bitrate_kbps:
+        # A caller-supplied target_size_mb pairs a fixed budget with a variable-length
+        # source: fine for a fixed-length surface (a 5-minute demo clip), but a target
+        # sized for a short recording can go negative on a multi-hour one — audio alone
+        # already exceeds the budget. This must never be a hard failure: a report build
+        # embedding this video (the original motivating caller) would lose everything
+        # generated up to this point over a video-compression nicety. Clamp to the floor
+        # instead and accept the output runs over target_size_mb.
+        osh.warning(
+            f"compress_video: target {target_size_mb} MB over {osh.time2str(duration)} would "
+            f"need {video_kbps} kbps for video — below the {min_video_bitrate_kbps} kbps floor. "
+            f"Using the floor instead; the output will exceed {target_size_mb} MB."
+        )
+        video_kbps = min_video_bitrate_kbps
 
     # Real ffmpeg CLI flags only: ffmpeg-python's kwargs pass straight through to
     # `-{key} {value}` with no name translation (see `convert_kwargs_to_cmd_line_args`
@@ -2137,7 +2238,7 @@ def concat_videos(
                     "pix_fmt": "yuv420p",
                     "preset": "medium",
                     "crf": 20,
-                    "an": None,
+                    "acodec": "aac",
                 }
             )
             if frame_rate:

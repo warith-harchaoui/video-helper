@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`iter_optical_flow`**: optional generator that wraps any `(H, W, 3)` BGR
+  frame iterator — `extract_frames` output, or a live source such as
+  `capture_helper.iter_camera_frames`, sharing the same contract — and
+  re-yields `(H, W, 5)` float32 arrays (frame + `vx`/`vy` dense flow vs. the
+  previous frame), or `(H, W, 3)` (grayscale intensity + flow) with the new
+  `grayscale=True`. Three backends: `"dis"` (default) and `"farneback"` need
+  no new dependency (opencv-python is already core); `"raft"` is a deep
+  RAFT network via torchvision, gated behind the new `[flow]` extra.
+- **`extract_optical_flow`**: file-level convenience wrapper (`extract_frames`
+  → `iter_optical_flow` → write) with full CLI/API/MCP parity, matching every
+  other operation in the suite — `video-helper extract-flow` /
+  `video-helper-click extract-flow`, `POST /extract-flow` (auto-published as
+  an MCP tool via `fastapi-mcp`, no extra wiring needed). Output kind is
+  inferred from the output path's extension: `.npy` (raw `(T, H, W, 2)`
+  float32 flow array) or anything else (default `.mp4`, an HSV-color-wheel
+  visualization video).
+- **`resize_flow`**: resizes a dense-optical-flow field via wavelet
+  decomposition (`PyWavelets`, part of the `[flow]` extra) instead of plain
+  bilinear/bicubic interpolation, specifically to avoid smearing motion
+  discontinuities across a resize, plus correctly rescaling flow *magnitude*
+  by the same factor as the spatial resize (a common silent correctness bug
+  in naive flow-resizing code). Wired into `iter_optical_flow` and
+  `extract_optical_flow` (and their CLI/API surfaces) as an optional
+  `output_width`/`output_height` pair.
+
 ## [2.2.0] - 2026-08-13
 
 ### Added

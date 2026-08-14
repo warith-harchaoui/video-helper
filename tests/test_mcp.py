@@ -29,3 +29,9 @@ def test_api_still_served_next_to_mcp() -> None:
     client = starlette_testclient.TestClient(mcp_module.app)
     res = client.get("/health")
     assert res.status_code == 200 and res.json()["status"] == "ok"
+
+
+def test_extract_flow_route_is_published_as_mcp_tool() -> None:
+    """`/extract-flow` is on the shared app, so fastapi-mcp auto-publishes it too."""
+    paths = {r.path for r in mcp_module.app.routes if hasattr(r, "path")}
+    assert "/extract-flow" in paths

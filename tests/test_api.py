@@ -67,6 +67,7 @@ def test_openapi_lists_expected_endpoints(client) -> None:
         "/burn-subs",
         "/srt2vtt",
         "/extract-frames",
+        "/extract-flow",
     }
     assert expected.issubset(set(paths.keys()))
 
@@ -91,6 +92,8 @@ def test_gui_returns_200_html(client) -> None:
     assert "video bench" in body
     assert 'value="convert"' in r.text and 'value="extract-frames"' in r.text
     assert 'value="compress"' in r.text
+    assert 'value="extract-flow"' in r.text
+    assert 'id="flow_method"' in r.text and 'id="flow_output_format"' in r.text
 
 
 def test_root_redirects_to_gui(client) -> None:
@@ -131,3 +134,34 @@ def test_compress_route_exposes_expected_params(client) -> None:
     assert props["audio_bitrate"]["default"] == "128k"
     assert props["vcodec"]["default"] == "libx265"
     assert props["min_video_bitrate_kbps"]["default"] == 200
+
+
+def test_extract_flow_route_exposes_expected_params(client) -> None:
+    """``/extract-flow`` request-body schema matches extract_optical_flow()'s defaults."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    schema = r.json()
+    body_schema_ref = schema["paths"]["/extract-flow"]["post"]["requestBody"]["content"][
+        "multipart/form-data"
+    ]["schema"]["$ref"]
+    body_schema_name = body_schema_ref.rsplit("/", 1)[-1]
+    props = schema["components"]["schemas"][body_schema_name]["properties"]
+    assert props["output_format"]["default"] == "video"
+    assert props["method"]["default"] == "dis"
+    assert props["dis_preset"]["default"] == "fast"
+    assert props["raft_variant"]["default"] == "small"
+    assert props["device"]["default"] == "cpu"
+    assert props["frame_step"]["default"] == 1
+    assert "output_width" in props
+    assert "output_height" in props
+    assert props["wavelet"]["default"] == "db2"
+
+
+def test_extract_flow_route_rejects_bad_output_format(client) -> None:
+    """An unsupported ``output_format`` should 400, not a raw 500 traceback."""
+    r = client.post(
+        "/extract-flow",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+        data={"output_format": "bogus"},
+    )
+    assert r.status_code == 400
