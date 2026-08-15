@@ -40,6 +40,13 @@ FIXTURES_DIR = osh.join([os.path.dirname(__file__), "..", "video_tests"])
 VIDEO_FIXTURE = osh.join([FIXTURES_DIR, "shaky.mp4"])
 
 
+def _require(path: str) -> str:
+    """Return the fixture path, skipping the test if it does not exist."""
+    if not osh.file_exists(path):
+        pytest.skip(f"Fixture missing: {path}")
+    return path
+
+
 def _shifted_frame_pair(size: int = 64, shift: int = 4) -> tuple[np.ndarray, np.ndarray]:
     """Build two synthetic BGR frames: a bright block, then shifted right.
 
@@ -255,7 +262,7 @@ def test_iter_frame_optical_flow_requires_both_output_dims_together() -> None:
 def test_extract_optical_flow_writes_a_valid_video(tmp_path) -> None:
     """The default (video) output is a real, valid video file."""
     out = extract_optical_flow(
-        VIDEO_FIXTURE,
+        _require(VIDEO_FIXTURE),
         str(tmp_path / "flow.mp4"),
         method="dis",
         frame_step=5,
@@ -268,7 +275,7 @@ def test_extract_optical_flow_writes_a_valid_video(tmp_path) -> None:
 def test_extract_optical_flow_writes_npy_with_flow_only_shape(tmp_path) -> None:
     """A '.npy' output path writes the raw (T, H, W, 2) float32 flow array."""
     out = extract_optical_flow(
-        VIDEO_FIXTURE,
+        _require(VIDEO_FIXTURE),
         str(tmp_path / "flow.npy"),
         method="dis",
         frame_step=5,
@@ -284,7 +291,7 @@ def test_extract_optical_flow_writes_npy_with_flow_only_shape(tmp_path) -> None:
 def test_extract_optical_flow_defaults_output_path(tmp_path) -> None:
     """Omitting output_path defaults to '<input>-flow.mp4' next to the source."""
     src = tmp_path / "clip.mp4"
-    shutil.copy(VIDEO_FIXTURE, src)
+    shutil.copy(_require(VIDEO_FIXTURE), src)
     out = extract_optical_flow(str(src), method="dis", frame_step=5, end_instant=1.0)
     assert out == str(tmp_path / "clip-flow.mp4")
     assert is_valid_video_file(out)
@@ -293,11 +300,12 @@ def test_extract_optical_flow_defaults_output_path(tmp_path) -> None:
 def test_extract_optical_flow_no_overwrite_skips_recompute(tmp_path) -> None:
     """overwrite=False returns the existing path without recomputing."""
     out_path = tmp_path / "flow.mp4"
-    extract_optical_flow(VIDEO_FIXTURE, str(out_path), frame_step=5, end_instant=1.0)
+    fixture = _require(VIDEO_FIXTURE)
+    extract_optical_flow(fixture, str(out_path), frame_step=5, end_instant=1.0)
     mtime_before = out_path.stat().st_mtime_ns
 
     result = extract_optical_flow(
-        VIDEO_FIXTURE, str(out_path), frame_step=5, end_instant=1.0, overwrite=False
+        fixture, str(out_path), frame_step=5, end_instant=1.0, overwrite=False
     )
     assert result == str(out_path)
     assert out_path.stat().st_mtime_ns == mtime_before
@@ -307,7 +315,7 @@ def test_extract_optical_flow_resizes_npy_output(tmp_path) -> None:
     """output_width/output_height resize the written flow array via resize_flow."""
     pytest.importorskip("pywt")
     out = extract_optical_flow(
-        VIDEO_FIXTURE,
+        _require(VIDEO_FIXTURE),
         str(tmp_path / "flow.npy"),
         method="dis",
         frame_step=5,
@@ -323,7 +331,7 @@ def test_extract_optical_flow_resizes_video_output(tmp_path) -> None:
     """output_width/output_height resize the HSV visualization video too."""
     pytest.importorskip("pywt")
     out = extract_optical_flow(
-        VIDEO_FIXTURE,
+        _require(VIDEO_FIXTURE),
         str(tmp_path / "flow.mp4"),
         method="dis",
         frame_step=5,
@@ -338,7 +346,7 @@ def test_extract_optical_flow_resizes_video_output(tmp_path) -> None:
 def test_extract_optical_flow_requires_both_output_dims_together(tmp_path) -> None:
     with pytest.raises(ValueError, match="output_width and output_height"):
         extract_optical_flow(
-            VIDEO_FIXTURE,
+            _require(VIDEO_FIXTURE),
             str(tmp_path / "flow.mp4"),
             frame_step=5,
             end_instant=1.0,
