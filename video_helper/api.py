@@ -50,6 +50,8 @@ import io
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -131,6 +133,43 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(AssertionError)
+@app.exception_handler(ValueError)
+async def _client_input_error_handler(request, exc: Exception) -> JSONResponse:
+    """Map a library input-validation failure to HTTP 400.
+
+    ``video_helper.main`` validates almost everything via bare ``assert``
+    (``assert is_valid_video_file(...)``, temporal-crop bounds, ...) or
+    ``ValueError`` (``pad_color``, ``backend``, ``output_width``/``height``
+    ...). Left uncaught, both surfaced as FastAPI's generic 500 —
+    indistinguishable from an actual server bug. Both are ordinary
+    client-input problems: 400.
+    """
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def _upstream_error_handler(request, exc: Exception) -> JSONResponse:
+    """Map any other library exception to HTTP 502.
+
+    Covers ``RuntimeError`` (e.g. a failed crop/convert/compress),
+    ``ImportError`` (an optional backend extra not installed), and
+    ``ffmpeg.Error`` (the underlying ``ffmpeg`` process itself failed) —
+    none of these are the API server's own bug, but they're not the
+    caller's malformed input either, so 502 (upstream failure) fits better
+    than 500 or a blanket 400.
+    """
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+def _status_for(exc: Exception) -> int:
+    """Same classification as the two handlers above, for routes that must
+    clean up a temp dir on failure and so cannot just let the exception
+    propagate to the global handlers (see ``extract_frames_route`` /
+    ``extract_flow_route``)."""
+    return 400 if isinstance(exc, (AssertionError, ValueError)) else 502
+
+
 def _spool(upload: UploadFile, dest_dir: Path, suffix_hint: str | None = None) -> Path:
     """
     Persist an ``UploadFile`` to a temp path on disk.
@@ -188,6 +227,28 @@ def _cleanup(*paths: str | Path) -> None:
 def _new_tmpdir() -> Path:
     """Create a request-scoped temp directory under the system temp root."""
     return Path(tempfile.mkdtemp(prefix="video-helper-"))
+
+
+@contextmanager
+def _cleanup_on_error(tmp: Path) -> Iterator[None]:
+    """Delete ``tmp`` immediately if the wrapped block raises.
+
+    Every action route below schedules ``background.add_task(_cleanup, tmp)``
+    on the *success* path only, since the response body (a ``FileResponse``/
+    ``StreamingResponse``) still needs to read from ``tmp`` after the route
+    function returns — an unconditional ``finally: _cleanup(tmp)`` would
+    delete the output file out from under the response. But that left every
+    failure path (bad input, a failed ffmpeg pass, ...) leaking the whole
+    temp dir — including the uploaded video — forever: a disk-exhaustion
+    vector on an HTTP-facing endpoint, trivially triggered by repeated
+    malformed requests. This re-adds that cleanup for the failure path only,
+    leaving the success path's ``background.add_task`` untouched.
+    """
+    try:
+        yield
+    except Exception:
+        _cleanup(tmp)
+        raise
 
 
 def _zip_folder(folder: Path) -> io.BytesIO:
@@ -304,16 +365,17 @@ def convert(
     # path on disk, not an in-memory stream. ``lstrip('.')`` tolerates callers
     # passing either "mp4" or ".mp4" as the target container.
     tmp = _new_tmpdir()
-    src = _spool(file, tmp)
-    dst = tmp / f"converted.{output_format.lstrip('.')}"
-    video_converter(
-        input_video=str(src),
-        output_video=str(dst),
-        frame_rate=frame_rate,
-        width=width,
-        height=height,
-        without_sound=without_sound,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp)
+        dst = tmp / f"converted.{output_format.lstrip('.')}"
+        video_converter(
+            input_video=str(src),
+            output_video=str(dst),
+            frame_rate=frame_rate,
+            width=width,
+            height=height,
+            without_sound=without_sound,
+        )
     # Delete the temp dir only *after* the response has been streamed — a
     # BackgroundTask runs post-response, so ``dst`` is still readable now.
     background.add_task(_cleanup, tmp)
@@ -333,17 +395,18 @@ def compress(
 ) -> FileResponse:
     """Two-pass compress the uploaded video to a target file size (HEVC by default)."""
     tmp = _new_tmpdir()
-    src = _spool(file, tmp)
-    dst = tmp / "compressed.mp4"
-    compress_video(
-        input_video=str(src),
-        output_video=str(dst),
-        target_size_mb=target_size_mb,
-        audio_bitrate=audio_bitrate,
-        vcodec=vcodec,
-        min_video_bitrate_kbps=min_video_bitrate_kbps,
-        overwrite=True,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp)
+        dst = tmp / "compressed.mp4"
+        compress_video(
+            input_video=str(src),
+            output_video=str(dst),
+            target_size_mb=target_size_mb,
+            audio_bitrate=audio_bitrate,
+            vcodec=vcodec,
+            min_video_bitrate_kbps=min_video_bitrate_kbps,
+            overwrite=True,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -359,14 +422,15 @@ def chunk(
     """Extract a ``[start, end]`` slice from the uploaded video."""
     # Same spool-to-disk pattern as /convert (ffmpeg needs a seekable file).
     tmp = _new_tmpdir()
-    src = _spool(file, tmp)
-    dst = tmp / f"chunk.{output_format.lstrip('.')}"
-    extract_video_chunk(
-        input_video=str(src),
-        sample_start=start,
-        sample_end=end,
-        output_video=str(dst),
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp)
+        dst = tmp / f"chunk.{output_format.lstrip('.')}"
+        extract_video_chunk(
+            input_video=str(src),
+            sample_start=start,
+            sample_end=end,
+            output_video=str(dst),
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -386,13 +450,14 @@ def black(
     # Python name avoids shadowing the builtin sense of the word.
     tmp = _new_tmpdir()
     dst = tmp / f"black.{output_format.lstrip('.')}"
-    black_video(
-        duration=duration_seconds,
-        width=width,
-        height=height,
-        output_video=str(dst),
-        frame_rate=frame_rate,
-    )
+    with _cleanup_on_error(tmp):
+        black_video(
+            duration=duration_seconds,
+            width=width,
+            height=height,
+            output_video=str(dst),
+            frame_rate=frame_rate,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -411,16 +476,17 @@ def image_loop(
     # Preserve the image's real extension (falling back to .png) so ffmpeg
     # picks the right image demuxer for the still.
     tmp = _new_tmpdir()
-    img = _spool(image, tmp, suffix_hint=Path(image.filename or "").suffix or ".png")
-    dst = tmp / f"loop.{output_format.lstrip('.')}"
-    image_loop_to_video(
-        image=str(img),
-        duration=duration_seconds,
-        output_video=str(dst),
-        frame_rate=frame_rate,
-        width=width,
-        height=height,
-    )
+    with _cleanup_on_error(tmp):
+        img = _spool(image, tmp, suffix_hint=Path(image.filename or "").suffix or ".png")
+        dst = tmp / f"loop.{output_format.lstrip('.')}"
+        image_loop_to_video(
+            image=str(img),
+            duration=duration_seconds,
+            output_video=str(dst),
+            frame_rate=frame_rate,
+            width=width,
+            height=height,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -437,21 +503,22 @@ def concat(
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="concat needs at least 2 files")
     tmp = _new_tmpdir()
-    # Spool inputs in order — FastAPI preserves multipart part ordering.
-    srcs = [str(_spool(f, tmp, suffix_hint=Path(f.filename or "").suffix)) for f in files]
-    # Two files spooled with the same "upload" prefix would collide; give
-    # each spooled file a unique name derived from its position.
-    for i, s in enumerate(srcs):
-        renamed = tmp / f"input_{i:03d}{Path(s).suffix}"
-        Path(s).rename(renamed)
-        srcs[i] = str(renamed)
-    dst = tmp / f"concat.{output_format.lstrip('.')}"
-    concat_videos(
-        input_videos=srcs,
-        output_video=str(dst),
-        reencode=reencode,
-        frame_rate=frame_rate,
-    )
+    with _cleanup_on_error(tmp):
+        # Spool inputs in order — FastAPI preserves multipart part ordering.
+        srcs = [str(_spool(f, tmp, suffix_hint=Path(f.filename or "").suffix)) for f in files]
+        # Two files spooled with the same "upload" prefix would collide; give
+        # each spooled file a unique name derived from its position.
+        for i, s in enumerate(srcs):
+            renamed = tmp / f"input_{i:03d}{Path(s).suffix}"
+            Path(s).rename(renamed)
+            srcs[i] = str(renamed)
+        dst = tmp / f"concat.{output_format.lstrip('.')}"
+        concat_videos(
+            input_videos=srcs,
+            output_video=str(dst),
+            reencode=reencode,
+            frame_rate=frame_rate,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -468,23 +535,24 @@ def overlay(
 ) -> FileResponse:
     """Overlay a still image on the uploaded video."""
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    # ``x`` / ``y`` are strings, not ints, on purpose: they may be ffmpeg
-    # overlay expressions (e.g. "main_w-overlay_w-10"), not just pixel offsets.
-    # Second upload needs a different filename — spool manually so it doesn't
-    # overwrite the video spooled above.
-    img = tmp / (f"overlay{Path(image.filename or '').suffix or '.png'}")
-    with img.open("wb") as fp:
-        shutil.copyfileobj(image.file, fp)
-    dst = tmp / f"overlaid.{output_format.lstrip('.')}"
-    overlay_image(
-        input_video=str(src),
-        image=str(img),
-        output_video=str(dst),
-        x=x,
-        y=y,
-        scale_width=scale_width,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+        # ``x`` / ``y`` are strings, not ints, on purpose: they may be ffmpeg
+        # overlay expressions (e.g. "main_w-overlay_w-10"), not just pixel offsets.
+        # Second upload needs a different filename — spool manually so it doesn't
+        # overwrite the video spooled above.
+        img = tmp / (f"overlay{Path(image.filename or '').suffix or '.png'}")
+        with img.open("wb") as fp:
+            shutil.copyfileobj(image.file, fp)
+        dst = tmp / f"overlaid.{output_format.lstrip('.')}"
+        overlay_image(
+            input_video=str(src),
+            image=str(img),
+            output_video=str(dst),
+            x=x,
+            y=y,
+            scale_width=scale_width,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -502,15 +570,16 @@ def extract_audio(
     # Default output_format is "wav" here (not "mp4") since the payload is
     # audio; the container extension still drives the encoder choice.
     tmp = _new_tmpdir()
-    src = _spool(file, tmp)
-    dst = tmp / f"audio.{output_format.lstrip('.')}"
-    extract_audio_track(
-        input_video=str(src),
-        output_audio=str(dst),
-        sample_rate=sample_rate,
-        channels=channels,
-        encoding=encoding,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp)
+        dst = tmp / f"audio.{output_format.lstrip('.')}"
+        extract_audio_track(
+            input_video=str(src),
+            output_audio=str(dst),
+            sample_rate=sample_rate,
+            channels=channels,
+            encoding=encoding,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -527,21 +596,22 @@ def mux_audio(
 ) -> FileResponse:
     """Mux a separate audio track onto the uploaded video."""
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    # Second upload must not reuse ``_spool``'s fixed "upload" name or it would
-    # clobber the video; spool it manually under a distinct "audio_track" name.
-    a = tmp / (f"audio_track{Path(audio.filename or '').suffix or '.wav'}")
-    with a.open("wb") as fp:
-        shutil.copyfileobj(audio.file, fp)
-    dst = tmp / f"muxed.{output_format.lstrip('.')}"
-    mux_audio_video(
-        input_video=str(src),
-        input_audio=str(a),
-        output_video=str(dst),
-        audio_codec=audio_codec,
-        audio_bitrate=audio_bitrate,
-        shortest=shortest,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+        # Second upload must not reuse ``_spool``'s fixed "upload" name or it would
+        # clobber the video; spool it manually under a distinct "audio_track" name.
+        a = tmp / (f"audio_track{Path(audio.filename or '').suffix or '.wav'}")
+        with a.open("wb") as fp:
+            shutil.copyfileobj(audio.file, fp)
+        dst = tmp / f"muxed.{output_format.lstrip('.')}"
+        mux_audio_video(
+            input_video=str(src),
+            input_audio=str(a),
+            output_video=str(dst),
+            audio_codec=audio_codec,
+            audio_bitrate=audio_bitrate,
+            shortest=shortest,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -556,19 +626,20 @@ def burn_subs(
 ) -> FileResponse:
     """Burn subtitles into the frames of the uploaded video."""
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    # Keep the subtitle file's real extension (.srt/.vtt/.ass) — libass selects
-    # the parser from it, so a wrong suffix would silently drop the captions.
-    s = tmp / (f"subs{Path(subs.filename or '').suffix or '.srt'}")
-    with s.open("wb") as fp:
-        shutil.copyfileobj(subs.file, fp)
-    dst = tmp / f"captioned.{output_format.lstrip('.')}"
-    burn_subtitles(
-        input_video=str(src),
-        subtitles_file=str(s),
-        output_video=str(dst),
-        force_style=force_style,
-    )
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+        # Keep the subtitle file's real extension (.srt/.vtt/.ass) — libass selects
+        # the parser from it, so a wrong suffix would silently drop the captions.
+        s = tmp / (f"subs{Path(subs.filename or '').suffix or '.srt'}")
+        with s.open("wb") as fp:
+            shutil.copyfileobj(subs.file, fp)
+        dst = tmp / f"captioned.{output_format.lstrip('.')}"
+        burn_subtitles(
+            input_video=str(src),
+            subtitles_file=str(s),
+            output_video=str(dst),
+            force_style=force_style,
+        )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
 
@@ -582,20 +653,21 @@ def srt2vtt_route(
     # Force the ``.srt`` suffix regardless of the uploaded filename so the
     # converter always treats the input as SubRip.
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=".srt")
-    out_vtt = tmp / "output.vtt"
-    out_css = tmp / "output.css"
-    srt2vtt(
-        srt_file_path=str(src),
-        vtt_file_path=str(out_vtt),
-        css_file_path=str(out_css),
-    )
-    # Pack the two sibling files into a ZIP so the client gets both in one shot.
-    pack_dir = tmp / "pack"
-    pack_dir.mkdir()
-    shutil.copy(out_vtt, pack_dir / out_vtt.name)
-    shutil.copy(out_css, pack_dir / out_css.name)
-    buf = _zip_folder(pack_dir)
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=".srt")
+        out_vtt = tmp / "output.vtt"
+        out_css = tmp / "output.css"
+        srt2vtt(
+            srt_file_path=str(src),
+            vtt_file_path=str(out_vtt),
+            css_file_path=str(out_css),
+        )
+        # Pack the two sibling files into a ZIP so the client gets both in one shot.
+        pack_dir = tmp / "pack"
+        pack_dir.mkdir()
+        shutil.copy(out_vtt, pack_dir / out_vtt.name)
+        shutil.copy(out_css, pack_dir / out_css.name)
+        buf = _zip_folder(pack_dir)
     background.add_task(_cleanup, tmp)
     return StreamingResponse(
         buf,
@@ -645,7 +717,9 @@ def extract_frames_route(
             cv2.imwrite(str(frames_dir / f"frame_{i:09d}.png"), frame)
     except Exception as exc:
         _cleanup(tmp)
-        raise HTTPException(status_code=500, detail=f"extract-frames failed: {exc}") from exc
+        raise HTTPException(
+            status_code=_status_for(exc), detail=f"extract-frames failed: {exc}"
+        ) from exc
     buf = _zip_folder(frames_dir)
     background.add_task(_cleanup, tmp)
     return StreamingResponse(
@@ -709,6 +783,8 @@ def extract_flow_route(
         )
     except Exception as exc:
         _cleanup(tmp)
-        raise HTTPException(status_code=500, detail=f"extract-flow failed: {exc}") from exc
+        raise HTTPException(
+            status_code=_status_for(exc), detail=f"extract-flow failed: {exc}"
+        ) from exc
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")

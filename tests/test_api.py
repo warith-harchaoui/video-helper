@@ -165,3 +165,63 @@ def test_extract_flow_route_rejects_bad_output_format(client) -> None:
         data={"output_format": "bogus"},
     )
     assert r.status_code == 400
+
+
+def test_status_for_classifies_client_vs_upstream_errors() -> None:
+    """``AssertionError``/``ValueError`` -> 400 (bad input); anything else -> 502."""
+    from video_helper.api import _status_for
+
+    assert _status_for(AssertionError("bad input")) == 400
+    assert _status_for(ValueError("bad input")) == 400
+    assert _status_for(RuntimeError("ffmpeg failed")) == 502
+    assert _status_for(ImportError("optional extra missing")) == 502
+
+
+def test_cleanup_on_error_removes_tmp_only_on_failure(tmp_path) -> None:
+    """The failure path deletes ``tmp``; the success path leaves it alone.
+
+    Every action route relies on this: ``background.add_task(_cleanup, tmp)``
+    only runs after a successful response, so a failure inside the
+    ``with _cleanup_on_error(tmp):`` block must be the thing that reclaims
+    the temp dir — otherwise every failed request leaks it forever.
+    """
+    from video_helper.api import _cleanup_on_error
+
+    failing_dir = tmp_path / "failing"
+    failing_dir.mkdir()
+    with pytest.raises(ValueError), _cleanup_on_error(failing_dir):
+        raise ValueError("boom")
+    assert not failing_dir.exists()
+
+    success_dir = tmp_path / "success"
+    success_dir.mkdir()
+    with _cleanup_on_error(success_dir):
+        pass
+    assert success_dir.exists()  # untouched — the caller's own background task owns this
+
+
+def test_convert_route_cleans_up_temp_dir_on_failure(client, tmp_path, monkeypatch) -> None:
+    """A full HTTP round trip: a failing ``/convert`` must not leak its temp dir.
+
+    Deterministic and ffmpeg-independent: patches ``_new_tmpdir`` to return a
+    directory under ``tmp_path`` (so the test can inspect it) and
+    ``video_converter`` to always raise, exactly like a real ffmpeg/input
+    failure would.
+    """
+    import video_helper.api as api_module
+
+    leaked_dir = tmp_path / "video-helper-leak-check"
+    leaked_dir.mkdir()
+    monkeypatch.setattr(api_module, "_new_tmpdir", lambda: leaked_dir)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("Input video file not okay")
+
+    monkeypatch.setattr(api_module, "video_converter", _boom)
+
+    r = client.post(
+        "/convert",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+    )
+    assert r.status_code == 400
+    assert not leaked_dir.exists()
