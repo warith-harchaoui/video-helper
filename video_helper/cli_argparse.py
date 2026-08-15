@@ -53,6 +53,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Sequence
 
 import os_helper as osh
@@ -1097,7 +1098,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # Every subparser sets ``func`` via ``set_defaults`` — no dispatch table
     # needed, argparse resolved it for us.
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except Exception as exc:  # noqa: BLE001 — last resort: clean CLI error, not a traceback
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover

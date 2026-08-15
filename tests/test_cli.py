@@ -17,6 +17,8 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 # The click CLI needs the ``click`` runtime dep, which lives in the
@@ -339,3 +341,43 @@ def test_click_extract_flow_defaults_match_library() -> None:
     assert defaults["output_height"] is None
     assert defaults["wavelet"] == "db2"
     assert defaults["no_overwrite"] is False
+
+
+def test_argparse_main_prints_clean_error_on_library_exception(capsys) -> None:
+    """A library ``AssertionError`` (missing input file) must not surface as
+    a raw Python traceback — ``main()`` should print one clean ``Error: ...``
+    line to stderr and return a nonzero exit code."""
+    from video_helper.cli_argparse import main
+
+    exit_code = main(["duration", "--input", "/nonexistent/no-such-video.mp4"])
+    assert exit_code != 0
+    captured = capsys.readouterr()
+    assert captured.err.startswith("Error: ")
+    assert "Traceback (most recent call last)" not in captured.err
+
+
+def test_click_main_prints_clean_error_on_library_exception(tmp_path, monkeypatch, capsys) -> None:
+    """Same guarantee as the argparse twin, via the ``main()`` console-script
+    wrapper (not the bare ``cli`` group, which does not catch this). ``main``
+    is a plain function (not a click ``Command``), so it is driven the same
+    way a real console-script invocation would: via ``sys.argv`` + the
+    ``SystemExit`` it raises, not ``CliRunner.invoke`` (which requires a
+    click ``Command``/``Group``).
+
+    ``duration --input`` uses ``click.Path(exists=True)``, which rejects a
+    missing path at the option-parsing level (exit code 2, click's own
+    usage error) before the library ever runs — so this needs a file that
+    *exists* but is not a valid video, to actually exercise the library's
+    own exception path.
+    """
+    from video_helper.cli_click import main
+
+    garbage = tmp_path / "not-a-video.mp4"
+    garbage.write_bytes(b"not a real video")
+    monkeypatch.setattr(sys, "argv", ["video-helper-click", "duration", "--input", str(garbage)])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err.startswith("Error: ")
+    assert "Traceback (most recent call last)" not in captured.err

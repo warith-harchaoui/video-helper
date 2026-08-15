@@ -15,8 +15,9 @@ Design notes
 - Flags reuse the argparse names (``--input`` / ``--output`` / …) rather
   than the more idiomatic click positional style — consistency across
   the two CLIs beats micro-idiomaticity here.
-- Errors from the library propagate unchanged; click handles the
-  formatting.
+- A library exception is caught by ``main()`` (the console-script entry
+  point) and printed as one clean ``Error: ...`` line + exit 1, instead of
+  a raw Python traceback.
 
 Usage Example
 -------------
@@ -36,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 
 import os_helper as osh
 
@@ -665,5 +667,24 @@ def extract_flow_cmd(
     click.echo(result)
 
 
+def main() -> None:
+    """Console entry point (``video-helper-click``).
+
+    Click's own dispatch only special-cases ``ClickException``/``Abort``
+    (and a broken pipe); a plain library exception (e.g. from
+    ``video_converter()``) would otherwise propagate as a raw Python
+    traceback instead of a clean CLI error. This wraps the whole invocation
+    and translates that last case into a one-line stderr message + exit 1
+    — click's own control flow (usage errors, ``--help``, an explicit
+    ``sys.exit(1)`` in a subcommand) already raises ``SystemExit``, a
+    ``BaseException`` this does not catch, so it passes through untouched.
+    """
+    try:
+        cli()
+    except Exception as exc:  # noqa: BLE001 — last resort: see docstring
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":  # pragma: no cover
-    cli()
+    main()
