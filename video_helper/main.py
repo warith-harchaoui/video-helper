@@ -1954,8 +1954,7 @@ def compress_video(
     Raises
     ------
     AssertionError
-        If ``input_video`` is not a valid video file, or if the solved video
-        bitrate would fall below ``min_video_bitrate_kbps``.
+        If ``input_video`` is not a valid video file.
     ffmpeg.Error
         If either encoding pass fails.
 

@@ -534,7 +534,9 @@ def active_speaker_map(
             margin = (top - second) / (top + 1e-9)
             cov = min(1.0, covered[spk].get(fid, 0.0) / (sampled[spk] + 1e-9))
             if cov < coverage_floor:
-                osh.info(f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted")
+                osh.info(
+                    f"faces.sampling: speaker {spk} coverage {cov:.2f} < floor — face not trusted"
+                )
                 continue
             crops = [(fr, face) for _s, fr, face in best_crops.get(fid, [])]
             results.append(
