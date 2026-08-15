@@ -48,7 +48,7 @@ __email__ = "warithmetics@deraison.ai"
 # Import the public surface from ``main``. Names re-exported here are
 # what downstream callers should rely on; anything not listed in
 # ``__all__`` is considered private.
-from .flow import extract_optical_flow, iter_optical_flow, resize_flow
+from .flow import extract_optical_flow, iter_frame_optical_flow, resize_flow
 from .main import (
     black_video,
     burn_subtitles,
@@ -71,7 +71,7 @@ from .main import (
 
 # Define the public API for the library
 __all__ = [
-    "iter_optical_flow",
+    "iter_frame_optical_flow",
     "extract_optical_flow",
     "resize_flow",
     "extract_unique_colors",

@@ -6,7 +6,7 @@ Optional dense-optical-flow generator that wraps any BGR frame stream.
 
 Module summary
 --------------
-Exposes a single public generator, :func:`iter_optical_flow`, which takes any
+Exposes a single public generator, :func:`iter_frame_optical_flow`, which takes any
 ``Iterator[numpy.ndarray]`` of ``(H, W, 3)`` BGR uint8 frames — the same
 contract already produced by :func:`video_helper.extract_frames` and by
 ``capture_helper.iter_camera_frames`` (live camera) — and re-yields each frame
@@ -34,7 +34,7 @@ Usage Example
 -------------
 >>> import video_helper as vh
 >>> frames = vh.extract_frames("clip.mp4", frame_step=1)
->>> for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+>>> for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
 ...     # flow_frame.shape == (H, W, 5), float32
 ...     bgr = flow_frame[..., :3].astype("uint8")
 ...     vx, vy = flow_frame[..., 3], flow_frame[..., 4]
@@ -348,7 +348,7 @@ def resize_flow(
     ----------
     flow : numpy.ndarray
         Flow field ``(H, W, 2)`` float, channels ``[vx, vy]`` — e.g. the last
-        2 channels of an :func:`iter_optical_flow` output frame.
+        2 channels of an :func:`iter_frame_optical_flow` output frame.
     output_width : int
         Target width in pixels.
     output_height : int
@@ -488,7 +488,7 @@ class _RaftFlowEstimator:
         return predicted_flow.permute(1, 2, 0).contiguous().cpu().numpy().astype(np.float32)
 
 
-def iter_optical_flow(
+def iter_frame_optical_flow(
     frames: Iterator[np.ndarray],
     *,
     method: Literal["dis", "farneback", "raft"] = "dis",
@@ -591,11 +591,11 @@ def iter_optical_flow(
     --------
     >>> import video_helper as vh
     >>> frames = vh.extract_frames("clip.mp4", frame_step=1)
-    >>> for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+    >>> for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
     ...     bgr = flow_frame[..., :3].astype("uint8")
     ...     vx, vy = flow_frame[..., 3], flow_frame[..., 4]
     ...     break
-    >>> for flow_frame in vh.iter_optical_flow(frames, method="dis", grayscale=True):
+    >>> for flow_frame in vh.iter_frame_optical_flow(frames, method="dis", grayscale=True):
     ...     gray = flow_frame[..., 0].astype("uint8")
     ...     vx, vy = flow_frame[..., 1], flow_frame[..., 2]
     ...     break
@@ -728,7 +728,7 @@ def extract_optical_flow(
 ) -> str:
     """Compute dense optical flow over a video file and write it to disk.
 
-    File-level convenience wrapper around :func:`iter_optical_flow` for the
+    File-level convenience wrapper around :func:`iter_frame_optical_flow` for the
     common "just give me flow for this video" case (CLI / API surfaces need a
     single input path and a single output path, not a frame iterator). The
     output kind is inferred from ``output_path``'s extension, mirroring how
@@ -748,7 +748,7 @@ def extract_optical_flow(
         Where to write the result. Defaults to ``<input>-flow.mp4`` next to
         the source. Extension controls the output kind (see above).
     method : {"dis", "farneback", "raft"}, default "dis"
-        Optical-flow backend — see :func:`iter_optical_flow`.
+        Optical-flow backend — see :func:`iter_frame_optical_flow`.
     dis_preset : {"ultrafast", "fast", "medium"}, default "fast"
         Speed/quality preset for ``method="dis"``. Ignored otherwise.
     raft_variant : {"small", "large"}, default "small"
@@ -757,7 +757,7 @@ def extract_optical_flow(
         Torch device for ``method="raft"`` only.
     clip_flow : float or None, default None
         Symmetric pixel clip for outlier suppression — see
-        :func:`iter_optical_flow`.
+        :func:`iter_frame_optical_flow`.
     start_instant : float, optional
         Start time in seconds (forwarded to :func:`video_helper.main.extract_frames`).
     end_instant : float, optional
@@ -799,7 +799,7 @@ def extract_optical_flow(
         If ``input_video`` is not a valid video file.
     ValueError
         If ``method``, ``dis_preset``, or ``raft_variant`` is not supported
-        (propagated from :func:`iter_optical_flow`).
+        (propagated from :func:`iter_frame_optical_flow`).
     ImportError
         If ``method="raft"`` is requested but ``torchvision`` is not
         installed, or if ``output_width``/``output_height`` are requested
@@ -831,7 +831,7 @@ def extract_optical_flow(
         frame_step=frame_step,
         frame_interval=frame_interval,
     )
-    flow_frames = iter_optical_flow(
+    flow_frames = iter_frame_optical_flow(
         frames,
         method=method,
         dis_preset=dis_preset,

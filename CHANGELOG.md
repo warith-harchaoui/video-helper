@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`iter_optical_flow`**: optional generator that wraps any `(H, W, 3)` BGR
+- **`iter_frame_optical_flow`**: optional generator that wraps any `(H, W, 3)` BGR
   frame iterator — `extract_frames` output, or a live source such as
   `capture_helper.iter_camera_frames`, sharing the same contract — and
   re-yields `(H, W, 5)` float32 arrays (frame + `vx`/`vy` dense flow vs. the
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no new dependency (opencv-python is already core); `"raft"` is a deep
   RAFT network via torchvision, gated behind the new `[flow]` extra.
 - **`extract_optical_flow`**: file-level convenience wrapper (`extract_frames`
-  → `iter_optical_flow` → write) with full CLI/API/MCP parity, matching every
+  → `iter_frame_optical_flow` → write) with full CLI/API/MCP parity, matching every
   other operation in the suite — `video-helper extract-flow` /
   `video-helper-click extract-flow`, `POST /extract-flow` (auto-published as
   an MCP tool via `fastapi-mcp`, no extra wiring needed). Output kind is
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bilinear/bicubic interpolation, specifically to avoid smearing motion
   discontinuities across a resize, plus correctly rescaling flow *magnitude*
   by the same factor as the spatial resize (a common silent correctness bug
-  in naive flow-resizing code). Wired into `iter_optical_flow` and
+  in naive flow-resizing code). Wired into `iter_frame_optical_flow` and
   `extract_optical_flow` (and their CLI/API surfaces) as an optional
   `output_width`/`output_height` pair.
 

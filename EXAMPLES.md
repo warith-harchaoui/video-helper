@@ -327,7 +327,7 @@ in `torch.from_numpy(...).to(device)`.
 
 ### Optical Flow
 
-`iter_optical_flow` wraps **any** `(H, W, 3)` BGR uint8 frame iterator —
+`iter_frame_optical_flow` wraps **any** `(H, W, 3)` BGR uint8 frame iterator —
 `extract_frames` output, or a live source sharing the same contract such as
 `capture_helper.iter_camera_frames` — and re-yields `(H, W, 5)` float32
 arrays: the frame (channels 0-2) plus dense flow `vx`/`vy` (channels 3-4)
@@ -338,23 +338,23 @@ a live camera.
 ```python
 # Default: DIS, no extra dependency (opencv-python is already core).
 frames = vh.extract_frames("clip.mp4", frame_step=1)
-for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
     bgr = flow_frame[..., :3].astype("uint8")     # back to a plain frame
     vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # signed px displacement
 
 # Composes with a live camera the exact same way (capture-helper, not
 # video-helper, owns the camera loop — no opencv/torch dependency added there).
 import capture_helper as ch
-for flow_frame in vh.iter_optical_flow(ch.iter_camera_frames(), method="dis"):
+for flow_frame in vh.iter_frame_optical_flow(ch.iter_camera_frames(), method="dis"):
     ...
 
 # Deep-learning flow (RAFT via torchvision) — needs `pip install "video-helper[flow]"`.
-for flow_frame in vh.iter_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
     ...
 
 # grayscale=True: (H, W, 3) instead of (H, W, 5) — intensity + flow only,
 # a smaller motion-focused representation (e.g. feeding a flow-only model).
-for flow_frame in vh.iter_optical_flow(frames, method="dis", grayscale=True):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="dis", grayscale=True):
     gray = flow_frame[..., 0].astype("uint8")
     vx, vy = flow_frame[..., 1], flow_frame[..., 2]
 ```

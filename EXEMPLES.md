@@ -342,7 +342,7 @@ dernières mesures. Le chemin par lots actuel reste déjà un gain de
 
 ### Flux optique
 
-`iter_optical_flow` enveloppe **n'importe quel** itérateur de frames
+`iter_frame_optical_flow` enveloppe **n'importe quel** itérateur de frames
 `(H, W, 3)` BGR uint8 — la sortie d'`extract_frames`, ou une source live
 partageant le même contrat comme `capture_helper.iter_camera_frames` — et
 réémet des tableaux `(H, W, 5)` float32 : la frame (canaux 0-2) plus le flux
@@ -353,23 +353,23 @@ tout l'intérêt : le même appel fonctionne pour un fichier ou une caméra live
 ```python
 # Par défaut : DIS, aucune dépendance supplémentaire (opencv-python est déjà core).
 frames = vh.extract_frames("clip.mp4", frame_step=1)
-for flow_frame in vh.iter_optical_flow(frames, method="dis"):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
     bgr = flow_frame[..., :3].astype("uint8")        # retour à une frame classique
     vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # déplacement signé en px
 
 # Se compose avec une caméra live de la même façon (capture-helper, pas
 # video-helper, possède la boucle caméra — aucune dépendance opencv/torch ajoutée là-bas).
 import capture_helper as ch
-for flow_frame in vh.iter_optical_flow(ch.iter_camera_frames(), method="dis"):
+for flow_frame in vh.iter_frame_optical_flow(ch.iter_camera_frames(), method="dis"):
     ...
 
 # Flux optique par deep learning (RAFT via torchvision) — nécessite `pip install "video-helper[flow]"`.
-for flow_frame in vh.iter_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
     ...
 
 # grayscale=True : (H, W, 3) au lieu de (H, W, 5) — intensité + flux uniquement,
 # une représentation plus légère centrée sur le mouvement (ex. alimenter un modèle flux-seul).
-for flow_frame in vh.iter_optical_flow(frames, method="dis", grayscale=True):
+for flow_frame in vh.iter_frame_optical_flow(frames, method="dis", grayscale=True):
     gray = flow_frame[..., 0].astype("uint8")
     vx, vy = flow_frame[..., 1], flow_frame[..., 2]
 ```

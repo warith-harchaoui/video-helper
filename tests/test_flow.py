@@ -31,7 +31,7 @@ import pytest
 from video_helper import (
     extract_optical_flow,
     is_valid_video_file,
-    iter_optical_flow,
+    iter_frame_optical_flow,
     resize_flow,
     video_dimensions,
 )
@@ -66,7 +66,7 @@ def _shifted_frame_pair(size: int = 64, shift: int = 4) -> tuple[np.ndarray, np.
 def test_output_contract_and_first_frame_zero_flow(method: str) -> None:
     """Every yielded array is (H, W, 5) float32; frame 0 has exactly zero flow."""
     frame0, frame1 = _shifted_frame_pair()
-    out = list(iter_optical_flow(iter([frame0, frame1]), method=method))
+    out = list(iter_frame_optical_flow(iter([frame0, frame1]), method=method))
 
     assert len(out) == 2
     for arr in out:
@@ -81,7 +81,7 @@ def test_output_contract_and_first_frame_zero_flow(method: str) -> None:
 def test_recovers_approximate_rightward_shift(method: str) -> None:
     """A block shifted right should yield a predominantly positive vx over it."""
     frame0, frame1 = _shifted_frame_pair(size=64, shift=4)
-    out = list(iter_optical_flow(iter([frame0, frame1]), method=method))
+    out = list(iter_frame_optical_flow(iter([frame0, frame1]), method=method))
 
     vx = out[1][20:44, 24:40, 3]  # interior of the moved block, away from edges
     assert vx.mean() > 0.5  # moved right → positive vx
@@ -91,7 +91,7 @@ def test_recovers_approximate_rightward_shift(method: str) -> None:
 def test_grayscale_mode_yields_3_channel_arrays(method: str) -> None:
     """grayscale=True yields (H, W, 3): intensity + vx + vy, instead of (H, W, 5)."""
     frame0, frame1 = _shifted_frame_pair()
-    out = list(iter_optical_flow(iter([frame0, frame1]), method=method, grayscale=True))
+    out = list(iter_frame_optical_flow(iter([frame0, frame1]), method=method, grayscale=True))
 
     assert len(out) == 2
     for arr in out:
@@ -106,7 +106,7 @@ def test_grayscale_mode_yields_3_channel_arrays(method: str) -> None:
 def test_grayscale_mode_recovers_approximate_rightward_shift() -> None:
     """The flow channels behave identically in grayscale mode (last 2 channels)."""
     frame0, frame1 = _shifted_frame_pair(size=64, shift=4)
-    out = list(iter_optical_flow(iter([frame0, frame1]), method="dis", grayscale=True))
+    out = list(iter_frame_optical_flow(iter([frame0, frame1]), method="dis", grayscale=True))
 
     vx = out[1][20:44, 24:40, 1]  # interior of the moved block, away from edges
     assert vx.mean() > 0.5  # moved right → positive vx
@@ -115,7 +115,7 @@ def test_grayscale_mode_recovers_approximate_rightward_shift() -> None:
 def test_clip_flow_bounds_the_output() -> None:
     """``clip_flow`` symmetrically bounds both channels without changing shape."""
     frame0, frame1 = _shifted_frame_pair(size=64, shift=10)
-    out = list(iter_optical_flow(iter([frame0, frame1]), method="dis", clip_flow=0.5))
+    out = list(iter_frame_optical_flow(iter([frame0, frame1]), method="dis", clip_flow=0.5))
 
     assert out[1].shape == (64, 64, 5)
     assert np.abs(out[1][..., 3:]).max() <= 0.5 + 1e-6
@@ -124,7 +124,7 @@ def test_clip_flow_bounds_the_output() -> None:
 def test_unknown_method_raises() -> None:
     frame0, frame1 = _shifted_frame_pair()
     with pytest.raises(ValueError):
-        list(iter_optical_flow(iter([frame0, frame1]), method="bogus"))  # type: ignore[arg-type]
+        list(iter_frame_optical_flow(iter([frame0, frame1]), method="bogus"))  # type: ignore[arg-type]
 
 
 def test_raft_requires_torchvision(monkeypatch) -> None:
@@ -134,7 +134,7 @@ def test_raft_requires_torchvision(monkeypatch) -> None:
     monkeypatch.setattr(flow_mod, "_have_torchvision", lambda: False)
     frame0, frame1 = _shifted_frame_pair()
     with pytest.raises(ImportError, match="torchvision"):
-        list(flow_mod.iter_optical_flow(iter([frame0, frame1]), method="raft"))
+        list(flow_mod.iter_frame_optical_flow(iter([frame0, frame1]), method="raft"))
 
 
 def test_raft_recovers_approximate_rightward_shift() -> None:
@@ -142,7 +142,9 @@ def test_raft_recovers_approximate_rightward_shift() -> None:
     pytest.importorskip("torchvision")
     frame0, frame1 = _shifted_frame_pair(size=136, shift=8)  # RAFT needs >= ~128px per side
     out = list(
-        iter_optical_flow(iter([frame0, frame1]), method="raft", raft_variant="small", device="cpu")
+        iter_frame_optical_flow(
+            iter([frame0, frame1]), method="raft", raft_variant="small", device="cpu"
+        )
     )
 
     assert out[1].shape == (136, 136, 5)
@@ -157,7 +159,7 @@ def test_raft_grayscale_mode_yields_3_channel_arrays() -> None:
     pytest.importorskip("torchvision")
     frame0, frame1 = _shifted_frame_pair(size=136, shift=8)
     out = list(
-        iter_optical_flow(
+        iter_frame_optical_flow(
             iter([frame0, frame1]),
             method="raft",
             raft_variant="small",
@@ -231,21 +233,23 @@ def test_resize_flow_requires_pywt(monkeypatch) -> None:
         flow_mod.resize_flow(_step_flow(), output_width=32, output_height=32)
 
 
-def test_iter_optical_flow_output_size_is_wired_to_resize_flow() -> None:
+def test_iter_frame_optical_flow_output_size_is_wired_to_resize_flow() -> None:
     """output_width/output_height resize both the image and flow channels."""
     pytest.importorskip("pywt")
     frame0, frame1 = _shifted_frame_pair(size=64, shift=4)
     out = list(
-        iter_optical_flow(iter([frame0, frame1]), method="dis", output_width=32, output_height=32)
+        iter_frame_optical_flow(
+            iter([frame0, frame1]), method="dis", output_width=32, output_height=32
+        )
     )
     assert out[0].shape == (32, 32, 5)
     assert out[1].shape == (32, 32, 5)
 
 
-def test_iter_optical_flow_requires_both_output_dims_together() -> None:
+def test_iter_frame_optical_flow_requires_both_output_dims_together() -> None:
     frame0, frame1 = _shifted_frame_pair()
     with pytest.raises(ValueError, match="output_width and output_height"):
-        list(iter_optical_flow(iter([frame0, frame1]), method="dis", output_width=32))
+        list(iter_frame_optical_flow(iter([frame0, frame1]), method="dis", output_width=32))
 
 
 def test_extract_optical_flow_writes_a_valid_video(tmp_path) -> None:
