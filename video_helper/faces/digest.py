@@ -78,7 +78,6 @@ later runs against the digest is an orthogonal choice.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 import os_helper as osh
