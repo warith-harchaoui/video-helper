@@ -104,10 +104,20 @@ def test_compress_video_overwrite_false_skips_existing(short_clip, tmp_path) -> 
     assert out.read_bytes() == b"not a real video, just a sentinel"
 
 
-def test_compress_video_rejects_infeasible_target_size(short_clip) -> None:
-    """A target size too small for the floor bitrate raises, instead of producing junk."""
-    with pytest.raises(AssertionError, match="leaves only"):
-        compress_video(short_clip, target_size_mb=0.05)
+def test_compress_video_clamps_to_floor_on_infeasible_target_size(short_clip, tmp_path) -> None:
+    """A target size too small for the floor bitrate clamps to the floor instead
+    of raising: per the function's own design (see its ``min_video_bitrate_kbps``
+    docstring), a caller-supplied budget going negative on a longer-than-expected
+    source must never be a hard failure — that would lose an entire pipeline's
+    output over a compression nicety. The output exceeds the requested target
+    size instead."""
+    out = str(tmp_path / "compressed.mp4")
+    target_mb = 0.05
+    result = compress_video(short_clip, out, target_size_mb=target_mb)
+    assert result == out
+    assert is_valid_video_file(out)
+    size_mb = os.path.getsize(out) / (1024 * 1024)
+    assert size_mb > target_mb
 
 
 def test_compress_video_rejects_invalid_input(tmp_path) -> None:
