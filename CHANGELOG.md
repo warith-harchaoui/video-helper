@@ -34,6 +34,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `extract_optical_flow` (and their CLI/API surfaces) as an optional
   `output_width`/`output_height` pair.
 
+### Security
+
+- **The HTTP API leaked a temp directory (including the uploaded video) on
+  every failed request** to any of the 11 action routes (`/convert`,
+  `/compress`, `/chunk`, `/black`, `/image-loop`, `/concat`, `/overlay`,
+  `/extract-audio`, `/mux-audio`, `/burn-subs`, `/srt2vtt`): cleanup was
+  only ever scheduled via `background.add_task(_cleanup, tmp)` on the
+  success path, so a client sending deliberately-invalid input repeatedly
+  could exhaust server disk — every failure left its whole temp dir behind
+  forever. Fixed with a shared `_cleanup_on_error` context manager that
+  reclaims the temp dir immediately on any exception, leaving the
+  success-path background cleanup untouched.
+
+### Fixed
+
+- **CLI**: a library exception now prints one clean `Error: ...` line to
+  stderr and exits 1, instead of a raw Python traceback, on both CLI
+  twins. `video-helper-click`'s console-script entry point now points at a
+  new `cli_click.main()` wrapper (was the bare `cli` group).
+- **API**: every library exception collapsed into FastAPI's generic 500.
+  `AssertionError`/`ValueError` (the library's own input-validation
+  failures) now map to 400; anything else (`RuntimeError`, `ImportError`,
+  an `ffmpeg.Error`) maps to 502.
+- **Tests**: `test_compress_video_rejects_infeasible_target_size` asserted
+  stale behavior — `compress_video` was intentionally changed to clamp to
+  the floor bitrate with a warning instead of raising (see its own
+  `min_video_bitrate_kbps` docstring), but the test still expected an
+  `AssertionError`. Updated to assert the actual, intended behavior.
+
 ## [2.2.0] - 2026-08-13
 
 ### Added
