@@ -286,9 +286,15 @@ def active_speaker_map(
     burning the machine on it). ``None`` (the default) lets the rescue run until the
     finite window pool or the no-progress guard stops it; an int caps the extra windows.
 
-    Returns one :class:`SpeakerFaceAssignment` per cluster that cleared the vote
-    floor. Clusters left uncertain are logged and omitted (caller falls back to
-    voiceprint for those).
+    The iterative rounds and rescue pass above chase full certainty (margin
+    *and* coverage), but the final cut is coverage-only: a cluster is omitted
+    only if it never gathered enough sampled evidence (``coverage <
+    coverage_floor``), logged and left for the caller's voiceprint fallback.
+    A cluster that gathered enough evidence but never reached the margin
+    target is still returned, with its true ``margin`` reported on the
+    :class:`SpeakerFaceAssignment` (the field is meant as a caller-facing
+    certainty signal, not an internal admission gate) so the caller can apply
+    their own threshold instead of the evidence being silently discarded.
     """
     import contextlib
 
