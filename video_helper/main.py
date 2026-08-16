@@ -1646,24 +1646,23 @@ def extract_frames(
 
 def dump_frames(frames_list: list[np.ndarray], output_movie: str, fps: int = 30) -> None:
     """
-    Save frames to a video file.
+    Save a list of frames to a video file — the inverse of :func:`extract_frames`.
 
     Parameters
     ----------
     frames_list : List[np.ndarray]
-        A list of frames as numpy arrays.
+        Frames as ``(H, W, 3)`` **BGR uint8** numpy arrays — the OpenCV
+        convention used throughout video-helper, identical to what
+        :func:`extract_frames` (``destination="numpy"``) yields. Passing
+        RGB frames here writes a video with red and blue swapped.
     output_movie : str
         Path to the output video file.
     fps : int, optional
         Frame rate of the output video file. Defaults to 30.
 
-    Notes
-    -----
-    The function uses VidGear to write the frames to a video file.
-
     Usage
     -----
-    >>> frames = [frame1, frame2, frame3]
+    >>> frames = [frame1, frame2, frame3]  # BGR uint8, e.g. from extract_frames
     >>> dump_frames(frames, "output.mp4")
     """
     assert len(frames_list) > 0, "No frames to dump!"
@@ -1681,8 +1680,9 @@ def dump_frames(frames_list: list[np.ndarray], output_movie: str, fps: int = 30)
             frame_pattern = osh.join([temp_folder, "frame_%09d.png"])
             for i, frame in enumerate(frames_list):
                 frame_path = frame_pattern % i
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # BGR convention of opencv
-                cv2.imwrite(frame_path, frame_bgr)
+                # cv2.imwrite expects BGR natively — no color conversion needed,
+                # frames_list is already BGR per this function's documented contract.
+                cv2.imwrite(frame_path, frame)
 
             temp_movie = osh.join([temp_folder, "temp_movie.mp4"])
             ffmpeg.input(frame_pattern, framerate=fps).output(temp_movie).run(

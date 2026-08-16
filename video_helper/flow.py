@@ -679,13 +679,14 @@ def iter_frame_optical_flow(
         yield out
 
 
-def _flow_to_rgb(vx: np.ndarray, vy: np.ndarray) -> np.ndarray:
-    """Render a flow field as an HSV-color-wheel RGB image (OpenCV's standard convention).
+def _flow_to_bgr(vx: np.ndarray, vy: np.ndarray) -> np.ndarray:
+    """Render a flow field as an HSV-color-wheel BGR image (OpenCV's standard convention).
 
     Direction maps to hue, magnitude to value (per-frame min-max normalized),
     saturation is fixed at maximum — the same encoding as OpenCV's own dense
-    optical-flow tutorial. Output is RGB (not BGR) so it can be handed
-    straight to :func:`video_helper.main.dump_frames`, which expects RGB.
+    optical-flow tutorial. Output is BGR (not RGB) so it can be handed
+    straight to :func:`video_helper.main.dump_frames`, which expects BGR
+    (the OpenCV convention shared by every frame in this library).
 
     Parameters
     ----------
@@ -697,14 +698,14 @@ def _flow_to_rgb(vx: np.ndarray, vy: np.ndarray) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        ``(H, W, 3)`` RGB uint8 visualization.
+        ``(H, W, 3)`` BGR uint8 visualization.
     """
     mag, ang = cv2.cartToPolar(vx, vy)
     hsv = np.zeros((*vx.shape, 3), dtype=np.uint8)
     hsv[..., 0] = ang * (90.0 / np.pi)  # radians -> OpenCV's 0-179 hue range
     hsv[..., 1] = 255
     hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
 
 def extract_optical_flow(
@@ -737,7 +738,7 @@ def extract_optical_flow(
     - ``.npy`` — the raw flow-only array, ``(T, H, W, 2)`` float32 (``vx``,
       ``vy``), one entry per input frame (frame 1 is all zeros).
     - anything else (default ``.mp4``) — an HSV-color-wheel visualization
-      video (direction -> hue, magnitude -> value, see :func:`_flow_to_rgb`),
+      video (direction -> hue, magnitude -> value, see :func:`_flow_to_bgr`),
       viewable directly without loading numpy.
 
     Parameters
@@ -856,7 +857,7 @@ def extract_optical_flow(
     if output_ext.lower() == "npy":
         np.save(output_path, np.stack(flow_channels, axis=0))
     else:
-        viz_frames = [_flow_to_rgb(flow[..., 0], flow[..., 1]) for flow in flow_channels]
+        viz_frames = [_flow_to_bgr(flow[..., 0], flow[..., 1]) for flow in flow_channels]
         resolved_fps = (
             fps if fps is not None else video_dimensions(input_video)["frame_rate"] / frame_step
         )

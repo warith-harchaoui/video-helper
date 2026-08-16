@@ -154,6 +154,31 @@ def test_frames_dump(tmp_path) -> None:
     assert is_valid_video_file(out)
 
 
+def test_dump_frames_preserves_bgr_channel_order(tmp_path) -> None:
+    """dump_frames writes frames as-is (BGR), matching extract_frames' own
+    contract — it must not silently swap red and blue (regression: an
+    internal RGB2BGR conversion previously flipped BGR input to the wrong
+    colors on write)."""
+    red_bgr = np.zeros((16, 16, 3), dtype=np.uint8)
+    red_bgr[..., 2] = 255  # pure red in BGR: channel 2 (R) lit, 0 (B) and 1 (G) off
+    frames = [red_bgr.copy() for _ in range(5)]
+
+    out = str(tmp_path / "red.mp4")
+    dump_frames(frames, out, fps=5)
+    assert is_valid_video_file(out)
+
+    readback = next(iter(extract_frames(out, start_index=0, end_index=0)))
+    # Lossy H.264 round-trip: assert the dominant channel, not exact equality.
+    mean_b, mean_g, mean_r = (
+        readback[..., 0].mean(),
+        readback[..., 1].mean(),
+        readback[..., 2].mean(),
+    )
+    assert mean_r > mean_b and mean_r > mean_g, (
+        f"Expected red (BGR) to survive the round trip, got B={mean_b:.0f} G={mean_g:.0f} R={mean_r:.0f}"
+    )
+
+
 def test_extract_video_chunk(tmp_path) -> None:
     """Temporal crop yields a valid, shorter video."""
     video_file = _require(VIDEO_NO_AUDIO)

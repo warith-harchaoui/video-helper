@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`dump_frames`**: silently swapped red and blue on every frame it wrote —
+  an internal `RGB2BGR` conversion treated the input as RGB while every other
+  part of video-helper (including `extract_frames`, which `dump_frames` is
+  documented as the inverse of) uses BGR uint8. `dump_frames` now writes
+  frames as-is, matching its documented contract and the OpenCV convention
+  used throughout the library. `extract_optical_flow`'s `.mp4` visualization
+  output (the only in-repo caller of `dump_frames`) is updated to match
+  (`_flow_to_bgr`, was `_flow_to_rgb`) so its rendered colors are unaffected.
+
 ## [2.3.1] - 2026-08-15
 
 ### Fixed
