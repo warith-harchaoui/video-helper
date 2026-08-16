@@ -4,23 +4,26 @@ video_helper.faces
 
 Reusable, HuggingFace-free computer-vision primitives for face-anchored speaker
 identity on video, built on the same local-first ethos as the rest of
-video-helper (ffmpeg + OpenCV + ONNX, no cloud, no HuggingFace at runtime).
+video-helper (ffmpeg + OpenCV + PyTorch, no cloud, no HuggingFace at runtime).
 
 Pieces (each usable on its own):
 
-- :class:`FaceDetector` — YuNet detection + 5 landmarks (``detect``).
-- :class:`FaceRecognizer` — SFace 128-d embeddings (``recognize``).
+- :class:`FaceDetector` — YuNet detection + 5 landmarks (``detect``), via
+  OpenCV's own bundled DNN wrapper (no separate onnxruntime dependency).
+- :class:`FaceRecognizer` — SFace 128-d embeddings (``recognize``), same DNN
+  wrapper as the detector.
 - :func:`track_faces` — IoU/ByteTrack-family tracking into :class:`FaceTrack`.
 - :func:`mouth_roi` — lip-centred ROI for the ASD visual stream (``align``).
-- :func:`get_engine` — an :class:`ASDEngine` (lip-motion proxy or Light-ASD ONNX).
+- :func:`get_engine` — an :class:`ASDEngine` (lip-motion proxy or Light-ASD PyTorch).
 - :func:`active_speaker_map` — the **smart-sampling harness** that ties it all
   together: shots + speaker-turns + a cheap face census pick a small set of clips,
   heavy ASD runs only there and grows until every speaker is covered with
   certainty (``sampling``).
 - :func:`ensure_model` — the sovereign model downloader (``models``).
 
-Install the extra: ``pip install "video-helper[faces]"`` (adds onnxruntime +
-scenedetect; opencv-python is already a core dependency).
+Install the extra: ``pip install "video-helper[faces]"`` (adds ``torch``,
+``scenedetect`` and ``python_speech_features``; ``opencv-python`` is already
+a core dependency).
 """
 
 from __future__ import annotations

@@ -23,9 +23,9 @@ Usage
     # and (optionally) paste the printed SHA-256 digests into
     # video_helper/faces/models.py so the runtime verifies integrity.
 
-The Light-ASD ONNX weight has no public permissive URL we control; export it from
-the authors' PyTorch checkpoint yourself and drop ``light_asd.onnx`` into the
-output folder before uploading (see .private/face.md §6).
+The Light-ASD weight has no public permissive URL we control; fetch the
+authors' PyTorch checkpoint yourself and drop ``light_asd.pth`` into the
+output folder before uploading.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from video_helper.faces.models import REGISTRY
 UPSTREAMS: dict[str, str] = {
     "yunet": REGISTRY["yunet"].upstreams[0],
     "sface": REGISTRY["sface"].upstreams[0],
-    # "light-asd": "<your PyTorch->ONNX export, dropped in manually>",
+    # "light-asd": "<your PyTorch checkpoint, dropped in manually>",
 }
 
 

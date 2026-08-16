@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used throughout the library. `extract_optical_flow`'s `.mp4` visualization
   output (the only in-repo caller of `dump_frames`) is updated to match
   (`_flow_to_bgr`, was `_flow_to_rgb`) so its rendered colors are unaffected.
+- **`[faces]` extra**: dropped the dead `onnxruntime` dependency — nothing in
+  `video_helper.faces` ever imported it. YuNet detection and SFace
+  recognition load their `.onnx` weight files through OpenCV's own bundled
+  DNN wrappers (`cv2.FaceDetectorYN`, `cv2.FaceRecognizerSF`), and the
+  accurate ASD engine (`LightASD`) runs entirely in PyTorch. Also fixed
+  docstrings in `faces/__init__.py`, `faces/asd.py`, and
+  `scripts/seed_model_mirror.py` that incorrectly claimed the ASD engine ran
+  "through ONNX Runtime" (it never did) and that the seeding script should
+  produce a `light_asd.onnx` file (the runtime looks for `light_asd.pth`).
 
 ## [2.3.1] - 2026-08-15
 
