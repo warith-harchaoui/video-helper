@@ -141,8 +141,9 @@ def test_frame_extraction() -> None:
     assert abs(len(frames_interval) - expected_interval) <= 2
 
 
-def test_frames_dump(tmp_path) -> None:
-    """Round-trip: extract a short window of frames, dump, and re-open."""
+def test_frames_dump_round_trip_from_a_real_video(tmp_path) -> None:
+    """Round-trip: extract a short window of real frames, dump, and re-open
+    as a valid video."""
     video_file = _require(VIDEO_NO_AUDIO)
     d = video_dimensions(video_file)
 

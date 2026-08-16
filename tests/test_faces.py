@@ -20,17 +20,31 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
+import pytest
 
 from video_helper.faces import mouth_roi, track_faces
-from video_helper.faces.detect import Face
-from video_helper.faces.models import REGISTRY, ModelSpec
+from video_helper.faces.detect import Face, FaceDetector
+from video_helper.faces.models import REGISTRY, ModelSpec, model_dir
+from video_helper.faces.recognize import FaceRecognizer
 from video_helper.faces.sampling import _candidate_windows, _FaceGallery, _greedy_assign
 
 
+def _weights_cached(name: str) -> bool:
+    """Return True without touching the network -- checks the on-disk cache
+    only, so these tests never trigger a download in CI (see module
+    docstring)."""
+    spec = REGISTRY[name]
+    return os.path.isfile(os.path.join(model_dir(), spec.filename))
+
+
 def _face(x: float, y: float, w: float = 40, h: float = 40, score: float = 0.9) -> Face:
-    lms = np.array([[x + 10, y + 12], [x + 30, y + 12], [x + 20, y + 22],
-                    [x + 14, y + 32], [x + 26, y + 32]], dtype=np.float32)
+    lms = np.array(
+        [[x + 10, y + 12], [x + 30, y + 12], [x + 20, y + 22], [x + 14, y + 32], [x + 26, y + 32]],
+        dtype=np.float32,
+    )
     raw = np.zeros(15, dtype=np.float32)
     raw[:4] = [x, y, w, h]
     raw[4:14] = lms.reshape(-1)
@@ -96,3 +110,35 @@ def test_mouth_roi_shape_and_offscreen() -> None:
     # A face entirely off-frame yields a zero ROI, not a crash.
     off = mouth_roi(frame, _face(-500, -500), size=112)
     assert off.shape == (112, 112) and int(off.max()) == 0
+
+
+@pytest.mark.skipif(not _weights_cached("yunet"), reason="YuNet weights not cached locally")
+def test_face_detector_runs_real_yunet_inference() -> None:
+    """Opportunistic (real cached weights, never downloaded in CI): the real
+    ``cv2.FaceDetectorYN`` loads and runs on a real frame without crashing,
+    returning a (possibly empty) list of :class:`Face`. Exercises the actual
+    model-construction + inference path that the weights-free tests above
+    cannot reach."""
+    detector = FaceDetector(score_threshold=0.5)
+    frame = np.random.default_rng(0).integers(0, 256, (240, 320, 3), dtype=np.uint8)
+    faces = detector.detect(frame)
+    assert isinstance(faces, list)
+    for f in faces:
+        assert isinstance(f, Face)
+        assert f.landmarks.shape == (5, 2)
+
+
+@pytest.mark.skipif(not _weights_cached("sface"), reason="SFace weights not cached locally")
+def test_face_recognizer_embeds_a_real_unit_norm_vector() -> None:
+    """Opportunistic (real cached weights, never downloaded in CI): the real
+    ``cv2.FaceRecognizerSF`` aligns a crop from a raw YuNet-shaped detector
+    row and embeds it, returning a genuine L2-normalised 128-d vector --
+    exercises the actual ONNX inference path, not just the gallery/tracking
+    logic that consumes its output."""
+    frame = np.random.default_rng(1).integers(0, 256, (240, 240, 3), dtype=np.uint8)
+    recognizer = FaceRecognizer()
+    vec = recognizer.embed(frame, _face(60, 60, w=80, h=80))
+    assert vec is not None
+    assert vec.shape == (recognizer.emb_dim,)
+    assert vec.dtype == np.float32
+    assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4

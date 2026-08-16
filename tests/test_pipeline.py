@@ -93,8 +93,9 @@ def test_extract_unique_colors(tmp_path) -> None:
     assert colors == {"#FF0000", "#00FF00"}
 
 
-def test_srt2vtt_default_paths(tmp_path) -> None:
-    """srt2vtt writes sibling .vtt/.css with color cue classes and dot timecodes."""
+def test_srt2vtt_default_and_custom_paths(tmp_path) -> None:
+    """srt2vtt writes sibling .vtt/.css by default (color cue classes, dot
+    timecodes), and honors explicit vtt/css paths with per-color ::cue rules."""
     srt = _write_srt(tmp_path / "subs.srt")
     srt2vtt(srt)
     vtt = tmp_path / "subs.vtt"
@@ -102,22 +103,15 @@ def test_srt2vtt_default_paths(tmp_path) -> None:
     assert vtt.exists() and css.exists()
     vtt_text = vtt.read_text(encoding="utf-8")
     assert vtt_text.startswith("WEBVTT")
-    # Cue classes derived from the hex colors.
     assert "<c.ff0000>Hello</c>" in vtt_text
     assert "<c.00ff00>World</c>" in vtt_text
-    # Comma → dot in timecodes.
-    assert "00:00:00.500 --> 00:00:02.000" in vtt_text
+    assert "00:00:00.500 --> 00:00:02.000" in vtt_text  # comma -> dot in timecodes
 
-
-def test_srt2vtt_custom_paths(tmp_path) -> None:
-    """srt2vtt honors explicit vtt/css paths and emits ::cue rules per color."""
-    srt = _write_srt(tmp_path / "subs.srt")
-    vtt = tmp_path / "out.vtt"
-    css = tmp_path / "out.css"
-    srt2vtt(srt, str(vtt), str(css))
-    assert vtt.exists() and css.exists()
-    css_text = css.read_text(encoding="utf-8")
-    # Both colors get a ::cue rule.
+    custom_vtt = tmp_path / "out.vtt"
+    custom_css = tmp_path / "out.css"
+    srt2vtt(srt, str(custom_vtt), str(custom_css))
+    assert custom_vtt.exists() and custom_css.exists()
+    css_text = custom_css.read_text(encoding="utf-8")
     assert "::cue(.ff0000)" in css_text
     assert "::cue(.00ff00)" in css_text
 
@@ -140,18 +134,17 @@ def test_video_duration_matches_black_video(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_black_video_dimensions(tmp_path) -> None:
-    """black_video rounds odd dimensions down to even and produces a silent clip."""
+def test_black_video_dimensions_and_rejects_bad_duration(tmp_path) -> None:
+    """black_video rounds odd dimensions down to even, produces a silent clip
+    of the requested duration, and rejects a non-positive duration outright."""
     out = str(tmp_path / "black.mp4")
-    black_video(0.5, 65, 33, out, frame_rate=15)  # odd dims → rounded down
+    black_video(0.5, 65, 33, out, frame_rate=15)  # odd dims -> rounded down
     assert is_valid_video_file(out)
     d = video_dimensions(out)
     assert d["width"] == 64 and d["height"] == 32
     assert d["has_sound"] is False
+    assert abs(d["duration"] - 0.5) < 0.2
 
-
-def test_black_video_rejects_bad_duration(tmp_path) -> None:
-    """black_video rejects a non-positive duration with an assertion."""
     with pytest.raises(AssertionError):
         black_video(0.0, 64, 64, str(tmp_path / "x.mp4"))
 
@@ -177,8 +170,9 @@ def test_image_loop_to_video_letterbox(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_concat_videos_doubles_duration(tmp_path) -> None:
-    """Concatenating two equal clips yields a clip of roughly double duration."""
+def test_concat_videos_doubles_duration_and_rejects_empty_input(tmp_path) -> None:
+    """Concatenating two equal clips yields a clip of roughly double
+    duration; an empty input list is rejected with an assertion."""
     a = str(tmp_path / "a.mp4")
     b = str(tmp_path / "b.mp4")
     black_video(1.0, 64, 64, a, frame_rate=15)
@@ -188,9 +182,6 @@ def test_concat_videos_doubles_duration(tmp_path) -> None:
     assert is_valid_video_file(out)
     assert abs(video_duration(out) - 2.0) < 0.2
 
-
-def test_concat_videos_rejects_empty(tmp_path) -> None:
-    """concat_videos rejects an empty input list with an assertion."""
     with pytest.raises(AssertionError):
         concat_videos([], str(tmp_path / "x.mp4"))
 

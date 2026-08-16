@@ -34,11 +34,11 @@ def _nfft_for(fps: float) -> tuple[int, int]:
 def test_nfft_covers_stretched_window_no_truncation():
     """A low asd_fps stretches the window past 512 samples; nfft must round up to cover it."""
     frame_len, nfft = _nfft_for(12.0)
-    assert frame_len > 512      # exactly the case that used to truncate + spam warnings
-    assert nfft >= frame_len    # now the whole window is transformed
+    assert frame_len > 512  # exactly the case that used to truncate + spam warnings
+    assert nfft >= frame_len  # now the whole window is transformed
     assert nfft == 1024
     _, nfft_hi = _nfft_for(25.0)
-    assert nfft_hi >= 512       # never drops below the library default at native rate
+    assert nfft_hi >= 512  # never drops below the library default at native rate
 
 
 @pytest.mark.skipif(not LightASD().available(), reason="Light-ASD weights unavailable")

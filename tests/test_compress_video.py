@@ -67,21 +67,19 @@ def test_compress_video_hits_target_size_and_is_valid(short_clip, tmp_path) -> N
     assert size_mb < target_mb * 1.5
 
 
-def test_compress_video_default_hevc_gets_hvc1_tag(short_clip, tmp_path) -> None:
-    """Default vcodec=libx265 output is tagged hvc1 (QuickTime/Apple compatibility)."""
-    out = str(tmp_path / "compressed.mp4")
-    compress_video(short_clip, out, target_size_mb=0.5)
-    stream = _video_stream(out)
-    assert stream["codec_name"] == "hevc"
-    assert stream.get("codec_tag_string") == "hvc1"
+def test_compress_video_codec_tag_is_hvc1_only_for_default_hevc(short_clip, tmp_path) -> None:
+    """Default vcodec=libx265 output is tagged hvc1 (QuickTime/Apple
+    compatibility); vcodec=libx264 encodes H.264 and never applies the
+    HEVC-only hvc1 tag."""
+    hevc_out = str(tmp_path / "hevc.mp4")
+    compress_video(short_clip, hevc_out, target_size_mb=0.5)
+    hevc_stream = _video_stream(hevc_out)
+    assert hevc_stream["codec_name"] == "hevc"
+    assert hevc_stream.get("codec_tag_string") == "hvc1"
 
-
-def test_compress_video_libx264_has_no_hvc1_tag(short_clip, tmp_path) -> None:
-    """vcodec=libx264 encodes H.264 and never applies the HEVC-only hvc1 tag."""
-    out = str(tmp_path / "compressed.mp4")
-    compress_video(short_clip, out, target_size_mb=0.5, vcodec="libx264")
-    stream = _video_stream(out)
-    assert stream["codec_name"] == "h264"
+    h264_out = str(tmp_path / "h264.mp4")
+    compress_video(short_clip, h264_out, target_size_mb=0.5, vcodec="libx264")
+    assert _video_stream(h264_out)["codec_name"] == "h264"
 
 
 def test_compress_video_copy_remuxes_without_reencoding(short_clip, tmp_path) -> None:

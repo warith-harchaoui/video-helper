@@ -25,18 +25,12 @@ from video_helper import is_valid_video_file, video_dimensions
 # ---------------------------------------------------------------------------
 
 
-def test_is_valid_video_file_trusts_https_url() -> None:
-    """An https URL is trusted (would need bandwidth to verify otherwise)."""
+def test_is_valid_video_file_trusts_any_http_or_https_url() -> None:
+    """Any http(s) URL is trusted (would need bandwidth to verify otherwise)
+    -- including yt-dlp-resolved URLs with unusual extensions (.m3u8/.mpd)
+    or no extension at all."""
     assert is_valid_video_file("https://example.com/sample.mp4") is True
-
-
-def test_is_valid_video_file_trusts_http_url() -> None:
-    """An http URL is trusted too — same rationale."""
     assert is_valid_video_file("http://example.com/sample.mp4") is True
-
-
-def test_is_valid_video_file_trusts_url_with_unusual_extension() -> None:
-    """yt-dlp-resolved URLs often end in ``.m3u8`` / ``.mpd`` or no ext at all."""
     assert is_valid_video_file("https://manifest.example.com/live.m3u8") is True
     assert is_valid_video_file("https://stream.example.com/path?token=xyz") is True
 
