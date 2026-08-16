@@ -23,13 +23,24 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import os_helper as osh
 import pytest
 
-from video_helper.faces import mouth_roi, track_faces
+from video_helper import black_video, is_valid_video_file, video_duration
+from video_helper.faces import (
+    active_speaker_map,
+    build_asd_digest,
+    load_manifest,
+    mouth_roi,
+    track_faces,
+)
 from video_helper.faces.detect import Face, FaceDetector
+from video_helper.faces.digest import source_to_digest_window
 from video_helper.faces.models import REGISTRY, ModelSpec, model_dir
 from video_helper.faces.recognize import FaceRecognizer
 from video_helper.faces.sampling import _candidate_windows, _FaceGallery, _greedy_assign
+
+osh.verbosity(0)
 
 
 def _weights_cached(name: str) -> bool:
@@ -142,3 +153,63 @@ def test_face_recognizer_embeds_a_real_unit_norm_vector() -> None:
     assert vec.shape == (recognizer.emb_dim,)
     assert vec.dtype == np.float32
     assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4
+
+
+def test_build_asd_digest_end_to_end(tmp_path) -> None:
+    """Real ffmpeg pipeline, no model weights needed: a 20s clip with a close
+    pair of anchors (fused) plus a far one yields several non-overlapping
+    digest windows, a valid concatenated video, and a manifest whose two
+    timelines (digest <-> source) invert each other via ``to_source_time``/
+    ``source_to_digest_window`` -- the bookkeeping every ASD consumer relies
+    on to map a digest-time result back onto the original recording."""
+    src = str(tmp_path / "source.mp4")
+    black_video(20.0, 64, 64, src, frame_rate=10)
+    out = str(tmp_path / "digest.mp4")
+
+    segments = build_asd_digest(src, [3.0, 3.5, 12.0], out, window=2.0, merge_gap=1.0)
+
+    assert len(segments) >= 2  # the close pair fuses; the far anchor stays separate
+    assert is_valid_video_file(out)
+    digest_dur = video_duration(out)
+    expected = sum(s.digest_end - s.digest_start for s in segments)
+    assert abs(digest_dur - expected) < 1.0  # final re-encode preserves total length
+
+    manifest_path = f"{out}.manifest.json"
+    assert os.path.isfile(manifest_path)
+    reloaded = load_manifest(manifest_path)
+    assert [(s.digest_start, s.digest_end) for s in reloaded] == [
+        (s.digest_start, s.digest_end) for s in segments
+    ]
+
+    for seg in segments:
+        # digest -> source -> digest round-trips through the segment's own offset.
+        # Cuts snap to the nearest frame boundary (0.1s at this clip's 10fps), so
+        # allow slack wider than one frame rather than asserting exact equality.
+        assert seg.to_source_time(seg.digest_start) == pytest.approx(seg.source_start, abs=0.2)
+        assert seg.to_source_time(seg.digest_end) == pytest.approx(seg.source_end, abs=0.2)
+        mapped = source_to_digest_window(segments, seg.source_start, seg.source_end)
+        assert mapped == pytest.approx((seg.digest_start, seg.digest_end), abs=0.2)
+
+    # A span outside every window (the 20s tail, far past the last anchor's
+    # window) was never anchor-driven into the digest -- callers must fall
+    # back to the original source for it.
+    assert source_to_digest_window(segments, 19.5, 19.9) is None
+
+
+@pytest.mark.skipif(not _weights_cached("yunet"), reason="YuNet weights not cached locally")
+def test_active_speaker_map_returns_empty_without_any_face() -> None:
+    """Opportunistic (real cached weights, never downloaded in CI): a plain
+    black clip has no face for YuNet to find, so the real census (real
+    decode + real detection, no mocking) comes back empty and the whole
+    harness degrades to 'no face anchoring possible' rather than crashing --
+    exercising the orchestration function's setup + early-exit path that no
+    other test reaches (engine/detector/recognizer construction, shot
+    detection, the census loop itself)."""
+    with osh.temporary_folder(prefix="asd-map-test") as tmp_dir:
+        src = osh.join(tmp_dir, "source.mp4")
+        black_video(6.0, 64, 64, src, frame_rate=10)
+        turns = [{"t0": 0.0, "t1": 3.0, "spk": 0}, {"t0": 3.0, "t1": 6.0, "spk": 1}]
+        results = active_speaker_map(
+            src, None, turns, asd_engine="lip-motion", clip_len=1.5, clip_budget=4
+        )
+    assert results == []
