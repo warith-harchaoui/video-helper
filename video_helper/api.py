@@ -509,14 +509,19 @@ def concat(
         raise HTTPException(status_code=400, detail="concat needs at least 2 files")
     tmp = _new_tmpdir()
     with _cleanup_on_error(tmp):
-        # Spool inputs in order — FastAPI preserves multipart part ordering.
-        srcs = [str(_spool(f, tmp, suffix_hint=Path(f.filename or "").suffix)) for f in files]
-        # Two files spooled with the same "upload" prefix would collide; give
-        # each spooled file a unique name derived from its position.
-        for i, s in enumerate(srcs):
-            renamed = tmp / f"input_{i:03d}{Path(s).suffix}"
-            Path(s).rename(renamed)
-            srcs[i] = str(renamed)
+        # Spool each upload straight to a position-derived unique name — FastAPI
+        # preserves multipart part ordering. _spool() always writes to the same
+        # fixed "upload<ext>" path, so calling it once per file here (then
+        # renaming) would let each later file clobber the earlier ones on disk
+        # before the rename ever runs; write directly instead, like /overlay and
+        # /mux-audio do for their second upload.
+        srcs: list[str] = []
+        for i, f in enumerate(files):
+            ext = Path(f.filename or "").suffix or ".mp4"
+            dest = tmp / f"input_{i:03d}{ext}"
+            with dest.open("wb") as fp:
+                shutil.copyfileobj(f.file, fp)
+            srcs.append(str(dest))
         dst = tmp / f"concat.{output_format.lstrip('.')}"
         concat_videos(
             input_videos=srcs,
