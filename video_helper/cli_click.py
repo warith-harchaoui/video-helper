@@ -13,7 +13,7 @@ Design notes
 - Subcommands mirror ``video-helper`` (the argparse twin) so both CLIs
   can be introspected identically by higher layers (FastAPI).
 - Flags reuse the argparse names (``--input`` / ``--output`` / …) rather
-  than the more idiomatic click positional style — consistency across
+  than the more idiomatic click positional style: consistency across
   the two CLIs beats micro-idiomaticity here.
 - A library exception is caught by ``main()`` (the console-script entry
   point) and printed as one clean ``Error: ...`` line + exit 1, instead of

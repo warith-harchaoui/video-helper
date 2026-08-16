@@ -8,7 +8,7 @@ Per-frame face detection with 5-point landmarks via OpenCV's YuNet
 The 5 landmarks (right eye, left eye, nose tip, right mouth corner, left mouth
 corner) are what the recognition aligner and the ASD mouth-ROI both need, so the
 raw detector row is carried through on each :class:`Face` for downstream reuse
-(``cv2.FaceRecognizerSF.alignCrop`` consumes it directly — no re-derivation).
+(``cv2.FaceRecognizerSF.alignCrop`` consumes it directly, no re-derivation).
 """
 
 from __future__ import annotations

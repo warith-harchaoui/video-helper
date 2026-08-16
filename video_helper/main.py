@@ -13,7 +13,7 @@ Usage Example
 >>> from video_helper.main import extract_frames, video_dimensions
 >>> info = video_dimensions("clip.mp4")
 >>> for frame in extract_frames("clip.mp4", frame_step=5):
-...     # frame.shape == (H, W, 3) — BGR uint8
+...     # frame.shape == (H, W, 3), BGR uint8
 ...     pass
 
 The public surface is re-exported from ``video_helper`` (the package

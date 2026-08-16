@@ -2,19 +2,19 @@
 video_helper.faces.sampling
 ============================
 
-The **smart-sampling harness** — the piece that makes Active-Speaker Detection
+The **smart-sampling harness**: the piece that makes Active-Speaker Detection
 affordable on a full recording.
 
 Heavy ASD is never run over the whole video. Instead:
 
-1. **Shots** — PySceneDetect segments the video into shots (cheap; skipped
+1. **Shots**: PySceneDetect segments the video into shots (cheap; skipped
    gracefully if scenedetect is absent → one shot).
-2. **Face census** — a cheap low-fps YuNet-only pass counts faces and records
+2. **Face census**: a cheap low-fps YuNet-only pass counts faces and records
    *where* (which time regions) faces appear. No ASD here.
-3. **Candidate windows** — for each audio speaker cluster, short windows are
+3. **Candidate windows**: for each audio speaker cluster, short windows are
    proposed where that cluster speaks **and** a face is on screen, spread across
    distinct shots for diversity.
-4. **Iterative ASD** — heavy ASD runs only on a small batch of windows; per-face
+4. **Iterative ASD**: heavy ASD runs only on a small batch of windows; per-face
    speaking scores vote each cluster onto a **global face identity** (tracks are
    stitched across windows/shots by face embedding, which also *counts the faces*
    along the video). After each round the assignment is checked for **certainty**

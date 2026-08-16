@@ -2,14 +2,16 @@
 video_helper.faces.track
 =========================
 
-Lightweight multi-face tracking: greedy IoU association (SORT/ByteTrack-family,
-pure NumPy, no model weights). Meeting / talking-head video moves slowly, so IoU
-linking with a short "coast" through missed frames is enough to build coherent
-face **tracks** — the unit ASD and recognition actually operate on.
+Lightweight multi-face tracking: greedy association by intersection-over-union
+(IoU, how much two boxes overlap divided by how much space they cover together,
+1.0 for a perfect match, 0.0 for no overlap at all), in the style of SORT/
+ByteTrack, pure NumPy, no model weights. Meeting / talking-head video moves
+slowly, so IoU linking with a short "coast" through missed frames is enough to
+build coherent face **tracks**: the unit ASD and recognition actually operate on.
 
 Face-embedding-based *stitching* of tracks that a person split by leaving and
 re-entering frame is handled one level up (in the resolver, where embeddings are
-already computed) — the face analogue of voiceprint re-identification.
+already computed): the face analogue of voiceprint re-identification.
 """
 
 from __future__ import annotations

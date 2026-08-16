@@ -6,10 +6,18 @@ Optional dense-optical-flow generator that wraps any BGR frame stream.
 
 Module summary
 --------------
+Optical flow estimates, for every pixel, how far and in which direction that
+point moved between two consecutive frames: the output is a 2D vector field,
+one ``(vx, vy)`` pair per pixel, ``vx`` the sideways motion and ``vy`` the
+vertical motion, both in pixels. A tracked feature or a whole moving object
+is not needed first: a patch of texture sliding right shows up directly as
+positive ``vx`` on every pixel inside it, computed straight from pixel
+intensities in the two frames.
+
 Exposes a single public generator, :func:`iter_frame_optical_flow`, which takes any
-``Iterator[numpy.ndarray]`` of ``(H, W, 3)`` BGR uint8 frames — the same
+``Iterator[numpy.ndarray]`` of ``(H, W, 3)`` BGR uint8 frames, the same
 contract already produced by :func:`video_helper.extract_frames` and by
-``capture_helper.iter_camera_frames`` (live camera) — and re-yields each frame
+``capture_helper.iter_camera_frames`` (live camera), and re-yields each frame
 with 2 extra channels: dense optical flow ``vx``/``vy`` relative to the
 previous frame. Taking a generic frame iterator rather than a video path is
 the deliberate composability point: this module works identically for a video
@@ -20,12 +28,12 @@ layouts, picked with ``grayscale``: ``(H, W, 5)`` BGR + flow (default) or
 Three interchangeable backends, from zero-dependency classical to optional
 deep learning:
 
-- ``method="dis"`` (default) — ``cv2.DISOpticalFlow``, the standard
+- ``method="dis"`` (default): ``cv2.DISOpticalFlow``, the standard
   best CPU real-time speed/quality trade-off. No new dependency:
   ``opencv-python`` is already a core dependency of video-helper.
-- ``method="farneback"`` — ``cv2.calcOpticalFlowFarneback``. Also core cv2,
+- ``method="farneback"``: ``cv2.calcOpticalFlowFarneback``. Also core cv2,
   no new dependency. Denser/smoother field, a bit slower than DIS.
-- ``method="raft"`` — ``torchvision.models.optical_flow.{raft_small,raft_large}``,
+- ``method="raft"``: ``torchvision.models.optical_flow.{raft_small,raft_large}``,
   a real deep-learning optical-flow network. Needs the ``[flow]`` extra
   (torch + torchvision). Quality-first, GPU-recommended; not expected to be
   real-time on CPU.

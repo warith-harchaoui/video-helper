@@ -22,7 +22,7 @@ Usage Example
 -------------
 >>> import video_helper as vh
 >>> for frame in vh.extract_frames("clip.mp4", frame_interval=1.0):
-...     # frame.shape == (H, W, 3) — BGR uint8 (OpenCV convention)
+...     # frame.shape == (H, W, 3), BGR uint8 (OpenCV convention)
 ...     do_something(frame)
 
 See ``EXAMPLES.md`` at the repo root for the full cookbook (sparse

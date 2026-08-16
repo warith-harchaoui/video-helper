@@ -7,10 +7,10 @@ concurrent audio, score *which* face is producing the speech.
 
 Two interchangeable engines behind one interface:
 
-- :class:`LipMotionASD` — a zero-weight proxy. Scores the **temporal variance of
+- :class:`LipMotionASD`: a zero-weight proxy. Scores the **temporal variance of
   mouth openness** per track, gated by audio activity in the window. Always
   available, fully offline, no download. The graceful-degradation default.
-- :class:`LightASD` — the accurate audio-visual cross-attention model (Light-ASD)
+- :class:`LightASD`: the accurate audio-visual cross-attention model (Light-ASD)
   run through PyTorch. Downloaded on first use from the user's mirror; if the
   weights are not hosted yet, :meth:`available` is False and the caller falls back
   to the proxy.

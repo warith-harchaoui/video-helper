@@ -4,7 +4,7 @@ Video Helper — minimal single-page GUI ("video bench").
 This module holds nothing but the self-contained HTML document served by the
 FastAPI app at ``GET /gui`` (see :mod:`video_helper.api`). It is deliberately
 build-step-free: one string of HTML + Tailwind (via CDN) + vanilla ES-module
-JavaScript. There is no bundler, no framework, no npm — the whole page is a
+JavaScript. There is no bundler, no framework, no npm: the whole page is a
 static asset the API returns verbatim.
 
 Why a separate module
@@ -21,7 +21,7 @@ What the page does
   mux-audio / burn-subs / srt2vtt / extract-frames / extract-flow).
 - Reveal only the fields (and any extra file inputs) that operation needs.
 - POST a ``multipart/form-data`` request to the SAME FastAPI endpoints the
-  CLI surface uses — the GUI adds zero new server logic.
+  CLI surface uses: the GUI adds zero new server logic.
 - Preview the input and the output side by side: a ``<video>`` player for
   clips, an ``<img>`` for the odd still, a JSON dump for the read-only
   probes, and a download link for everything (single file, or a ``.zip`` for

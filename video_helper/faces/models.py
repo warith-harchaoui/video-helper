@@ -10,7 +10,7 @@ Sourcing policy (sovereign, HuggingFace-free at runtime)
 Weights are fetched **on first use** and cached on disk. The registry resolves
 each model in this order:
 
-1. **The user's own mirror** — ``AI_HELPERS_MODEL_BASE_URL`` (default
+1. **The user's own mirror**: ``AI_HELPERS_MODEL_BASE_URL`` (default
    ``https://harchaoui.org/warith/ai-helpers/models/``). This is the preferred
    path once the mirror is seeded (see ``scripts/seed_model_mirror.py``).
 2. **A permissive, HuggingFace-free upstream** (OpenCV Zoo / InsightFace GitHub

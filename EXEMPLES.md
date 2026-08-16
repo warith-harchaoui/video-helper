@@ -229,8 +229,8 @@ for frame in vh.extract_frames(
     process(frame)
 ```
 
-Le backend VidGear journalise un avertissement et ignore `http_headers`
-— OpenCV ne les expose pas proprement. Utilisez `backend="pyav"`
+Le backend VidGear journalise un avertissement et ignore `http_headers` :
+OpenCV ne les expose pas proprement. Utilisez `backend="pyav"`
 (préféré) ou `"ffmpeg-pipe"` pour les URL protégées par authentification.
 
 ### Taille de sortie exacte avec padding préservant le ratio
@@ -342,9 +342,14 @@ dernières mesures. Le chemin par lots actuel reste déjà un gain de
 
 ### Flux optique
 
+Le flux optique estime, pour chaque pixel, à quelle distance et dans quelle
+direction ce point s'est déplacé entre deux frames consécutives : un champ
+de vecteurs 2D, une paire `(vx, vy)` par pixel, `vx` pour le déplacement
+horizontal et `vy` pour le vertical, tous deux en pixels.
+
 `iter_frame_optical_flow` enveloppe **n'importe quel** itérateur de frames
-`(H, W, 3)` BGR uint8 — la sortie d'`extract_frames`, ou une source live
-partageant le même contrat comme `capture_helper.iter_camera_frames` — et
+`(H, W, 3)` BGR uint8 (la sortie d'`extract_frames`, ou une source live
+partageant le même contrat comme `capture_helper.iter_camera_frames`) et
 réémet des tableaux `(H, W, 5)` float32 : la frame (canaux 0-2) plus le flux
 dense `vx`/`vy` (canaux 3-4) par rapport à la frame précédente. Cette
 composabilité (l'entrée est un itérateur générique, pas un chemin vidéo) est
@@ -358,16 +363,16 @@ for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
     vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # déplacement signé en px
 
 # Se compose avec une caméra live de la même façon (capture-helper, pas
-# video-helper, possède la boucle caméra — aucune dépendance opencv/torch ajoutée là-bas).
+# video-helper, possède la boucle caméra : aucune dépendance opencv/torch ajoutée là-bas).
 import capture_helper as ch
 for flow_frame in vh.iter_frame_optical_flow(ch.iter_camera_frames(), method="dis"):
     ...
 
-# Flux optique par deep learning (RAFT via torchvision) — nécessite `pip install "video-helper[flow]"`.
+# Flux optique par deep learning (RAFT via torchvision) : nécessite `pip install "video-helper[flow]"`.
 for flow_frame in vh.iter_frame_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
     ...
 
-# grayscale=True : (H, W, 3) au lieu de (H, W, 5) — intensité + flux uniquement,
+# grayscale=True : (H, W, 3) au lieu de (H, W, 5), intensité + flux uniquement,
 # une représentation plus légère centrée sur le mouvement (ex. alimenter un modèle flux-seul).
 for flow_frame in vh.iter_frame_optical_flow(frames, method="dis", grayscale=True):
     gray = flow_frame[..., 0].astype("uint8")
@@ -384,7 +389,7 @@ video-helper).
 
 Pour le cas courant « donne-moi juste le flux pour ce fichier vidéo »,
 `extract_optical_flow` enveloppe les deux étapes précédentes en un seul
-appel — pas de plomberie manuelle d'itérateur de frames :
+appel, sans plomberie manuelle d'itérateur de frames :
 
 ```python
 # Le type de sortie est déduit de l'extension : tout sauf '.npy' -> vidéo
@@ -402,7 +407,7 @@ curl -F 'file=@clip.mp4' -F 'method=dis' -o clip-flow.mp4 http://localhost:8000/
 # MCP : publié automatiquement comme outil depuis la même route FastAPI, sans configuration supplémentaire.
 ```
 
-**Redimensionner un flux calculé** — `output_width`/`output_height` (les deux
+**Redimensionner un flux calculé :** `output_width`/`output_height` (les deux
 requis ensemble) passent par `resize_flow`, basé sur les ondelettes plutôt
 qu'une simple interpolation bilinéaire/bicubique, pour ne pas étaler une
 frontière de mouvement lors du redimensionnement, et rééchelonne correctement
@@ -410,7 +415,7 @@ la *magnitude* du flux par le même facteur que le redimensionnement spatial
 (nécessite `pip install "video-helper[flow]"` pour `PyWavelets`) :
 
 ```python
-# Réduit la sortie de flux pour le stockage — calculé en pleine qualité, puis réduit.
+# Réduit la sortie de flux pour le stockage : calculé en pleine qualité, puis réduit.
 vh.extract_optical_flow(
     "clip.mp4", "clip-flow.npy", method="dis", output_width=320, output_height=180,
 )

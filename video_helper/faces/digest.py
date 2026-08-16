@@ -2,8 +2,8 @@
 video_helper.faces.digest
 ==========================
 
-Build a short, dense **digest video** — a handful of small clips lifted from a long
-recording and concatenated end-to-end — so a heavy per-frame model (Active Speaker
+Build a short, dense **digest video**: a handful of small clips lifted from a long
+recording and concatenated end-to-end, so a heavy per-frame model (Active Speaker
 Detection, or anything else that wants "the interesting moments" rather than the
 whole file) runs once on a compact file instead of many separate seeks into the
 original.
@@ -21,12 +21,12 @@ Two problems this solves at once:
    :func:`video_helper.main.extract_frames`'s ``_extract_via_pyav`` notes). Building
    the digest is still several seeks into the original, but every later stage (ASD,
    face tracking, re-scoring, human review) reads only the small, uniformly-encoded
-   digest file — one open, no further seeking into the fragile long original.
+   digest file: one open, no further seeking into the fragile long original.
 
 Anchor-driven window selection
 -------------------------------
 The caller supplies ``anchor_times``: timestamps (seconds) where something
-diarization-worthy happens — typically the union of raw (unnamed) diarization
+diarization-worthy happens, typically the union of raw (unnamed) diarization
 speaker-change instants and shot-change instants, merged and sorted by the caller.
 This module is deliberately agnostic about *where* anchors come from: it knows
 nothing about diarization or scene detection, only about timestamps.
@@ -35,12 +35,12 @@ From the anchors, two complementary window families are built around each fused
 anchor ``F[i]`` (anchors closer than ``merge_gap`` seconds collapse to their
 midpoint first):
 
-- **Boundary windows** ``[F[i] - window, F[i] + window]`` — centred *on* the
+- **Boundary windows** ``[F[i] - window, F[i] + window]``: centred *on* the
   anchor, where a speaker or shot change is happening and the speaker/face
   identity most needs (re-)confirming.
 - **Mid-segment windows** ``[mid - window, mid + window]``, where ``mid`` is the
   midpoint between two consecutive fused anchors (and, at the two ends of the
-  timeline, between the start/end of the video and the nearest anchor) — a calm,
+  timeline, between the start/end of the video and the nearest anchor): a calm,
   representative sample of an already-established segment, away from any cut.
 
 Overlapping windows are merged (min start, max end) before extraction, so dense
@@ -54,7 +54,7 @@ both its position **in the digest** (``digest_start``/``digest_end``) and its
 corresponding position **in the original source video**
 (``source_start``/``source_end``). Any consumer that runs a per-frame model on the
 digest and gets a result at digest-time ``t`` maps it back to the original
-recording's timeline via the manifest — this is the only way the two timelines are
+recording's timeline via the manifest: this is the only way the two timelines are
 ever reconciled, so treat it as required bookkeeping, not an optional extra.
 
 Splice-boundary caveat for consumers
@@ -62,7 +62,7 @@ Splice-boundary caveat for consumers
 The digest is a concatenation of clips from *different, non-contiguous* parts of
 the source video. Anything that tracks continuity frame-to-frame (face tracking by
 IoU, an ASD model's temporal context) **must be reset at every segment boundary**
-in the manifest — a face that happens to land in a similar position right after a
+in the manifest: a face that happens to land in a similar position right after a
 splice is coincidence, not continuity. This module does not run any such tracking
 itself, so it cannot enforce the reset; it only guarantees the manifest gives every
 splice point precisely, in ``digest_start`` order.

@@ -9,7 +9,7 @@ hard-coded constant.
 
 Alignment is delegated to ``cv2.FaceRecognizerSF.alignCrop``, which consumes the
 raw YuNet detector row (5 landmarks) to similarity-transform each face to the
-canonical 112×112 template — so detection and recognition share one landmark
+canonical 112×112 template, so detection and recognition share one landmark
 source and there is no second alignment implementation to keep in sync.
 """
 

@@ -12,7 +12,7 @@ consumed by other services. Kept intentionally minimal:
   (``/extract-frames`` → PNG frames zipped) so the client gets one download
   per call.
 - ``BackgroundTasks`` cleans temp files after the response has been
-  streamed — no leftover garbage on disk after a request.
+  streamed: no leftover garbage on disk after a request.
 
 Install the extra to get the runtime dependencies::
 

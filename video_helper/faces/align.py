@@ -5,7 +5,7 @@ video_helper.faces.align
 Mouth-ROI extraction for the active-speaker (lip) stream.
 
 Recognition alignment (the canonical 112×112 face crop) is handled inside
-``cv2.FaceRecognizerSF.alignCrop`` — see :mod:`video_helper.faces.recognize`.
+``cv2.FaceRecognizerSF.alignCrop``: see :mod:`video_helper.faces.recognize`.
 What ASD additionally needs is a **stable crop centred on the lips**, derived
 here from the two mouth-corner landmarks so the articulatory signal dominates.
 """
