@@ -136,6 +136,16 @@ def test_compress_route_exposes_expected_params(client) -> None:
     assert props["min_video_bitrate_kbps"]["default"] == 200
 
 
+def test_compress_route_rejects_bad_vcodec(client) -> None:
+    """An unsupported ``vcodec`` should 400, not a raw 500 traceback from ffmpeg."""
+    r = client.post(
+        "/compress",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+        data={"vcodec": "bogus"},
+    )
+    assert r.status_code == 400
+
+
 def test_extract_flow_route_exposes_expected_params(client) -> None:
     """``/extract-flow`` request-body schema matches extract_optical_flow()'s defaults."""
     r = client.get("/openapi.json")

@@ -233,6 +233,22 @@ def test_click_compress_defaults_match_library() -> None:
     assert defaults["no_overwrite"] is False
 
 
+def test_argparse_compress_vcodec_accepts_copy() -> None:
+    """The argparse ``compress`` --vcodec choices include the 'copy' remux escape hatch."""
+    from video_helper.cli_argparse import build_parser
+
+    ns = build_parser().parse_args(["compress", "--input", "in.mp4", "--vcodec", "copy"])
+    assert ns.vcodec == "copy"
+
+
+def test_click_compress_vcodec_choices_include_copy() -> None:
+    """The click ``compress`` --vcodec choices include the 'copy' remux escape hatch."""
+    from video_helper.cli_click import compress
+
+    vcodec_param = next(p for p in compress.params if p.name == "vcodec")
+    assert vcodec_param.type.choices == ("libx265", "libx264", "copy")
+
+
 def test_argparse_extract_flow_parses_all_flags() -> None:
     """The argparse ``extract-flow`` subparser parses every documented flag."""
     from video_helper.cli_argparse import build_parser

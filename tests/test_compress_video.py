@@ -84,6 +84,16 @@ def test_compress_video_libx264_has_no_hvc1_tag(short_clip, tmp_path) -> None:
     assert stream["codec_name"] == "h264"
 
 
+def test_compress_video_copy_remuxes_without_reencoding(short_clip, tmp_path) -> None:
+    """vcodec='copy' remuxes the source codec as-is instead of re-encoding."""
+    src_stream = _video_stream(short_clip)
+    out = str(tmp_path / "remuxed.mp4")
+    result = compress_video(short_clip, out, vcodec="copy")
+    assert result == out
+    assert is_valid_video_file(out)
+    assert _video_stream(out)["codec_name"] == src_stream["codec_name"]
+
+
 def test_compress_video_output_defaults_to_compressed_suffix(short_clip, tmp_path) -> None:
     """Omitting output_video writes ``<input>-compressed.mp4`` next to the source."""
     src_copy = tmp_path / "clip.mp4"

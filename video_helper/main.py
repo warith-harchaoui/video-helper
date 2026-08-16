@@ -1935,7 +1935,9 @@ def compress_video(
         Video codec (default ``"libx265"`` — HEVC compresses noticeably
         better than H.264 at the same target size). Pass ``"libx264"`` for
         maximum legacy-player compatibility at a larger file for the same
-        quality; the ``hvc1`` tag is only applied when encoding HEVC.
+        quality; the ``hvc1`` tag is only applied when encoding HEVC. Pass
+        ``"copy"`` to skip re-encoding entirely (plain remux, no bitrate
+        solving) when the source is already an acceptable size.
     min_video_bitrate_kbps : int, optional
         Floor on the solved video bitrate (default 200) — guards against a
         near-zero bitrate when a long source is squeezed into a small target

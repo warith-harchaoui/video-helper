@@ -244,8 +244,9 @@ def black(duration_: float, width: int, height: int, output: str, frame_rate: in
 @click.option(
     "--vcodec",
     default="libx265",
-    type=click.Choice(["libx265", "libx264"]),
+    type=click.Choice(["libx265", "libx264", "copy"]),
     show_default=True,
+    help="Video codec, or 'copy' to remux without re-encoding.",
 )
 @click.option(
     "--min-video-bitrate-kbps",

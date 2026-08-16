@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/seed_model_mirror.py` that incorrectly claimed the ASD engine ran
   "through ONNX Runtime" (it never did) and that the seeding script should
   produce a `light_asd.onnx` file (the runtime looks for `light_asd.pth`).
+- **`compress` CLI/API surfaces**: `compress_video`'s `vcodec="copy"` remux
+  escape hatch (no re-encode) was a real, working library feature but
+  unreachable from either CLI — both `--vcodec` choices lists only allowed
+  `libx265`/`libx264`. The FastAPI `/compress` route accepted `copy` but
+  silently accepted *any* string, forwarding invalid values straight to
+  ffmpeg instead of a clean 400. Added `"copy"` to both CLI choice lists,
+  added the same 400 validation `/extract-flow` already had for
+  `output_format`, and documented `vcodec="copy"` in `compress_video`'s
+  docstring and the README/LISEZMOI reference tables.
 
 ## [2.3.1] - 2026-08-15
 

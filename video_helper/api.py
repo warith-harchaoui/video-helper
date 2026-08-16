@@ -394,6 +394,11 @@ def compress(
     min_video_bitrate_kbps: int = Form(200),
 ) -> FileResponse:
     """Two-pass compress the uploaded video to a target file size (HEVC by default)."""
+    if vcodec not in ("libx265", "libx264", "copy"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"vcodec must be 'libx265', 'libx264', or 'copy', got {vcodec!r}",
+        )
     tmp = _new_tmpdir()
     with _cleanup_on_error(tmp):
         src = _spool(file, tmp)

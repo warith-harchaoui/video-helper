@@ -697,8 +697,8 @@ def _add_compress(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--vcodec",
         default="libx265",
-        choices=["libx265", "libx264"],
-        help="Video codec (default libx265/HEVC).",
+        choices=["libx265", "libx264", "copy"],
+        help="Video codec, or 'copy' to remux without re-encoding (default libx265/HEVC).",
     )
     p.add_argument(
         "--min-video-bitrate-kbps",
