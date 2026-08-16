@@ -21,12 +21,13 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 from __future__ import annotations
 
 import os
+import subprocess
 
 import numpy as np
 import os_helper as osh
 import pytest
 
-from video_helper import black_video, is_valid_video_file, video_duration
+from video_helper import black_video, extract_video_chunk, is_valid_video_file, video_duration
 from video_helper.faces import (
     active_speaker_map,
     build_asd_digest,
@@ -49,6 +50,28 @@ def _weights_cached(name: str) -> bool:
     docstring)."""
     spec = REGISTRY[name]
     return os.path.isfile(os.path.join(model_dir(), spec.filename))
+
+
+# A real, single-speaker talking-head recording, git-ignored (see .gitignore's
+# blanket `*.mp4` rule) and never committed -- it shows a real identifiable
+# person, so it stays local-only by deliberate choice. Every test using it is
+# additionally gated on `os.path.isfile`, so its absence (any machine other
+# than the one it was recorded on) is just another opportunistic skip, same as
+# the weights-cache gates above.
+_FACE_FIXTURE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "assets", "face_fixture.mp4"
+)
+
+
+def _load_audio_16k(path: str, start: float, duration: float) -> np.ndarray:
+    """Decode a mono 16kHz float32 PCM slice via ffmpeg -- the sample rate and
+    layout :func:`~video_helper.faces.sampling.active_speaker_map` expects."""
+    cmd = [
+        "ffmpeg", "-v", "quiet", "-ss", str(start), "-t", str(duration),
+        "-i", path, "-ac", "1", "-ar", "16000", "-f", "f32le", "-",
+    ]  # fmt: skip
+    raw = subprocess.run(cmd, stdout=subprocess.PIPE, check=True).stdout
+    return np.frombuffer(raw, dtype=np.float32)
 
 
 def _face(x: float, y: float, w: float = 40, h: float = 40, score: float = 0.9) -> Face:
@@ -213,3 +236,54 @@ def test_active_speaker_map_returns_empty_without_any_face() -> None:
             src, None, turns, asd_engine="lip-motion", clip_len=1.5, clip_budget=4
         )
     assert results == []
+
+
+@pytest.mark.skipif(not os.path.isfile(_FACE_FIXTURE), reason="local face_fixture.mp4 not present")
+@pytest.mark.skipif(not _weights_cached("yunet"), reason="YuNet weights not cached locally")
+@pytest.mark.skipif(not _weights_cached("sface"), reason="SFace weights not cached locally")
+@pytest.mark.skipif(not _weights_cached("light-asd"), reason="Light-ASD weights not cached locally")
+def test_active_speaker_map_drives_the_full_iterative_asd_loop() -> None:
+    """Opportunistic (real cached weights + a real local-only face recording,
+    never available in CI): a real single-speaker clip, split into two
+    *synthetic* diarization clusters that both actually belong to the one
+    on-screen face, drives every stage of the orchestrator that the
+    weights-free/no-face tests above cannot reach -- real shot detection,
+    real census, real digest build, several full ASD rounds (real Light-ASD
+    scoring against real audio, real YuNet detection, real SFace embedding,
+    real greedy vote assignment), the last-chance rescue pass with its
+    no-progress give-up guard, and both terminal branches: one cluster
+    accumulates enough vote margin/coverage to be face-anchored (the
+    fully-successful path no other test reaches), the other never does
+    (voice-only anchoring) because it was never truly a distinct speaker."""
+    with osh.temporary_folder(prefix="asd-map-real") as tmp_dir:
+        clip = osh.join(tmp_dir, "clip.mp4")
+        extract_video_chunk(_FACE_FIXTURE, 0.0, 90.0, clip)
+        audio = _load_audio_16k(clip, 0.0, 90.0)
+        turns = [
+            {"t0": 0.0, "t1": 30.0, "spk": 0},
+            {"t0": 30.0, "t1": 60.0, "spk": 1},
+            {"t0": 60.0, "t1": 90.0, "spk": 0},
+        ]
+        results = active_speaker_map(
+            clip,
+            audio,
+            turns,
+            asd_engine="auto",
+            clip_len=2.0,
+            asd_fps=6.0,
+            census_period=2.0,
+            clip_budget=8,
+            per_round=4,
+            asd_tau=0.25,
+            coverage_floor=0.15,
+            margin_tau=0.1,
+        )
+
+    assert 0 < len(results) < 2  # exactly one cluster clears the vote/coverage floor
+    anchored = results[0]
+    assert anchored.speaker in (0, 1)
+    assert anchored.coverage > 0.9  # the real speaker is on-screen almost the whole clip
+    assert anchored.margin > 0.5  # a clean win, not a coin-flip vote
+    assert len(anchored.crops) > 0
+    for _frame, face in anchored.crops:
+        assert face.landmarks.shape == (5, 2)
