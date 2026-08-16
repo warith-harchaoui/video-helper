@@ -177,6 +177,36 @@ def test_extract_flow_route_rejects_bad_output_format(client) -> None:
     assert r.status_code == 400
 
 
+def test_extract_flow_route_rejects_bad_method(client) -> None:
+    """An unsupported ``method`` should 400 with a clean message, not an opaque 502."""
+    r = client.post(
+        "/extract-flow",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+        data={"method": "bogus"},
+    )
+    assert r.status_code == 400
+
+
+def test_extract_flow_route_rejects_bad_dis_preset(client) -> None:
+    """An unsupported ``dis_preset`` should 400 with a clean message."""
+    r = client.post(
+        "/extract-flow",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+        data={"dis_preset": "bogus"},
+    )
+    assert r.status_code == 400
+
+
+def test_extract_flow_route_rejects_bad_raft_variant(client) -> None:
+    """An unsupported ``raft_variant`` should 400 with a clean message."""
+    r = client.post(
+        "/extract-flow",
+        files={"file": ("t.mp4", b"not-a-real-video", "video/mp4")},
+        data={"raft_variant": "bogus"},
+    )
+    assert r.status_code == 400
+
+
 def test_status_for_classifies_client_vs_upstream_errors() -> None:
     """``AssertionError``/``ValueError`` -> 400 (bad input); anything else -> 502."""
     from video_helper.api import _status_for

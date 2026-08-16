@@ -764,6 +764,21 @@ def extract_flow_route(
         raise HTTPException(
             status_code=400, detail=f"output_format must be 'video' or 'npy', got {output_format!r}"
         )
+    if method not in ("dis", "farneback", "raft"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"method must be 'dis', 'farneback', or 'raft', got {method!r}",
+        )
+    if dis_preset not in ("ultrafast", "fast", "medium"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"dis_preset must be 'ultrafast', 'fast', or 'medium', got {dis_preset!r}",
+        )
+    if raft_variant not in ("small", "large"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"raft_variant must be 'small' or 'large', got {raft_variant!r}",
+        )
     tmp = _new_tmpdir()
     src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
     dst = tmp / ("flow.npy" if output_format == "npy" else "flow.mp4")

@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   added the same 400 validation `/extract-flow` already had for
   `output_format`, and documented `vcodec="copy"` in `compress_video`'s
   docstring and the README/LISEZMOI reference tables.
+- **`extract-flow` API surface**: `method`, `dis_preset`, and `raft_variant`
+  were unconstrained on `POST /extract-flow` (plain `str = Form(...)`)
+  though both CLIs already restrict them via `choices=`. Bad values still
+  failed correctly (the library itself validates and raises `ValueError`,
+  mapped to a 400), but with a generic wrapped message and no OpenAPI enum
+  documented for the field. Added the same explicit `if x not in (...):
+  raise HTTPException(400, ...)` pattern already used for `output_format`
+  and `compress`'s `vcodec`, for a clean, schema-visible error on all three
+  fields.
 
 ## [2.3.1] - 2026-08-15
 
