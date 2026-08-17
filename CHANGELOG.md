@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.3.2] - 2026-08-17
 
 ### Fixed
 
@@ -44,6 +44,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raise HTTPException(400, ...)` pattern already used for `output_format`
   and `compress`'s `vcodec`, for a clean, schema-visible error on all three
   fields.
+- **`/concat` API route**: clobbered spooled uploads that shared the same
+  extension. `_spool()` always wrote to a fixed `upload<ext>` path;
+  `concat()` called it once per file then renamed, so a later file with the
+  same extension overwrote an earlier one on disk before its own rename
+  ever ran. Each upload now writes directly to its position-derived name,
+  matching the pattern `/overlay` and `/mux-audio` already use for their
+  second upload.
+- **`active_speaker_map`'s docstring contradicted its own return contract**:
+  it claimed uncertain clusters (margin *and* coverage below threshold) are
+  omitted, but the finalize step only ever re-checks coverage; a cluster
+  with a lower margin but sufficient coverage is intentionally still
+  returned, with its real margin exposed as a caller-facing certainty
+  signal rather than an internal filter. Docstring now states the actual,
+  intentional behavior; the code was already correct.
+
+### Documentation
+
+- Glossed dense optical flow for a first-time reader in `README.md` /
+  `LISEZMOI.md` and `flow.py`'s module docstring; punctuation-dash cleanup
+  across the docs and every touched module's opening docstring.
 
 ## [2.3.1] - 2026-08-15
 
