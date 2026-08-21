@@ -16,6 +16,10 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 **Local-first, par conception.** video-helper s'exécute entièrement sur votre machine, avec des outils open source (ffmpeg). Vos données ne quittent jamais votre machine : aucune télémétrie, aucun compte, aucun verrouillage cloud. Vous gardez la main sur toute la chaîne. Fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) : la souveraineté sur vos données grâce à l'open source local-first.
 
+## Éprouvé en production
+
+video-helper suit la même discipline que le reste de la suite. Chaque changement passe par l'intégration continue avant d'atteindre `main` ; l'intégration continue reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.3.2`](https://github.com/warith-harchaoui/video-helper/releases)) ; c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/). Ce que vous installez avec `pip` correspond donc à ce qui a été testé. La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. [youtube-helper](https://github.com/warith-harchaoui/youtube-helper), la couche de téléchargement de la suite, dépend directement de video-helper pour chaque extrait qu'il traite. Une bibliothèque faite pour être construite dessus, pas pour être bricolée à la légère.
+
 ## Documentation
 
 [💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/video-helper-doc/)
@@ -32,6 +36,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
 - **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
+- **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`) : la diarisation audio seule (segmenter un enregistrement en « qui parle quand » à partir du son) dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond. Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné ; cette technique porte un nom, la détection du locuteur actif (« active-speaker detection » ou ASD : repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste). `FaceDetector` / `FaceRecognizer` (YuNet et SFace, les enveloppes DNN natives d'OpenCV, sans HuggingFace à l'exécution), `track_faces` (suivi par recouvrement de boîtes), `get_engine` (une estimation gratuite par mouvement des lèvres ou le modèle PyTorch précis Light-ASD), `active_speaker_map`, la mécanique qui relie tout cela : elle échantillonne une poignée de courts extraits au lieu de décoder tout l'enregistrement, en élargissant l'échantillon seulement pour les locuteurs encore incertains. Voir la [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) pour le tableau complet.
 
 ## Installation
 
@@ -53,6 +58,7 @@ pip install video-helper
 pip install "video-helper[pyav]"      # backend de frames PyAV
 pip install "video-helper[cli]"       # CLI click jumelle
 pip install "video-helper[api]"       # surface HTTP FastAPI
+pip install "video-helper[faces]"     # identité de locuteur ancrée sur le visage (YuNet / SFace / Light-ASD)
 ```
 
 ### Depuis les sources (sans PyPI)

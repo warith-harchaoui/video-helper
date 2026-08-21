@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-08-21
+
+### Fixed
+
+- **`faces/sampling.py`**: shot detection called PySceneDetect's deprecated
+  `FrameTimecode.get_seconds()`; switched to the `.seconds` property it was
+  deprecated in favor of. No behavior change, just silences the warning.
+- **`_extract_via_pyav`'s hwaccel fallback**: caught `av.error.ValueError`,
+  an attribute that does not exist on PyAV's error module (it roots its
+  hierarchy at `FFmpegError`, not the stdlib exception names). Any real
+  hwaccel init/open failure raised `AttributeError` from inside the `except`
+  clause itself instead of triggering the intended software-decode fallback,
+  crashing harder than doing nothing. Now catches `av.error.FFmpegError`.
+- **`/extract-frames` and `/extract-flow` API routes**: spooling the upload,
+  creating the frames directory, and zipping the result all ran outside the
+  `_cleanup_on_error` guard that every other action route uses; a failure at
+  any of those steps (not just inside the extraction call) leaked the whole
+  temp dir, including the spooled upload, on disk. Both routes now wrap their
+  full body in `_cleanup_on_error`, matching the pattern already used
+  elsewhere in `api.py`.
+
 ## [2.3.2] - 2026-08-17
 
 ### Fixed

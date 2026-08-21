@@ -128,7 +128,7 @@ def _detect_shots(video_path: str, *, frame_skip: int = 2) -> list[tuple[float, 
         sm.detect_scenes(video, frame_skip=frame_skip)
         scenes = sm.get_scene_list()
         if scenes:
-            return [(s.get_seconds(), e.get_seconds()) for s, e in scenes]
+            return [(s.seconds, e.seconds) for s, e in scenes]
     except Exception as exc:  # noqa: BLE001 — scenedetect optional / decode hiccup
         osh.warning(f"faces.sampling: shot detection unavailable ({exc}) — one shot")
     return [(0.0, 0.0)]  # sentinel single shot; end filled by caller

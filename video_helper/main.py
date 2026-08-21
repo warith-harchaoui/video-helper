@@ -879,7 +879,11 @@ def _extract_via_pyav(
                 if open_options
                 else av.open(video_path, hwaccel=hw)
             )
-        except (av.error.ValueError, ValueError) as exc:
+        # ``av.error.ValueError`` does not exist (PyAV's error hierarchy roots
+        # at ``FFmpegError``, not the stdlib exception names) — catching it
+        # would raise AttributeError instead of falling back, defeating the
+        # graceful-degradation this except clause exists for.
+        except (av.error.FFmpegError, ValueError) as exc:
             osh.warning(
                 "PyAV hwaccel=%r unavailable (%s); falling back to software decode",
                 hwaccel,

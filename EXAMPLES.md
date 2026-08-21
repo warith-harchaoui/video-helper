@@ -37,6 +37,7 @@ recipe additionally requires ffmpeg to be built with `libass`.
 7. [Subtitle Tools](#subtitle-tools)
    - [SRT → VTT + CSS](#srt--vtt--css)
    - [Unique Colors](#unique-colors)
+8. [Face-Anchored Speaker Identity](#face-anchored-speaker-identity)
 
 ---
 
@@ -534,3 +535,63 @@ conversion.
 print(vh.extract_unique_colors("subs.srt"))
 # {'#FF0000', '#00FF00', '#0000FF'}
 ```
+
+## Face-Anchored Speaker Identity
+
+Needs the `[faces]` extra: `pip install "video-helper[faces]"`.
+
+Audio-only diarization (splitting a recording into "who spoke when" from the
+sound alone) tells you a voice cluster exists, but not which on-screen face
+it belongs to. `video_helper.faces` answers that by detecting faces, tracking
+them from frame to frame, and scoring which tracked face's lip motion lines
+up with a given speaker's audio activity. Two pieces cover the common cases:
+
+```python
+from video_helper.faces import FaceDetector, track_faces
+
+detector = FaceDetector()
+
+# Detect faces (with 5 landmarks each) in every frame of a short clip.
+frame_dets = []
+for i, frame in enumerate(vh.extract_frames("meeting.mp4", start_instant=0, end_instant=5)):
+    frame_dets.append((i, detector.detect(frame)))
+
+# Link per-frame detections into continuous tracks (one per person on screen).
+tracks = track_faces(frame_dets)
+print(len(tracks), "face track(s) found in the first 5 seconds")
+```
+
+The harness that ties detection, tracking, and active-speaker scoring
+together is `active_speaker_map`: given diarization turns (e.g. from
+`vocal-helper`), it samples a handful of short clips instead of decoding the
+whole recording, growing the sample only for speakers it isn't yet sure
+about:
+
+```python
+from video_helper.faces import active_speaker_map
+
+# One dict per diarization turn: which cluster spoke, at what time.
+speaker_turns = [
+    {"spk": 0, "t0": 0.0, "t1": 4.2},
+    {"spk": 1, "t0": 4.2, "t1": 9.0},
+    {"spk": 0, "t0": 9.0, "t1": 14.5},
+]
+
+assignments = active_speaker_map("meeting.mp4", audio_16k=None, speaker_turns=speaker_turns)
+for a in assignments:
+    print(f"speaker {a.speaker} -> face {a.face_id} "
+          f"(coverage={a.coverage:.2f}, margin={a.margin:.2f})")
+```
+
+Each `SpeakerFaceAssignment` carries `crops` too: the best `(frame, Face)`
+samples of the assigned face, ready to hand to `FaceRecognizer` for a
+persistent embedding. A speaker that never gathered enough on-screen
+evidence (`coverage` below the floor) is simply left out of the results,
+so the caller's voice-only fallback still applies.
+
+See the [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) for the
+full picture: `FaceRecognizer` (SFace embeddings), `mouth_roi` /
+`mouth_openness` (the lip-motion signal), `get_engine` (the zero-weight
+proxy vs. the accurate Light-ASD PyTorch model), and `build_asd_digest`
+(the internal clip-compaction step `active_speaker_map` uses on long
+recordings).

@@ -37,6 +37,7 @@ et que `ffmpeg` est installé et accessible dans le `PATH`. La recette
 7. [Outils de sous-titrage](#outils-de-sous-titrage)
    - [SRT → VTT + CSS](#srt--vtt--css)
    - [Couleurs uniques](#couleurs-uniques)
+8. [Identité de locuteur ancrée sur le visage](#identité-de-locuteur-ancrée-sur-le-visage)
 
 ---
 
@@ -561,3 +562,68 @@ prévisualiser la palette avant une conversion.
 print(vh.extract_unique_colors("subs.srt"))
 # {'#FF0000', '#00FF00', '#0000FF'}
 ```
+
+## Identité de locuteur ancrée sur le visage
+
+Nécessite l'extra `[faces]` : `pip install "video-helper[faces]"`.
+
+La diarisation audio seule (segmenter un enregistrement en « qui parle
+quand » à partir du son) dit qu'une grappe de voix existe, mais pas à
+quel visage à l'écran elle correspond. Le sous-module `video_helper.faces`
+répond à la question : il détecte les visages, les suit d'une image à
+l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui
+colle à l'activité audio d'un locuteur donné. Deux briques couvrent les
+cas courants :
+
+```python
+from video_helper.faces import FaceDetector, track_faces
+
+detector = FaceDetector()
+
+# Détecter les visages (avec 5 points de repère chacun) dans chaque frame
+# d'un court extrait.
+frame_dets = []
+for i, frame in enumerate(vh.extract_frames("reunion.mp4", start_instant=0, end_instant=5)):
+    frame_dets.append((i, detector.detect(frame)))
+
+# Relier les détections image par image en pistes continues (une par
+# personne à l'écran).
+tracks = track_faces(frame_dets)
+print(len(tracks), "piste(s) de visage trouvée(s) dans les 5 premières secondes")
+```
+
+La mécanique qui relie détection, suivi et notation du locuteur actif est
+`active_speaker_map`. Prenant en entrée les tours de parole de la
+diarisation (par exemple issus de `vocal-helper`), elle échantillonne une
+poignée de courts extraits au lieu de décoder tout l'enregistrement, en
+élargissant l'échantillon seulement pour les locuteurs encore incertains :
+
+```python
+from video_helper.faces import active_speaker_map
+
+# Un dictionnaire par tour de parole : quelle grappe a parlé, à quel moment.
+speaker_turns = [
+    {"spk": 0, "t0": 0.0, "t1": 4.2},
+    {"spk": 1, "t0": 4.2, "t1": 9.0},
+    {"spk": 0, "t0": 9.0, "t1": 14.5},
+]
+
+assignments = active_speaker_map("reunion.mp4", audio_16k=None, speaker_turns=speaker_turns)
+for a in assignments:
+    print(f"locuteur {a.speaker} -> visage {a.face_id} "
+          f"(couverture={a.coverage:.2f}, marge={a.margin:.2f})")
+```
+
+Chaque `SpeakerFaceAssignment` transporte aussi `crops` : les meilleurs
+échantillons `(frame, Face)` du visage assigné, prêts à passer à
+`FaceRecognizer` pour en tirer une empreinte persistante. Un locuteur qui
+n'a jamais réuni assez de preuve à l'écran (`coverage` sous le seuil
+plancher) est simplement absent des résultats ; le recours vocal de
+l'appelant reste alors la seule voie.
+
+Voir la [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py)
+pour le tableau complet : `FaceRecognizer` (empreintes SFace), `mouth_roi`
+et `mouth_openness` (le signal de mouvement des lèvres), `get_engine`
+(l'estimation gratuite face au modèle PyTorch précis Light-ASD) et
+`build_asd_digest` (l'étape interne de compaction des extraits
+qu'`active_speaker_map` utilise sur les longs enregistrements).

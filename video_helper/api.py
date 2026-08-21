@@ -704,33 +704,38 @@ def extract_frames_route(
     # would slow every worker startup even for endpoints that never write PNGs.
     import cv2  # noqa: WPS433 — deferred so the module import stays cheap
 
+    # Spooling, directory creation, extraction, and zipping all happen inside
+    # _cleanup_on_error: an exception at any of those steps (not just inside
+    # the extraction loop) previously left the temp dir — and the spooled
+    # upload — leaked on disk, since only the extraction loop itself was
+    # guarded.
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    frames_dir = tmp / "frames"
-    frames_dir.mkdir()
-    # Extraction can fail deep in a backend; wrap it so we clean up the temp dir
-    # eagerly and surface a 500 instead of leaking files on the error path.
-    try:
-        for i, frame in enumerate(
-            extract_frames(
-                video_path=str(src),
-                frame_step=frame_step,
-                frame_interval=frame_interval,
-                start_instant=start,
-                end_instant=end,
-                backend=backend,
-                output_width=output_width,
-                output_height=output_height,
-                pad_color=pad_color,
-            )
-        ):
-            cv2.imwrite(str(frames_dir / f"frame_{i:09d}.png"), frame)
-    except Exception as exc:
-        _cleanup(tmp)
-        raise HTTPException(
-            status_code=_status_for(exc), detail=f"extract-frames failed: {exc}"
-        ) from exc
-    buf = _zip_folder(frames_dir)
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+        frames_dir = tmp / "frames"
+        frames_dir.mkdir()
+        # Extraction can fail deep in a backend; classify the status code here
+        # while cleanup is still handled by the context manager above.
+        try:
+            for i, frame in enumerate(
+                extract_frames(
+                    video_path=str(src),
+                    frame_step=frame_step,
+                    frame_interval=frame_interval,
+                    start_instant=start,
+                    end_instant=end,
+                    backend=backend,
+                    output_width=output_width,
+                    output_height=output_height,
+                    pad_color=pad_color,
+                )
+            ):
+                cv2.imwrite(str(frames_dir / f"frame_{i:09d}.png"), frame)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=_status_for(exc), detail=f"extract-frames failed: {exc}"
+            ) from exc
+        buf = _zip_folder(frames_dir)
     background.add_task(_cleanup, tmp)
     return StreamingResponse(
         buf,
@@ -784,32 +789,36 @@ def extract_flow_route(
             status_code=400,
             detail=f"raft_variant must be 'small' or 'large', got {raft_variant!r}",
         )
+    # Spooling and the flow computation both happen inside _cleanup_on_error:
+    # a spool failure previously left the temp dir (and the partial upload)
+    # leaked on disk, since only the extract_optical_flow call itself was
+    # guarded.
     tmp = _new_tmpdir()
-    src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
-    dst = tmp / ("flow.npy" if output_format == "npy" else "flow.mp4")
-    try:
-        extract_optical_flow(
-            input_video=str(src),
-            output_path=str(dst),
-            method=method,
-            dis_preset=dis_preset,
-            raft_variant=raft_variant,
-            device=device,
-            clip_flow=clip_flow,
-            start_instant=start,
-            end_instant=end,
-            frame_step=frame_step,
-            frame_interval=frame_interval,
-            fps=fps,
-            output_width=output_width,
-            output_height=output_height,
-            wavelet=wavelet,
-            overwrite=True,
-        )
-    except Exception as exc:
-        _cleanup(tmp)
-        raise HTTPException(
-            status_code=_status_for(exc), detail=f"extract-flow failed: {exc}"
-        ) from exc
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=Path(file.filename or "").suffix or ".mp4")
+        dst = tmp / ("flow.npy" if output_format == "npy" else "flow.mp4")
+        try:
+            extract_optical_flow(
+                input_video=str(src),
+                output_path=str(dst),
+                method=method,
+                dis_preset=dis_preset,
+                raft_variant=raft_variant,
+                device=device,
+                clip_flow=clip_flow,
+                start_instant=start,
+                end_instant=end,
+                frame_step=frame_step,
+                frame_interval=frame_interval,
+                fps=fps,
+                output_width=output_width,
+                output_height=output_height,
+                wavelet=wavelet,
+                overwrite=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=_status_for(exc), detail=f"extract-flow failed: {exc}"
+            ) from exc
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
