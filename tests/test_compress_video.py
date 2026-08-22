@@ -82,6 +82,35 @@ def test_compress_video_codec_tag_is_hvc1_only_for_default_hevc(short_clip, tmp_
     assert _video_stream(h264_out)["codec_name"] == "h264"
 
 
+def _has_encoder(name: str) -> bool:
+    import subprocess
+
+    try:
+        listed = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False,
+        ).stdout
+    except Exception:
+        return False
+    return name in listed
+
+
+@pytest.mark.skipif(not _has_encoder("hevc_videotoolbox"), reason="no VideoToolbox HEVC encoder on this machine")
+def test_compress_video_hardware_path_is_valid_hevc_hvc1(short_clip, tmp_path) -> None:
+    """vcodec='hevc_videotoolbox' takes the single-pass hardware branch: valid HEVC/hvc1
+    output, roughly the requested size (looser band than the software 2-pass test — a
+    single-pass CBR-ish encode is less precise by design, see compress_video's docstring)."""
+    out = str(tmp_path / "hw.mp4")
+    target_mb = 0.5
+    result = compress_video(short_clip, out, target_size_mb=target_mb, vcodec="hevc_videotoolbox")
+    assert result == out
+    assert is_valid_video_file(out)
+    stream = _video_stream(out)
+    assert stream["codec_name"] == "hevc"
+    assert stream.get("codec_tag_string") == "hvc1"
+    size_mb = os.path.getsize(out) / (1024 * 1024)
+    assert size_mb < target_mb * 2.5
+
+
 def test_compress_video_copy_remuxes_without_reencoding(short_clip, tmp_path) -> None:
     """vcodec='copy' remuxes the source codec as-is instead of re-encoding."""
     src_stream = _video_stream(short_clip)

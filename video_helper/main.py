@@ -341,6 +341,30 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     return d
 
 
+def _transcode_vcodec() -> str:
+    """H.264 encoder for a cross-container transcode — hardware on macOS when available.
+
+    ``ffmpeg -encoders`` lists ``h264_videotoolbox`` separately from the ``-hwaccels``
+    decode-only list :func:`_resolve_hwaccel` checks, so this probes encoder availability
+    directly rather than reusing that helper. VideoToolbox trades a little quality-per-bit
+    for a large speed win — acceptable here since this path exists to make an incompatible
+    container playable/muxable, not to produce an archival master (:func:`compress_video`,
+    the actual size/quality-targeted output, makes its own hardware-vs-software choice).
+    Falls back to ``libx264`` (this function's prior, unconditional behaviour) whenever the
+    probe itself fails or the encoder is unlisted, so a probe hiccup degrades to the slower,
+    always-available path rather than raising.
+    """
+    if platform.system().lower() != "darwin" or shutil.which("ffmpeg") is None:
+        return "libx264"
+    try:
+        listed = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False,
+        ).stdout
+    except Exception:
+        return "libx264"
+    return "h264_videotoolbox" if "h264_videotoolbox" in listed else "libx264"
+
+
 def video_converter(
     input_video: str,
     output_video: str | None = None,
@@ -401,7 +425,11 @@ def video_converter(
     # WebM/VP8 into .mp4) is rejected by ffmpeg because most codecs are
     # not muxable in every container. In that case we transcode to
     # H.264/AAC, which is the lingua franca every MP4-class container
-    # accepts.
+    # accepts — on hardware (VideoToolbox) when available, since a long
+    # source (a downloaded hour-plus recording) can otherwise spend tens of
+    # minutes of CPU on a software x264 pass before anything downstream even
+    # starts (observed: 3 concurrent ~1.5-2h downloads each burning 50-70+
+    # CPU-minutes on this exact step, see _transcode_vcodec's docstring).
     if not frame_rate and not width and not height and not without_sound:
         if input_ext.lower() == output_ext.lower():
             ffmpeg.input(input_video).output(output_video, vcodec="copy", acodec="copy").run(
@@ -410,7 +438,7 @@ def video_converter(
         else:
             ffmpeg.input(input_video).output(
                 output_video,
-                vcodec="libx264",
+                vcodec=_transcode_vcodec(),
                 acodec="aac",
                 pix_fmt="yuv420p",
             ).run(overwrite_output=True, quiet=quiet)
@@ -1940,8 +1968,13 @@ def compress_video(
         better than H.264 at the same target size). Pass ``"libx264"`` for
         maximum legacy-player compatibility at a larger file for the same
         quality; the ``hvc1`` tag is only applied when encoding HEVC. Pass
-        ``"copy"`` to skip re-encoding entirely (plain remux, no bitrate
-        solving) when the source is already an acceptable size.
+        ``"hevc_videotoolbox"`` on Apple Silicon for a large speed win
+        (single-pass hardware HEVC, minutes instead of tens of minutes on a
+        long source) at a small quality-per-bit cost versus ``"libx265"`` —
+        fine for a web-embedded report video, not recommended for an
+        archival master. Pass ``"copy"`` to skip re-encoding entirely
+        (plain remux, no bitrate solving) when the source is already an
+        acceptable size.
     min_video_bitrate_kbps : int, optional
         Floor on the solved video bitrate (default 200) — guards against a
         near-zero bitrate when a long source is squeezed into a small target
@@ -2017,6 +2050,29 @@ def compress_video(
             f"Using the floor instead; the output will exceed {target_size_mb} MB."
         )
         video_kbps = min_video_bitrate_kbps
+
+    if vcodec == "hevc_videotoolbox":
+        # VideoToolbox is Apple Silicon's hardware HEVC encoder — a large speed win over
+        # libx265 (observed: minutes instead of tens of minutes on an hour-plus source) at
+        # a small, acceptable quality-per-bit cost for a web-embedded report video (not an
+        # archival master, the same standard compress_video already holds itself to).
+        # It does NOT consume the two-pass log the libavcodec software encoders use
+        # (that mechanism is specific to x264/x265's own rate-control), so this is a
+        # single-pass CBR-ish encode instead: `-maxrate`/`-bufsize` bound the peak so the
+        # output stays close to target_size_mb without the precision a true two-pass log
+        # gives libx265 — acceptable slack for a size CAP that already has headroom
+        # built in (target_size_mb=97 under common 100 MB upload limits).
+        hw_kwargs = {
+            "c:v": vcodec, "b:v": f"{video_kbps}k", "maxrate": f"{video_kbps}k",
+            "bufsize": f"{video_kbps * 2}k", "tag:v": "hvc1",
+            "c:a": "aac", "b:a": audio_bitrate, "movflags": "+faststart",
+        }
+        ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
+            overwrite_output=True, quiet=quiet
+        )
+        assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
+        osh.info(f"Video file compressed successfully (hardware, single-pass):\n\t{output_video}")
+        return output_video
 
     # Real ffmpeg CLI flags only: ffmpeg-python's kwargs pass straight through to
     # `-{key} {value}` with no name translation (see `convert_kwargs_to_cmd_line_args`
