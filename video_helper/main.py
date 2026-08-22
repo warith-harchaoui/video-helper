@@ -37,6 +37,7 @@ import platform
 import re
 import shutil
 import subprocess
+import threading
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING
 
@@ -351,6 +352,17 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
 # call claiming the whole machine. Overridable via VIDEO_HELPER_MAX_THREADS.
 _MAX_THREADS = int(os.environ.get("VIDEO_HELPER_MAX_THREADS", "4"))
 
+# Caps CONCURRENT VideoToolbox hardware encode attempts, in-process, across every caller that
+# imports this module. The machine has one hardware encoder; when several threads each request a
+# session at once (e.g. a batch job downloading N videos in parallel), some collide and error out,
+# falling back to a software pass that then monopolizes that thread for 20-30x longer — which is
+# what actually starves the rest of the batch, not the failure itself. A queued wait of a few
+# seconds for a hardware slot is far cheaper than a spurious software fallback. Does NOT
+# coordinate across separate OS processes (a semaphore can't) — only helps callers sharing this
+# one Python process, which is exactly where the failures were observed (an ingest orchestrator
+# running N download threads in one process). Overridable via VIDEO_HELPER_MAX_HW_SESSIONS.
+_HW_ENCODE_SEM = threading.Semaphore(int(os.environ.get("VIDEO_HELPER_MAX_HW_SESSIONS", "1")))
+
 
 def hw_vcodec(software: str, hardware: str) -> str:
     """*hardware* on macOS when the ffmpeg build actually lists that encoder, else *software*.
@@ -460,15 +472,16 @@ def video_converter(
         else:
             vcodec = _transcode_vcodec()
             try:
-                ffmpeg.input(input_video).output(
-                    output_video, vcodec=vcodec, acodec="aac", pix_fmt="yuv420p",
-                    threads=_MAX_THREADS,
-                ).run(overwrite_output=True, quiet=quiet)
+                with _HW_ENCODE_SEM:
+                    ffmpeg.input(input_video).output(
+                        output_video, vcodec=vcodec, acodec="aac", pix_fmt="yuv420p",
+                        threads=_MAX_THREADS,
+                    ).run(overwrite_output=True, quiet=quiet)
             except ffmpeg.Error:
                 # VideoToolbox has a small, machine-dependent cap on concurrent hardware encode
-                # sessions — several downloads finishing their conversion step at once can
-                # transiently exceed it. One retry on plain libx264 costs a slower pass for just
-                # this file rather than failing the whole ingest over a capacity blip.
+                # sessions. _HW_ENCODE_SEM already serializes attempts within this process, but a
+                # genuine encoder error can still happen — one retry on plain libx264 costs a
+                # slower pass for just this file rather than failing the whole ingest.
                 if vcodec == "libx264":
                     raise
                 osh.warning(f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264")
@@ -2102,13 +2115,15 @@ def compress_video(
             "c:a": "aac", "b:a": audio_bitrate, "movflags": "+faststart",
         }
         try:
-            ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
-                overwrite_output=True, quiet=quiet
-            )
+            with _HW_ENCODE_SEM:
+                ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
+                    overwrite_output=True, quiet=quiet
+                )
         except ffmpeg.Error:
             # Same small, machine-dependent cap on concurrent VideoToolbox sessions as
-            # video_converter's hardware path (see its matching comment) — fall back to the
-            # software 2-pass path below for just this file instead of losing the report video.
+            # video_converter's hardware path (see its matching comment, also _HW_ENCODE_SEM-
+            # gated) — fall back to the software 2-pass path below for just this file instead of
+            # losing the report video.
             osh.warning(
                 "compress_video: hardware encode (hevc_videotoolbox) failed, retrying on libx265"
             )
