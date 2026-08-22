@@ -341,6 +341,17 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     return d
 
 
+# Caps ffmpeg's own thread pool for the heavy encode paths below (video_converter's
+# cross-container transcode, compress_video's hardware and software passes). ffmpeg's
+# default (0 = auto) claims every core it can see, which is fine for one isolated process
+# but oversubscribes badly the moment two or three of these run at once (a batch job's
+# concurrent conversions) — and was observed, on this machine, coinciding with otherwise
+# unexplained single-process VideoToolbox session failures under load. 4 leaves headroom
+# for whatever else is running (the OS, other batch workers) instead of a single ffmpeg
+# call claiming the whole machine. Overridable via VIDEO_HELPER_MAX_THREADS.
+_MAX_THREADS = int(os.environ.get("VIDEO_HELPER_MAX_THREADS", "4"))
+
+
 def hw_vcodec(software: str, hardware: str) -> str:
     """*hardware* on macOS when the ffmpeg build actually lists that encoder, else *software*.
 
@@ -451,6 +462,7 @@ def video_converter(
             try:
                 ffmpeg.input(input_video).output(
                     output_video, vcodec=vcodec, acodec="aac", pix_fmt="yuv420p",
+                    threads=_MAX_THREADS,
                 ).run(overwrite_output=True, quiet=quiet)
             except ffmpeg.Error:
                 # VideoToolbox has a small, machine-dependent cap on concurrent hardware encode
@@ -462,6 +474,7 @@ def video_converter(
                 osh.warning(f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264")
                 ffmpeg.input(input_video).output(
                     output_video, vcodec="libx264", acodec="aac", pix_fmt="yuv420p",
+                    threads=_MAX_THREADS,
                 ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
         osh.info(f"Video file converted successfully:\n{output_video}")
@@ -483,7 +496,7 @@ def video_converter(
         # MP4-compatible (h264 + aac); for VP8/VP9/Opus/etc. we must
         # transcode, otherwise ffmpeg refuses the cross-container mux.
         if input_ext.lower() != "mp4":
-            transcode_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p"}
+            transcode_kwargs = {"vcodec": "libx264", "pix_fmt": "yuv420p", "threads": _MAX_THREADS}
             if without_sound:
                 transcode_kwargs["an"] = None
             else:
@@ -2085,7 +2098,7 @@ def compress_video(
         # built in (target_size_mb=97 under common 100 MB upload limits).
         hw_kwargs = {
             "c:v": vcodec, "b:v": f"{video_kbps}k", "maxrate": f"{video_kbps}k",
-            "bufsize": f"{video_kbps * 2}k", "tag:v": "hvc1",
+            "bufsize": f"{video_kbps * 2}k", "tag:v": "hvc1", "threads": _MAX_THREADS,
             "c:a": "aac", "b:a": audio_bitrate, "movflags": "+faststart",
         }
         try:
@@ -2113,7 +2126,7 @@ def compress_video(
     # in the ffmpeg-python package), so e.g. a plausible-looking `video_bitrate=`
     # kwarg is a silent no-op — ffmpeg rejects "-video_bitrate" outright. Bitrate
     # must be the real flag names, `b:v` / `b:a`.
-    common = {"c:v": vcodec, "b:v": f"{video_kbps}k"}
+    common = {"c:v": vcodec, "b:v": f"{video_kbps}k", "threads": _MAX_THREADS}
 
     with osh.temporary_folder(prefix="video_helper-2pass-") as passdir:
         passlog = osh.join(passdir, "pass")
