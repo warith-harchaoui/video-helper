@@ -61,6 +61,7 @@ from .main import (
     extract_frames,
     extract_unique_colors,
     extract_video_chunk,
+    hw_vcodec,
     image_loop_to_video,
     is_valid_video_file,
     mux_audio_video,
@@ -93,4 +94,5 @@ __all__ = [
     "extract_audio_track",
     "mux_audio_video",
     "burn_subtitles",
+    "hw_vcodec",
 ]

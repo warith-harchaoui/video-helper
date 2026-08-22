@@ -341,28 +341,39 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     return d
 
 
-def _transcode_vcodec() -> str:
-    """H.264 encoder for a cross-container transcode — hardware on macOS when available.
+def hw_vcodec(software: str, hardware: str) -> str:
+    """*hardware* on macOS when the ffmpeg build actually lists that encoder, else *software*.
 
-    ``ffmpeg -encoders`` lists ``h264_videotoolbox`` separately from the ``-hwaccels``
-    decode-only list :func:`_resolve_hwaccel` checks, so this probes encoder availability
-    directly rather than reusing that helper. VideoToolbox trades a little quality-per-bit
-    for a large speed win — acceptable here since this path exists to make an incompatible
-    container playable/muxable, not to produce an archival master (:func:`compress_video`,
-    the actual size/quality-targeted output, makes its own hardware-vs-software choice).
-    Falls back to ``libx264`` (this function's prior, unconditional behaviour) whenever the
-    probe itself fails or the encoder is unlisted, so a probe hiccup degrades to the slower,
+    ``ffmpeg -encoders`` lists VideoToolbox encoders (``h264_videotoolbox``,
+    ``hevc_videotoolbox``, …) separately from the ``-hwaccels`` decode-only list
+    :func:`_resolve_hwaccel` checks, so this probes encoder availability directly rather than
+    reusing that helper. VideoToolbox trades a little quality-per-bit for a large speed win —
+    worth it any time software would otherwise serialize a whole video's worth of CPU-bound
+    encoding (a cross-container transcode, a target-size compression pass) before the caller can
+    move on. Falls back to *software* whenever the probe itself fails, the platform isn't
+    Darwin, or the named hardware encoder is unlisted, so a probe hiccup degrades to the slower,
     always-available path rather than raising.
     """
     if platform.system().lower() != "darwin" or shutil.which("ffmpeg") is None:
-        return "libx264"
+        return software
     try:
         listed = subprocess.run(
             ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False,
         ).stdout
     except Exception:
-        return "libx264"
-    return "h264_videotoolbox" if "h264_videotoolbox" in listed else "libx264"
+        return software
+    return hardware if hardware in listed else software
+
+
+def _transcode_vcodec() -> str:
+    """H.264 encoder for a cross-container transcode — hardware on macOS when available.
+
+    Thin wrapper over :func:`hw_vcodec` — kept as a separate name at this call site since
+    :func:`video_converter` exists to make an incompatible container playable/muxable, not to
+    produce an archival master (:func:`compress_video`, the actual size/quality-targeted output,
+    makes its own hardware-vs-software choice via the same underlying probe).
+    """
+    return hw_vcodec("libx264", "h264_videotoolbox")
 
 
 def video_converter(
@@ -436,12 +447,22 @@ def video_converter(
                 overwrite_output=True, quiet=quiet
             )
         else:
-            ffmpeg.input(input_video).output(
-                output_video,
-                vcodec=_transcode_vcodec(),
-                acodec="aac",
-                pix_fmt="yuv420p",
-            ).run(overwrite_output=True, quiet=quiet)
+            vcodec = _transcode_vcodec()
+            try:
+                ffmpeg.input(input_video).output(
+                    output_video, vcodec=vcodec, acodec="aac", pix_fmt="yuv420p",
+                ).run(overwrite_output=True, quiet=quiet)
+            except ffmpeg.Error:
+                # VideoToolbox has a small, machine-dependent cap on concurrent hardware encode
+                # sessions — several downloads finishing their conversion step at once can
+                # transiently exceed it. One retry on plain libx264 costs a slower pass for just
+                # this file rather than failing the whole ingest over a capacity blip.
+                if vcodec == "libx264":
+                    raise
+                osh.warning(f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264")
+                ffmpeg.input(input_video).output(
+                    output_video, vcodec="libx264", acodec="aac", pix_fmt="yuv420p",
+                ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
         osh.info(f"Video file converted successfully:\n{output_video}")
         return
@@ -2067,9 +2088,22 @@ def compress_video(
             "bufsize": f"{video_kbps * 2}k", "tag:v": "hvc1",
             "c:a": "aac", "b:a": audio_bitrate, "movflags": "+faststart",
         }
-        ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
-            overwrite_output=True, quiet=quiet
-        )
+        try:
+            ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
+                overwrite_output=True, quiet=quiet
+            )
+        except ffmpeg.Error:
+            # Same small, machine-dependent cap on concurrent VideoToolbox sessions as
+            # video_converter's hardware path (see its matching comment) — fall back to the
+            # software 2-pass path below for just this file instead of losing the report video.
+            osh.warning(
+                "compress_video: hardware encode (hevc_videotoolbox) failed, retrying on libx265"
+            )
+            return compress_video(
+                input_video, output_video, target_size_mb=target_size_mb,
+                audio_bitrate=audio_bitrate, vcodec="libx265",
+                min_video_bitrate_kbps=min_video_bitrate_kbps, overwrite=overwrite,
+            )
         assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
         osh.info(f"Video file compressed successfully (hardware, single-pass):\n\t{output_video}")
         return output_video
