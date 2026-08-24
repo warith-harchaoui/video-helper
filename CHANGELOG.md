@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-08-24
+
+### Added
+
+- **Hardware VideoToolbox encode path on macOS** for `video_converter`'s
+  cross-container transcode and `compress_video` (new `vcodec=
+  "hevc_videotoolbox"` option), a large speed win over the software x264/
+  x265 passes on a long source (minutes instead of tens of minutes),
+  at a small, acceptable quality-per-bit cost for a web-embedded video —
+  not recommended for an archival master. New public `hw_vcodec(software,
+  hardware)` probes `ffmpeg -encoders` and returns the hardware codec only
+  when the running ffmpeg build actually lists it, falling back to
+  *software* on any probe failure, a non-Darwin platform, or an unlisted
+  encoder. Both hardware paths retry once on the software codec if the
+  encode itself fails (VideoToolbox has a small, machine-dependent cap on
+  concurrent hardware sessions).
+- **`VIDEO_HELPER_MAX_THREADS`** (default 4): caps ffmpeg's own thread pool
+  on the heavy encode paths — ffmpeg's default (0 = auto) claims every core
+  it can see, fine for one isolated process but oversubscribes badly under
+  concurrent batch conversions.
+- **`VIDEO_HELPER_MAX_HW_SESSIONS`** (default 1): an in-process semaphore
+  serializing concurrent VideoToolbox hardware encode attempts — several
+  threads requesting a hardware session at once can collide and error out,
+  each falling back to a software pass that then monopolizes its thread for
+  20-30x longer, which is what actually starves a batch job, not the
+  collision itself. Does not coordinate across separate OS processes.
+
+### Fixed
+
+- **`compress_video`'s hardware-encode failure path could silently return a
+  broken file when called with `overwrite=False`.** On a VideoToolbox
+  failure it recurses into itself with `vcodec="libx265"` to retry in
+  software — but ffmpeg creates/truncates the output file as part of muxer
+  setup before the encode loop runs, so a failed hardware pass can leave a
+  partial, invalid file on disk. The recursive call's own
+  `if not overwrite and file_exists(output_video)` early-return then saw
+  that leftover file and handed it straight back, never running the
+  software fallback at all. Now removes the partial output file before
+  recursing.
+
 ## [2.3.3] - 2026-08-21
 
 ### Fixed

@@ -381,7 +381,10 @@ def hw_vcodec(software: str, hardware: str) -> str:
         return software
     try:
         listed = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False,
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout
     except Exception:
         return software
@@ -474,7 +477,10 @@ def video_converter(
             try:
                 with _HW_ENCODE_SEM:
                     ffmpeg.input(input_video).output(
-                        output_video, vcodec=vcodec, acodec="aac", pix_fmt="yuv420p",
+                        output_video,
+                        vcodec=vcodec,
+                        acodec="aac",
+                        pix_fmt="yuv420p",
                         threads=_MAX_THREADS,
                     ).run(overwrite_output=True, quiet=quiet)
             except ffmpeg.Error:
@@ -484,9 +490,14 @@ def video_converter(
                 # slower pass for just this file rather than failing the whole ingest.
                 if vcodec == "libx264":
                     raise
-                osh.warning(f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264")
+                osh.warning(
+                    f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264"
+                )
                 ffmpeg.input(input_video).output(
-                    output_video, vcodec="libx264", acodec="aac", pix_fmt="yuv420p",
+                    output_video,
+                    vcodec="libx264",
+                    acodec="aac",
+                    pix_fmt="yuv420p",
                     threads=_MAX_THREADS,
                 ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
@@ -2110,9 +2121,15 @@ def compress_video(
         # gives libx265 — acceptable slack for a size CAP that already has headroom
         # built in (target_size_mb=97 under common 100 MB upload limits).
         hw_kwargs = {
-            "c:v": vcodec, "b:v": f"{video_kbps}k", "maxrate": f"{video_kbps}k",
-            "bufsize": f"{video_kbps * 2}k", "tag:v": "hvc1", "threads": _MAX_THREADS,
-            "c:a": "aac", "b:a": audio_bitrate, "movflags": "+faststart",
+            "c:v": vcodec,
+            "b:v": f"{video_kbps}k",
+            "maxrate": f"{video_kbps}k",
+            "bufsize": f"{video_kbps * 2}k",
+            "tag:v": "hvc1",
+            "threads": _MAX_THREADS,
+            "c:a": "aac",
+            "b:a": audio_bitrate,
+            "movflags": "+faststart",
         }
         try:
             with _HW_ENCODE_SEM:
@@ -2127,12 +2144,25 @@ def compress_video(
             osh.warning(
                 "compress_video: hardware encode (hevc_videotoolbox) failed, retrying on libx265"
             )
+            # ffmpeg creates/truncates output_video as part of muxer setup before the
+            # encode loop runs, so a failed hardware pass can still leave a partial,
+            # invalid file on disk. Without removing it first, the recursive call
+            # below would hit its own `if not overwrite and file_exists(output_video)`
+            # early-return (when the caller passed overwrite=False) and silently hand
+            # back that broken file instead of ever running the software fallback.
+            osh.remove_files([output_video])
             return compress_video(
-                input_video, output_video, target_size_mb=target_size_mb,
-                audio_bitrate=audio_bitrate, vcodec="libx265",
-                min_video_bitrate_kbps=min_video_bitrate_kbps, overwrite=overwrite,
+                input_video,
+                output_video,
+                target_size_mb=target_size_mb,
+                audio_bitrate=audio_bitrate,
+                vcodec="libx265",
+                min_video_bitrate_kbps=min_video_bitrate_kbps,
+                overwrite=overwrite,
             )
-        assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
+        assert is_valid_video_file(output_video), (
+            f"Failed to compress video file:\n\t{output_video}"
+        )
         osh.info(f"Video file compressed successfully (hardware, single-pass):\n\t{output_video}")
         return output_video
 
