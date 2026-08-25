@@ -32,12 +32,13 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 # evaluated by tooling, never executed.
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import os
 import platform
 import re
 import shutil
 import subprocess
-import threading
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING
 
@@ -352,16 +353,41 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
 # call claiming the whole machine. Overridable via VIDEO_HELPER_MAX_THREADS.
 _MAX_THREADS = int(os.environ.get("VIDEO_HELPER_MAX_THREADS", "4"))
 
-# Caps CONCURRENT VideoToolbox hardware encode attempts, in-process, across every caller that
-# imports this module. The machine has one hardware encoder; when several threads each request a
-# session at once (e.g. a batch job downloading N videos in parallel), some collide and error out,
-# falling back to a software pass that then monopolizes that thread for 20-30x longer — which is
-# what actually starves the rest of the batch, not the failure itself. A queued wait of a few
-# seconds for a hardware slot is far cheaper than a spurious software fallback. Does NOT
-# coordinate across separate OS processes (a semaphore can't) — only helps callers sharing this
-# one Python process, which is exactly where the failures were observed (an ingest orchestrator
-# running N download threads in one process). Overridable via VIDEO_HELPER_MAX_HW_SESSIONS.
-_HW_ENCODE_SEM = threading.Semaphore(int(os.environ.get("VIDEO_HELPER_MAX_HW_SESSIONS", "1")))
+# Serializes the heavy encode paths (video_converter's transcode, compress_video's report
+# encode — both the hardware attempt AND its software fallback) to exactly one at a time,
+# system-wide. The machine has one hardware encoder; several callers each requesting a
+# VideoToolbox session at once collide and error out, and the resulting software fallback then
+# monopolizes a thread for 20-30x longer — which is what actually starves a batch, not the
+# original failure. Worse, if the fallback DOES get scheduled for several files concurrently,
+# each libx264/libx265 pass spawns _MAX_THREADS of its own, oversubscribing the machine's cores
+# and collapsing overall throughput (observed: load average climbing past 100 on a 12-core
+# machine running an ingest batch alongside a build's report encode — two separate OS processes,
+# each innocently running its own conversion). A plain threading.Semaphore only serializes
+# callers inside one Python process; an ffmpeg batch is routinely spread across several
+# processes (a download-orchestrator process plus one `notes-helper build` subprocess per item),
+# so the lock has to be a real OS-level file lock, not in-memory. Overridable via
+# VIDEO_HELPER_FFMPEG_LOCK (path) — same path must be used by every process for the lock to mean
+# anything, so change it only if every caller on the machine is updated together.
+_FFMPEG_LOCK_PATH = os.environ.get(
+    "VIDEO_HELPER_FFMPEG_LOCK", "/tmp/video_helper_ffmpeg_encode.lock"
+)
+
+
+@contextlib.contextmanager
+def _ffmpeg_serialize() -> Iterator[None]:
+    """Hold the system-wide encode lock for the duration of one hardware-or-software ffmpeg pass.
+
+    Blocks until every other process (and every other thread in this one) currently inside this
+    context manager has released it — see :data:`_FFMPEG_LOCK_PATH`'s docstring for why a
+    cross-process lock, not a semaphore, is required here.
+    """
+    os.makedirs(os.path.dirname(_FFMPEG_LOCK_PATH) or ".", exist_ok=True)
+    with open(_FFMPEG_LOCK_PATH, "a+") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def hw_vcodec(software: str, hardware: str) -> str:
@@ -474,8 +500,8 @@ def video_converter(
             )
         else:
             vcodec = _transcode_vcodec()
-            try:
-                with _HW_ENCODE_SEM:
+            with _ffmpeg_serialize():
+                try:
                     ffmpeg.input(input_video).output(
                         output_video,
                         vcodec=vcodec,
@@ -483,23 +509,24 @@ def video_converter(
                         pix_fmt="yuv420p",
                         threads=_MAX_THREADS,
                     ).run(overwrite_output=True, quiet=quiet)
-            except ffmpeg.Error:
-                # VideoToolbox has a small, machine-dependent cap on concurrent hardware encode
-                # sessions. _HW_ENCODE_SEM already serializes attempts within this process, but a
-                # genuine encoder error can still happen — one retry on plain libx264 costs a
-                # slower pass for just this file rather than failing the whole ingest.
-                if vcodec == "libx264":
-                    raise
-                osh.warning(
-                    f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264"
-                )
-                ffmpeg.input(input_video).output(
-                    output_video,
-                    vcodec="libx264",
-                    acodec="aac",
-                    pix_fmt="yuv420p",
-                    threads=_MAX_THREADS,
-                ).run(overwrite_output=True, quiet=quiet)
+                except ffmpeg.Error:
+                    # VideoToolbox has a small, machine-dependent cap on concurrent hardware
+                    # encode sessions, so a genuine encoder error can still happen even serialized
+                    # — one retry on plain libx264, still holding the lock, costs a slower pass
+                    # for just this file rather than failing the whole ingest or letting some
+                    # OTHER process's encode pile onto this thread's software fallback.
+                    if vcodec == "libx264":
+                        raise
+                    osh.warning(
+                        f"  video_converter: hardware encode ({vcodec}) failed, retrying on libx264"
+                    )
+                    ffmpeg.input(input_video).output(
+                        output_video,
+                        vcodec="libx264",
+                        acodec="aac",
+                        pix_fmt="yuv420p",
+                        threads=_MAX_THREADS,
+                    ).run(overwrite_output=True, quiet=quiet)
         assert is_valid_video_file(output_video), f"Failed to convert video file:\n\t{output_video}"
         osh.info(f"Video file converted successfully:\n{output_video}")
         return
@@ -2132,15 +2159,17 @@ def compress_video(
             "movflags": "+faststart",
         }
         try:
-            with _HW_ENCODE_SEM:
+            with _ffmpeg_serialize():
                 ffmpeg.input(input_video).output(output_video, **hw_kwargs).run(
                     overwrite_output=True, quiet=quiet
                 )
         except ffmpeg.Error:
             # Same small, machine-dependent cap on concurrent VideoToolbox sessions as
-            # video_converter's hardware path (see its matching comment, also _HW_ENCODE_SEM-
-            # gated) — fall back to the software 2-pass path below for just this file instead of
-            # losing the report video.
+            # video_converter's hardware path (see its matching comment, also
+            # _ffmpeg_serialize-gated) — fall back to the software 2-pass path below for just
+            # this file instead of losing the report video. The recursive call re-enters this
+            # function with vcodec="libx265", which takes the software branch further down —
+            # that branch holds its own _ffmpeg_serialize() around both encode passes.
             osh.warning(
                 "compress_video: hardware encode (hevc_videotoolbox) failed, retrying on libx265"
             )
@@ -2178,9 +2207,6 @@ def compress_video(
 
         pass1_kwargs = dict(common)
         pass1_kwargs.update({"pass": 1, "passlogfile": passlog, "an": None, "f": "null"})
-        ffmpeg.input(input_video).output(os.devnull, **pass1_kwargs).run(
-            overwrite_output=True, quiet=quiet
-        )
 
         pass2_kwargs = dict(common)
         pass2_kwargs.update(
@@ -2196,9 +2222,17 @@ def compress_video(
             # Without this, ffmpeg tags HEVC output "hev1", which QuickTime and
             # other Apple players refuse to play back (silently show a black frame).
             pass2_kwargs["tag:v"] = "hvc1"
-        ffmpeg.input(input_video).output(output_video, **pass2_kwargs).run(
-            overwrite_output=True, quiet=quiet
-        )
+
+        # Both passes of one file's software encode are one indivisible unit of work — hold the
+        # lock across both rather than release-and-reacquire between them, so another process's
+        # file can't wedge itself between pass 1 and pass 2 of this one.
+        with _ffmpeg_serialize():
+            ffmpeg.input(input_video).output(os.devnull, **pass1_kwargs).run(
+                overwrite_output=True, quiet=quiet
+            )
+            ffmpeg.input(input_video).output(output_video, **pass2_kwargs).run(
+                overwrite_output=True, quiet=quiet
+            )
 
     assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
     osh.info(f"Video file compressed successfully:\n\t{output_video}")
