@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.1] - 2026-09-03
 
 ### Fixed
 
@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly — a reader (including a later, separate-process call to
   `load_manifest`) could previously observe a truncated file if the writer
   was killed mid-write.
+- **`video_converter` and `compress_video`'s hardware-encode paths now
+  serialize across processes, not just threads.** `_HW_ENCODE_SEM` was an
+  in-process `threading.Semaphore`, which does nothing when an ffmpeg batch
+  spans several separate OS processes (an ingest orchestrator plus one
+  subprocess per build) each independently requesting a VideoToolbox
+  session. Colliding hardware requests fall back to software passes that
+  each spawn `_MAX_THREADS` of their own, oversubscribing the machine
+  (observed: load average past 100 on a 12-core box with just two such
+  processes active). Replaced with `_ffmpeg_serialize()`, an `flock`-based
+  lock file (`VIDEO_HELPER_FFMPEG_LOCK`) held across the hardware attempt
+  and its software fallback, in both `video_converter` and
+  `compress_video`'s report encode (which previously held no lock at all).
 
 ## [2.4.0] - 2026-08-24
 
