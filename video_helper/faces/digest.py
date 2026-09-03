@@ -78,7 +78,10 @@ later runs against the digest is an orthogonal choice.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import os_helper as osh
 
@@ -428,7 +431,13 @@ def source_to_digest_window(
 
 
 def _write_manifest(segments: list[DigestSegment], path: str) -> None:
-    """Write ``segments`` as a JSON array to ``path`` (see :func:`build_asd_digest`)."""
+    """Write ``segments`` as a JSON array to ``path`` (see :func:`build_asd_digest`).
+
+    Written atomically (temp file + ``os.replace``): a reader — including a
+    later call to :func:`load_manifest` from a separate process — must never
+    observe a truncated or half-written manifest if this process is killed
+    mid-write.
+    """
     import json
 
     payload = [
@@ -440,8 +449,16 @@ def _write_manifest(segments: list[DigestSegment], path: str) -> None:
         }
         for s in segments
     ]
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    parent = Path(path).parent
+    fd, tmp_name = tempfile.mkstemp(dir=str(parent), prefix=f".{Path(path).name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 def load_manifest(path: str) -> list[DigestSegment]:

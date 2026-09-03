@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `faces.digest._write_manifest` now writes the `<output>.manifest.json`
+  sidecar atomically (temp file + `os.replace`) instead of `open(path, "w")`
+  directly — a reader (including a later, separate-process call to
+  `load_manifest`) could previously observe a truncated file if the writer
+  was killed mid-write.
+
 ## [2.4.0] - 2026-08-24
 
 ### Added
