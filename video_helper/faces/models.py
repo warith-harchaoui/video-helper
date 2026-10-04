@@ -11,7 +11,7 @@ Weights are fetched **on first use** and cached on disk. The registry resolves
 each model in this order:
 
 1. **The user's own mirror**: ``AI_HELPERS_MODEL_BASE_URL`` (default
-   ``https://harchaoui.org/warith/ai-helpers/models/``). This is the preferred
+   ``https://deraison.ai/ai-helpers/models/``). This is the preferred
    path once the mirror is seeded (see ``scripts/seed_model_mirror.py``).
 2. **A permissive, HuggingFace-free upstream** (OpenCV Zoo / InsightFace GitHub
    releases) as a first-run convenience so the feature works before the mirror
@@ -36,7 +36,7 @@ import os_helper as osh
 # Default mirror on the user's own infrastructure. Runtime downloads prefer this
 # so there is no third-party (and specifically no HuggingFace) dependency once it
 # is seeded. Override for testing or a private mirror.
-DEFAULT_BASE_URL = "https://harchaoui.org/warith/ai-helpers/models/"
+DEFAULT_BASE_URL = "https://deraison.ai/ai-helpers/models/"
 
 
 def _base_url() -> str:

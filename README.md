@@ -6,9 +6,9 @@
 
 `Video Helper` belongs to a collection of libraries called `AI Helpers` developed for building Artificial Intelligence.
 
-[🌍 AI Helpers](https://harchaoui.org/warith/ai-helpers)
+[🌍 AI Helpers](https://deraison.ai/ai-helpers)
 
-[![logo](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/logo.png)](https://harchaoui.org/warith/ai-helpers)
+[![logo](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/logo.png)](https://deraison.ai/ai-helpers)
 
 Video Helper is a Python library that provides utility functions for processing video files. It includes features like loading, converting, extracting frames as well as working with subtitle formats.
 
@@ -22,7 +22,7 @@ video-helper follows the same discipline as the rest of the suite. Every change 
 
 ## Documentation
 
-[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/video-helper-doc/)
+[💻 Documentation](https://deraison.ai/ai-helpers/docs/video-helper-doc/)
 
 [🗺️ Landscape](https://github.com/warith-harchaoui/video-helper/blob/main/LANDSCAPE.md)
 
@@ -46,7 +46,7 @@ video-helper follows the same discipline as the rest of the suite. Every change 
 - 🐧 **Ubuntu/Debian**: `sudo apt update && sudo apt install -y python3 python3-pip git ffmpeg`
 - 🪟 **Windows** (PowerShell): `winget install Python.Python.3.12 Git.Git Gyan.FFmpeg`
 
-We recommend using Python environments. Check this link if you're unfamiliar with setting one up: [🥸 Tech tips](https://harchaoui.org/warith/4ml/#install).
+We recommend using Python environments. Check this link if you're unfamiliar with setting one up: [🥸 Tech tips](https://deraison.ai/4ml/#install).
 
 ### From PyPI (recommended)
 
