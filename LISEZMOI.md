@@ -94,8 +94,7 @@ print(details)
 
 # Convertir la vidéo vers un autre format
 output_video = "video_tests/example_converted.mp4"
-vh.video_converter(video_file, output_video,
-                   frame_rate=30, width=640, without_sound = True)
+vh.video_converter(video_file, output_video, frame_rate=30, width=640, without_sound=True)
 
 # Les images ne seront jamais déformées :
 # le ratio d'aspect est préservé même pour width/height arbitraires
@@ -103,28 +102,28 @@ vh.video_converter(video_file, output_video,
 
 # Extraire des frames de la vidéo
 
-start_instant=5  # secondes
+start_instant = 5  # secondes
 # correspond à start_index = start_instant * frame_rate = 5 * 30 = la 150e frame
 
-end_instant=10   # secondes
+end_instant = 10  # secondes
 # correspond à end_index = end_instant * frame_rate = 10 * 30 = la 300e frame
 
-frame_step=5     # prendre une frame sur 5
+frame_step = 5  # prendre une frame sur 5
 # soit 1 frame toutes les 5 / frame_rate = 5 / 30 = 0,17 seconde
 
 # Donc on prend 1 frame sur 5 entre la 150e et la 300e.
 
 # Exemple sous forme de liste
 frames = list(
-    vh.extract_frames(video_file, start_instant=start_instant, end_instant=end_instant, frame_step=frame_step)
+    vh.extract_frames(
+        video_file, start_instant=start_instant, end_instant=end_instant, frame_step=frame_step
+    )
 )
 
 # Exemple sous forme de boucle for
 for frame in vh.extract_frames(
-    video_file,
-    start_instant=start_instant,
-    end_instant=end_instant,
-    frame_step=frame_step):
+    video_file, start_instant=start_instant, end_instant=end_instant, frame_step=frame_step
+):
     pass  # Remplacer par votre logique de traitement
 
 # Chaque frame est un tableau numpy de forme (height, width, channels)

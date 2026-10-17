@@ -123,7 +123,7 @@ for frame in vh.extract_frames(
     "clip.mp4",
     start_instant=5.0,
     end_instant=10.0,
-    frame_interval=0.5,   # one frame every 0.5 s
+    frame_interval=0.5,  # one frame every 0.5 s
 ):
     pass
 ```
@@ -161,8 +161,7 @@ beat decord ~30 % on its own sweet spot in our bench).
 frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2))
 
 # Force a specific backend (useful for benchmarking or debugging).
-frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2,
-                                backend="pyav"))
+frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2, backend="pyav"))
 
 # Stabilization always forces VidGear:
 frames = list(vh.extract_frames("clip.mp4", stabilize=True))
@@ -209,14 +208,14 @@ Some sources need a specific `User-Agent` / `Referer` / `Cookie` / `Authorizatio
 # Headers obtained from youtube-helper (or hand-rolled)
 headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Referer": "https://www.youtube.com/",
 }
 
 for frame in vh.extract_frames(
     "https://rr5---sn-googlevideo.com/videoplayback?...",
     http_headers=headers,
-    backend="pyav",        # or "ffmpeg-pipe"; vidgear warns + ignores
+    backend="pyav",  # or "ffmpeg-pipe"; vidgear warns + ignores
 ):
     process(frame)
 ```
@@ -231,7 +230,9 @@ For ML pipelines that need a fixed input shape, set `output_width` + `output_hei
 # 1920×1080 source → 224×224 square with black letterbox padding
 for frame in vh.extract_frames(
     "clip.mp4",
-    output_width=224, output_height=224, pad_color="black",
+    output_width=224,
+    output_height=224,
+    pad_color="black",
 ):
     # frame.shape == (224, 224, 3); the 16:9 source is centred horizontally
     # with black bands top and bottom (letterbox).
@@ -253,8 +254,13 @@ Composable with everything else: destinations, hwaccel, sparse access.
 # Square torch tensors on Apple Silicon GPU, batched
 for batch in vh.extract_frames(
     "clip.mp4",
-    output_width=224, output_height=224, pad_color="black",
-    destination="torch", device="mps", batch_size=32, layout="image",
+    output_width=224,
+    output_height=224,
+    pad_color="black",
+    destination="torch",
+    device="mps",
+    batch_size=32,
+    layout="image",
 ):
     # batch.shape == (32, 3, 224, 224), NCHW RGB uint8 on MPS
     logits = model(batch)
@@ -289,6 +295,7 @@ for frame in vh.extract_frames("clip.mp4", start_instant=10, end_instant=20):
 
 # Torch CHW RGB on Apple Silicon GPU, per-frame.
 import torch
+
 for frame in vh.extract_frames("clip.mp4", destination="torch", device="mps"):
     # frame.shape == (3, H, W), RGB uint8, on MPS
     ...
@@ -296,7 +303,10 @@ for frame in vh.extract_frames("clip.mp4", destination="torch", device="mps"):
 # Torch NCHW RGB: typical image-model batch.
 for batch in vh.extract_frames(
     "clip.mp4",
-    destination="torch", device="mps", batch_size=32, layout="image",
+    destination="torch",
+    device="mps",
+    batch_size=32,
+    layout="image",
 ):
     # batch.shape == (N, 3, H, W); one host→device transfer per batch
     embeddings = image_model(batch)
@@ -304,7 +314,10 @@ for batch in vh.extract_frames(
 # Torch CTHW RGB: typical 3D-CNN / video-model clip.
 for clip in vh.extract_frames(
     "clip.mp4",
-    destination="torch", device="mps", batch_size=16, layout="video",
+    destination="torch",
+    device="mps",
+    batch_size=16,
+    layout="video",
 ):
     # clip.shape == (3, T, H, W); T == 16 for all but the last clip
     embedding = video_model(clip)
@@ -340,17 +353,20 @@ a live camera.
 # Default: DIS, no extra dependency (opencv-python is already core).
 frames = vh.extract_frames("clip.mp4", frame_step=1)
 for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
-    bgr = flow_frame[..., :3].astype("uint8")     # back to a plain frame
+    bgr = flow_frame[..., :3].astype("uint8")  # back to a plain frame
     vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # signed px displacement
 
 # Composes with a live camera the exact same way (capture-helper, not
 # video-helper, owns the camera loop: no opencv/torch dependency added there).
 import capture_helper as ch
+
 for flow_frame in vh.iter_frame_optical_flow(ch.iter_camera_frames(), method="dis"):
     ...
 
 # Deep-learning flow (RAFT via torchvision): needs `pip install "video-helper[flow]"`.
-for flow_frame in vh.iter_frame_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+for flow_frame in vh.iter_frame_optical_flow(
+    frames, method="raft", raft_variant="small", device="mps"
+):
     ...
 
 # grayscale=True: (H, W, 3) instead of (H, W, 5), intensity + flow only,
@@ -395,7 +411,11 @@ is correctly rescaled by the same factor as the spatial resize (needs
 ```python
 # Shrink the flow output for storage: computed at full quality, then downsized.
 vh.extract_optical_flow(
-    "clip.mp4", "clip-flow.npy", method="dis", output_width=320, output_height=180,
+    "clip.mp4",
+    "clip-flow.npy",
+    method="dis",
+    output_width=320,
+    output_height=180,
 )
 
 # Or resize a flow field you already have, standalone:
@@ -408,6 +428,7 @@ resized = vh.resize_flow(flow[..., -2:], output_width=320, output_height=180)
 
 ```python
 import numpy as np
+
 frames = [np.zeros((72, 128, 3), dtype=np.uint8) for _ in range(30)]
 vh.dump_frames(frames, "buffer.mp4", fps=15)
 ```
@@ -445,8 +466,12 @@ aspect-preserving letterboxing (black padding).
 
 ```python
 vh.image_loop_to_video(
-    "title.png", 3.0, "title.mp4",
-    frame_rate=30, width=1920, height=1080,
+    "title.png",
+    3.0,
+    "title.mp4",
+    frame_rate=30,
+    width=1920,
+    height=1080,
 )
 ```
 
@@ -459,7 +484,7 @@ for clips with different codecs / framerates).
 vh.concat_videos(
     ["intro.mp4", "body.mp4", "outro.mp4"],
     "final.mp4",
-    reencode=True,        # default; only set False if all inputs are bit-identical containers
+    reencode=True,  # default; only set False if all inputs are bit-identical containers
     frame_rate=30,
 )
 ```
@@ -471,8 +496,10 @@ ffmpeg expressions for time-varying motion.
 
 ```python
 vh.overlay_image(
-    "clip.mp4", "cursor.png", "out.mp4",
-    x="if(lt(t,2),100,400)",   # move at t=2s
+    "clip.mp4",
+    "cursor.png",
+    "out.mp4",
+    x="if(lt(t,2),100,400)",  # move at t=2s
     y="200",
     scale_width=24,
 )
@@ -483,8 +510,7 @@ vh.overlay_image(
 ```python
 # Pull the audio out of a video.
 vh.extract_audio_track("interview.mp4", "interview.wav")
-vh.extract_audio_track("interview.mp4", "interview.mp3",
-                       encoding="libmp3lame", sample_rate=22050)
+vh.extract_audio_track("interview.mp4", "interview.mp3", encoding="libmp3lame", sample_rate=22050)
 
 # Replace a video's audio track with a separate file.
 vh.mux_audio_video("silent.mp4", "voice.wav", "final.mp4")
@@ -507,7 +533,9 @@ vh.burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4")
 
 # Force a font + size on top of any source format.
 vh.burn_subtitles(
-    "clip.mp4", "subs.vtt", "captioned.mp4",
+    "clip.mp4",
+    "subs.vtt",
+    "captioned.mp4",
     force_style="FontName=Helvetica,FontSize=28,Outline=2",
 )
 ```
@@ -521,8 +549,8 @@ vh.burn_subtitles(
 `::cue(.rrggbb)` rule per color.
 
 ```python
-vh.srt2vtt("subs.srt")                       # → subs.vtt + subs.css
-vh.srt2vtt("subs.srt", "out.vtt", "out.css") # explicit paths
+vh.srt2vtt("subs.srt")  # → subs.vtt + subs.css
+vh.srt2vtt("subs.srt", "out.vtt", "out.css")  # explicit paths
 ```
 
 ### Unique Colors
@@ -579,8 +607,10 @@ speaker_turns = [
 
 assignments = active_speaker_map("meeting.mp4", audio_16k=None, speaker_turns=speaker_turns)
 for a in assignments:
-    print(f"speaker {a.speaker} -> face {a.face_id} "
-          f"(coverage={a.coverage:.2f}, margin={a.margin:.2f})")
+    print(
+        f"speaker {a.speaker} -> face {a.face_id} "
+        f"(coverage={a.coverage:.2f}, margin={a.margin:.2f})"
+    )
 ```
 
 Each `SpeakerFaceAssignment` carries `crops` too: the best `(frame, Face)`

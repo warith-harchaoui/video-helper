@@ -125,7 +125,7 @@ for frame in vh.extract_frames(
     "clip.mp4",
     start_instant=5.0,
     end_instant=10.0,
-    frame_interval=0.5,   # un frame toutes les 0,5 s
+    frame_interval=0.5,  # un frame toutes les 0,5 s
 ):
     pass
 ```
@@ -164,8 +164,7 @@ prédilection dans notre banc d'essai).
 frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2))
 
 # Forcer un backend précis (utile pour le benchmarking ou le débogage).
-frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2,
-                                backend="pyav"))
+frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2, backend="pyav"))
 
 # La stabilisation force toujours VidGear :
 frames = list(vh.extract_frames("clip.mp4", stabilize=True))
@@ -218,14 +217,14 @@ vidéos privées Vimeo, les flux Twitch. Passez-les via `http_headers` :
 # En-têtes obtenus depuis youtube-helper (ou construits à la main)
 headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Referer": "https://www.youtube.com/",
 }
 
 for frame in vh.extract_frames(
     "https://rr5---sn-googlevideo.com/videoplayback?...",
     http_headers=headers,
-    backend="pyav",        # ou "ffmpeg-pipe" ; vidgear avertit + ignore
+    backend="pyav",  # ou "ffmpeg-pipe" ; vidgear avertit + ignore
 ):
     process(frame)
 ```
@@ -245,7 +244,9 @@ demandée exacte avec `pad_color` :
 # Source 1920×1080 → carré 224×224 avec bandes noires (letterbox)
 for frame in vh.extract_frames(
     "clip.mp4",
-    output_width=224, output_height=224, pad_color="black",
+    output_width=224,
+    output_height=224,
+    pad_color="black",
 ):
     # frame.shape == (224, 224, 3) ; la source en 16:9 est centrée
     # horizontalement avec des bandes noires en haut et en bas (letterbox).
@@ -267,8 +268,13 @@ Composable avec tout le reste : destinations, hwaccel, accès épars :
 # Tenseurs torch carrés sur GPU Apple Silicon, par lots
 for batch in vh.extract_frames(
     "clip.mp4",
-    output_width=224, output_height=224, pad_color="black",
-    destination="torch", device="mps", batch_size=32, layout="image",
+    output_width=224,
+    output_height=224,
+    pad_color="black",
+    destination="torch",
+    device="mps",
+    batch_size=32,
+    layout="image",
 ):
     # batch.shape == (32, 3, 224, 224), NCHW RGB uint8 sur MPS
     logits = model(batch)
@@ -303,6 +309,7 @@ for frame in vh.extract_frames("clip.mp4", start_instant=10, end_instant=20):
 
 # Torch CHW RGB sur GPU Apple Silicon, par frame.
 import torch
+
 for frame in vh.extract_frames("clip.mp4", destination="torch", device="mps"):
     # frame.shape == (3, H, W), RGB uint8, sur MPS
     ...
@@ -310,7 +317,10 @@ for frame in vh.extract_frames("clip.mp4", destination="torch", device="mps"):
 # Torch NCHW RGB : lot typique pour un modèle image.
 for batch in vh.extract_frames(
     "clip.mp4",
-    destination="torch", device="mps", batch_size=32, layout="image",
+    destination="torch",
+    device="mps",
+    batch_size=32,
+    layout="image",
 ):
     # batch.shape == (N, 3, H, W) ; un transfert hôte→device par lot
     embeddings = image_model(batch)
@@ -318,7 +328,10 @@ for batch in vh.extract_frames(
 # Torch CTHW RGB : clip typique pour un CNN 3D / modèle vidéo.
 for clip in vh.extract_frames(
     "clip.mp4",
-    destination="torch", device="mps", batch_size=16, layout="video",
+    destination="torch",
+    device="mps",
+    batch_size=16,
+    layout="video",
 ):
     # clip.shape == (3, T, H, W) ; T == 16 pour tous les clips sauf le dernier
     embedding = video_model(clip)
@@ -360,17 +373,20 @@ tout l'intérêt : le même appel fonctionne pour un fichier ou une caméra live
 # Par défaut : DIS, aucune dépendance supplémentaire (opencv-python est déjà core).
 frames = vh.extract_frames("clip.mp4", frame_step=1)
 for flow_frame in vh.iter_frame_optical_flow(frames, method="dis"):
-    bgr = flow_frame[..., :3].astype("uint8")        # retour à une frame classique
+    bgr = flow_frame[..., :3].astype("uint8")  # retour à une frame classique
     vx, vy = flow_frame[..., 3], flow_frame[..., 4]  # déplacement signé en px
 
 # Se compose avec une caméra live de la même façon (capture-helper, pas
 # video-helper, possède la boucle caméra : aucune dépendance opencv/torch ajoutée là-bas).
 import capture_helper as ch
+
 for flow_frame in vh.iter_frame_optical_flow(ch.iter_camera_frames(), method="dis"):
     ...
 
 # Flux optique par deep learning (RAFT via torchvision) : nécessite `pip install "video-helper[flow]"`.
-for flow_frame in vh.iter_frame_optical_flow(frames, method="raft", raft_variant="small", device="mps"):
+for flow_frame in vh.iter_frame_optical_flow(
+    frames, method="raft", raft_variant="small", device="mps"
+):
     ...
 
 # grayscale=True : (H, W, 3) au lieu de (H, W, 5), intensité + flux uniquement,
@@ -418,7 +434,11 @@ la *magnitude* du flux par le même facteur que le redimensionnement spatial
 ```python
 # Réduit la sortie de flux pour le stockage : calculé en pleine qualité, puis réduit.
 vh.extract_optical_flow(
-    "clip.mp4", "clip-flow.npy", method="dis", output_width=320, output_height=180,
+    "clip.mp4",
+    "clip-flow.npy",
+    method="dis",
+    output_width=320,
+    output_height=180,
 )
 
 # Ou redimensionne un flux déjà en main, de façon autonome :
@@ -431,6 +451,7 @@ resized = vh.resize_flow(flow[..., -2:], output_width=320, output_height=180)
 
 ```python
 import numpy as np
+
 frames = [np.zeros((72, 128, 3), dtype=np.uint8) for _ in range(30)]
 vh.dump_frames(frames, "buffer.mp4", fps=15)
 ```
@@ -469,8 +490,12 @@ pour un letterboxing préservant le ratio (padding noir).
 
 ```python
 vh.image_loop_to_video(
-    "title.png", 3.0, "title.mp4",
-    frame_rate=30, width=1920, height=1080,
+    "title.png",
+    3.0,
+    "title.mp4",
+    frame_rate=30,
+    width=1920,
+    height=1080,
 )
 ```
 
@@ -484,7 +509,7 @@ différents).
 vh.concat_videos(
     ["intro.mp4", "body.mp4", "outro.mp4"],
     "final.mp4",
-    reencode=True,        # par défaut ; ne mettre False que si toutes les entrées sont des conteneurs bit-identiques
+    reencode=True,  # par défaut ; ne mettre False que si toutes les entrées sont des conteneurs bit-identiques
     frame_rate=30,
 )
 ```
@@ -497,8 +522,10 @@ temps.
 
 ```python
 vh.overlay_image(
-    "clip.mp4", "cursor.png", "out.mp4",
-    x="if(lt(t,2),100,400)",   # se déplace à t=2s
+    "clip.mp4",
+    "cursor.png",
+    "out.mp4",
+    x="if(lt(t,2),100,400)",  # se déplace à t=2s
     y="200",
     scale_width=24,
 )
@@ -509,8 +536,7 @@ vh.overlay_image(
 ```python
 # Extraire l'audio d'une vidéo.
 vh.extract_audio_track("interview.mp4", "interview.wav")
-vh.extract_audio_track("interview.mp4", "interview.mp3",
-                       encoding="libmp3lame", sample_rate=22050)
+vh.extract_audio_track("interview.mp4", "interview.mp3", encoding="libmp3lame", sample_rate=22050)
 
 # Remplacer la piste audio d'une vidéo par un fichier séparé.
 vh.mux_audio_video("silent.mp4", "voice.wav", "final.mp4")
@@ -534,7 +560,9 @@ vh.burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4")
 
 # Forcer une police + une taille par-dessus n'importe quel format source.
 vh.burn_subtitles(
-    "clip.mp4", "subs.vtt", "captioned.mp4",
+    "clip.mp4",
+    "subs.vtt",
+    "captioned.mp4",
     force_style="FontName=Helvetica,FontSize=28,Outline=2",
 )
 ```
@@ -548,8 +576,8 @@ en classes de cue WebVTT `<c.rrggbb>…</c>` et écrit un fichier CSS
 compagnon avec une règle `::cue(.rrggbb)` par couleur.
 
 ```python
-vh.srt2vtt("subs.srt")                       # → subs.vtt + subs.css
-vh.srt2vtt("subs.srt", "out.vtt", "out.css") # chemins explicites
+vh.srt2vtt("subs.srt")  # → subs.vtt + subs.css
+vh.srt2vtt("subs.srt", "out.vtt", "out.css")  # chemins explicites
 ```
 
 ### Couleurs uniques
@@ -610,8 +638,10 @@ speaker_turns = [
 
 assignments = active_speaker_map("reunion.mp4", audio_16k=None, speaker_turns=speaker_turns)
 for a in assignments:
-    print(f"locuteur {a.speaker} -> visage {a.face_id} "
-          f"(couverture={a.coverage:.2f}, marge={a.margin:.2f})")
+    print(
+        f"locuteur {a.speaker} -> visage {a.face_id} "
+        f"(couverture={a.coverage:.2f}, marge={a.margin:.2f})"
+    )
 ```
 
 Chaque `SpeakerFaceAssignment` transporte aussi `crops` : les meilleurs
