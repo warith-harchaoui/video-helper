@@ -184,6 +184,17 @@ Voir [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md)
 (canvas de recette, comparateur frame-first, zone de dépôt par lots ;
 le bench minimal `/gui` ci-dessus en est la première étape).
 
+### En tant que skill d'agent
+
+`skills/video-helper/` empaquette video-helper comme **skill Claude** *et* skill
+**OpenCode**, pour qu'un agent puisse s'en saisir à votre place. Voir
+[`skills/README.md`](https://github.com/warith-harchaoui/video-helper/blob/main/skills/README.md) pour l'installer (liens
+symboliques vers `~/.claude/skills/` et `~/.opencode/skills/`) et
+[`TRIGGERS.md`](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md) pour le catalogue exhaustif des
+déclencheurs — `scripts/check_triggers.py` maintient la description du skill
+alignée dessus ; la suite de tests échoue si une capacité cesse d'être
+nommée.
+
 ## Référence d'API
 
 | Fonction | Signature | Description |

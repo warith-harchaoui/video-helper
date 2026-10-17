@@ -182,6 +182,16 @@ See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) 
 Canvas, frame-first comparator, batch drop zone: the minimal `/gui` bench
 above is the first step).
 
+### Use it as an agent skill
+
+`skills/video-helper/` packages video-helper as a **Claude Skill** *and* an **OpenCode
+skill**, so an agent can reach for it on your behalf. See
+[`skills/README.md`](https://github.com/warith-harchaoui/video-helper/blob/main/skills/README.md) to install it (symlink into
+`~/.claude/skills/` and `~/.opencode/skills/`), and
+[`TRIGGERS.md`](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md) for the exhaustive trigger catalogue —
+`scripts/check_triggers.py` keeps the skill's description in sync with it, and
+the test suite fails if a capability stops being named.
+
 ## API Reference
 
 | Function | Signature | Description |
