@@ -1,0 +1,49 @@
+# video-helper — Compose entry point for the container image next to this file.
+#
+#   docker compose up --build      # HTTP surface on http://localhost:8000
+#   docker compose run --rm video-helper video-helper --help
+#
+# The image installs the [api,pyav] extras, so the FastAPI app is what it
+# serves. Per the suite's rule, MCP is never a second implementation: when the
+# [mcp] extra is present, fastapi-mcp mounts /mcp onto this very app and each
+# tool *is* one of these routes.
+
+services:
+  video-helper:
+    build: .
+    image: video-helper:local
+    ports:
+      - "${VIDEO_HELPER_PORT:-8000}:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      VIDEO_HELPER_HOST: 0.0.0.0
+      VIDEO_HELPER_PORT: "8000"
+      # Face detection / recognition / active-speaker weights are fetched on
+      # first use. Pointing this at the volume below is the whole reason this
+      # file is worth having: without it every `docker compose up` starts by
+      # re-downloading the same weights.
+      VIDEO_HELPER_MODEL_DIR: /models
+      # Override to pull weights from somewhere other than the suite's mirror.
+      # AI_HELPERS_MODEL_BASE_URL: https://example.invalid/models
+    volumes:
+      - ./data:/data
+      - video-helper-models:/models
+    restart: unless-stopped
+    healthcheck:
+      # python, not curl: the slim image ships no HTTP client, and adding one
+      # just for a probe would grow the image for nothing.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8000/health", timeout=3).status == 200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Generous: torch and the vision stack are slow to import.
+      start_period: 60s
+
+volumes:
+  video-helper-models:
