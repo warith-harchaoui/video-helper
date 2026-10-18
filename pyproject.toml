@@ -89,7 +89,7 @@ mcp = [
 # + click (so the click CLI import always resolves in tests) + api/mcp
 # so smoke tests exercise every surface.
 dev = [
-    "pytest>=8",
+    "pytest>=8", "pytest-timeout>=2.3",
     "av>=12,<18",
     "httpx>=0.27",
     "click>=8.1,<9",
