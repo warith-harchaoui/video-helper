@@ -19,8 +19,10 @@ import pytest
 from video_helper import extract_frames, is_valid_video_file
 from video_helper.main import (
     _apply_output_transform,
+    _is_network_source,
     _join_http_headers,
     _parse_pad_color,
+    _rw_timeout_us,
 )
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "video_tests")
@@ -199,3 +201,41 @@ def test_extract_frames_rejects_invalid_output_options_e2e() -> None:
                 pad_color="transparent",
             )
         )
+
+
+# --- bounded network reads --------------------------------------------------
+# ffmpeg applies no I/O timeout unless asked, so a connection the remote has
+# half-closed is waited on forever -- 0 % CPU, socket open, only a kill ends it.
+# This module is built to read yt-dlp-resolved googlevideo.com URLs, which are
+# precisely the ones that go quiet.
+
+
+def test_network_sources_are_recognised() -> None:
+    assert _is_network_source("https://example.com/a.mp4")
+    assert _is_network_source("HTTP://EXAMPLE.COM/a.mp4")
+    assert not _is_network_source("/tmp/local.mp4")
+    assert not _is_network_source("relative/clip.mkv")
+
+
+def test_reads_are_bounded_by_default() -> None:
+    """The point is that it is never unbounded."""
+    assert _rw_timeout_us() > 0
+
+
+def test_the_bound_is_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VIDEO_HELPER_RW_TIMEOUT", "5")
+    assert _rw_timeout_us() == 5_000_000
+
+
+def test_the_bound_can_be_disabled_deliberately(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Waiting forever is defensible as a choice, not as a default."""
+    monkeypatch.setenv("VIDEO_HELPER_RW_TIMEOUT", "0")
+    assert _rw_timeout_us() == 0
+
+
+def test_a_blank_or_bogus_override_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An exported-but-empty variable is a common shell accident."""
+    monkeypatch.setenv("VIDEO_HELPER_RW_TIMEOUT", "   ")
+    assert _rw_timeout_us() > 0
+    monkeypatch.setenv("VIDEO_HELPER_RW_TIMEOUT", "not-a-number")
+    assert _rw_timeout_us() > 0

@@ -320,9 +320,17 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     # input options. ffmpeg-python's ``probe`` accepts arbitrary kwargs
     # which it converts into CLI flags.
     probe_kwargs: dict = {}
-    if is_url and http_headers:
-        # ffmpeg expects a single CRLF-separated string before -i.
-        probe_kwargs["headers"] = "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
+    if is_url:
+        # Bound the read before anything else: an unbounded probe of a stalled
+        # URL never returns. See _rw_timeout_us.
+        timeout_us = _rw_timeout_us()
+        if timeout_us > 0:
+            probe_kwargs["rw_timeout"] = timeout_us
+        if http_headers:
+            # ffmpeg expects a single CRLF-separated string before -i.
+            probe_kwargs["headers"] = (
+                "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
+            )
 
     probe = ffmpeg.probe(video_file, **probe_kwargs)
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
@@ -848,6 +856,33 @@ def _join_http_headers(http_headers: dict | None) -> str | None:
     return "\r\n".join(f"{k}: {v}" for k, v in http_headers.items()) + "\r\n"
 
 
+def _is_network_source(video_path: str) -> bool:
+    """True when ffmpeg will read ``video_path`` over a socket, not from disk."""
+    return str(video_path).lower().startswith(("http://", "https://"))
+
+
+def _rw_timeout_us() -> int:
+    """Microseconds an ffmpeg socket read may stall before it gives up.
+
+    ffmpeg applies no I/O timeout unless asked, so a connection the remote has
+    half-closed is waited on forever: the process sits at 0 % CPU holding a
+    socket that will never deliver another byte, and only a kill ends it. The
+    resolved media URLs this module is built to read -- yt-dlp-resolved
+    ``googlevideo.com`` and friends -- are exactly the ones that go quiet.
+
+    60 s is far past any healthy stall while still bounded. Set
+    ``VIDEO_HELPER_RW_TIMEOUT`` (seconds) to change it, ``0`` to opt out.
+    """
+    raw = os.environ.get("VIDEO_HELPER_RW_TIMEOUT", "").strip()
+    seconds = 60.0
+    if raw:
+        try:
+            seconds = max(0.0, float(raw))
+        except ValueError:
+            seconds = 60.0
+    return int(seconds * 1_000_000)
+
+
 def _parse_pad_color(pad_color: str) -> tuple[int, int, int]:
     """Parse opaque ``pad_color`` into a BGR uint8 tuple.
 
@@ -983,6 +1018,12 @@ def _extract_via_pyav(
     headers_str = _join_http_headers(http_headers)
     if headers_str:
         open_options = {"headers": headers_str}
+    # PyAV forwards these straight to libavformat, so the same protocol-level
+    # bound applies. See _rw_timeout_us.
+    if _is_network_source(video_path):
+        timeout_us = _rw_timeout_us()
+        if timeout_us > 0:
+            open_options = {**(open_options or {}), "rw_timeout": str(timeout_us)}
 
     if hwaccel:
         try:
@@ -1109,6 +1150,11 @@ def _extract_via_ffmpeg_pipe(
     headers_str = _join_http_headers(http_headers)
     if headers_str:
         cmd += ["-headers", headers_str]
+    # Protocol option, so it must precede -i. See _rw_timeout_us.
+    if _is_network_source(video_path):
+        timeout_us = _rw_timeout_us()
+        if timeout_us > 0:
+            cmd += ["-rw_timeout", str(timeout_us)]
     cmd += ["-ss", f"{start_s:.6f}", "-to", f"{end_s:.6f}", "-i", video_path]
     if frame_step > 1:
         # Sample every Nth frame after the seek.

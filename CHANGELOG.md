@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-19
+
+### Fixed
+
+- **Reading a remote URL could hang forever.** ffmpeg applies no I/O timeout
+  unless asked, so a connection the remote has half-closed is simply waited on:
+  the process sits at 0 % CPU holding a socket that will never deliver another
+  byte, and only a kill ends it.
+
+  This module is built to read exactly the URLs that behave that way —
+  `video_dimensions`, `extract_frames` and the frame-extraction backends all
+  accept yt-dlp-resolved `googlevideo.com` links and forward `http_headers` to
+  ffmpeg. None of the three network entry points was bounded:
+
+  - `video_dimensions`'s `ffmpeg.probe` call,
+  - `_extract_via_ffmpeg_pipe`'s `ffmpeg` subprocess,
+  - `_extract_via_pyav`'s `av.open`, whose options go straight to libavformat.
+
+  All three now pass `rw_timeout` (60 s, `VIDEO_HELPER_RW_TIMEOUT` in seconds to
+  change it, `0` to opt out). It is a protocol option, so on the CLI path it is
+  placed ahead of `-i`. Local paths are untouched: a file on disk cannot stall
+  on a socket.
+
+  Found by auditing the suite, where the same root cause had already been fixed
+  in `youtube-helper`, `youtube-helper-rs` and `podcast-helper`. A caveat worth
+  carrying from that work: `rw_timeout` removes the common case but is not a
+  guarantee — a `podcast-helper` run stalled for over four hours with the option
+  set. Anything that *must* finish still needs a bound it owns, outside the
+  process.
+
 ## [2.4.1] - 2026-09-03
 
 ### Fixed
