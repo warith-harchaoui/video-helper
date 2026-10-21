@@ -180,14 +180,25 @@ Pour le catalogue exhaustif de ce qui déclenche chaque opération
 fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
 La page parle **français et anglais**. `GET /gui?lang=fr|en` choisit la langue,
-un drapeau dans l'en-tête bascule de l'une à l'autre, et un code que le fichier
-de locales ne porte pas retombe sur la langue par défaut au lieu d'échouer.
-Toutes les chaînes vivent dans
-[`video_helper/locales/i18n.yaml`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/i18n.yaml),
-lu par `os_helper.Locales` — le chargeur partagé par la suite — si bien que
-traduire la page n'oblige jamais à ouvrir un fichier Python. Les libellés de
-paramètres restent volontairement dans une seule langue, et le fichier dit
-pourquoi : chacun nomme le champ que la requête porte vraiment.
+un drapeau dans l'en-tête bascule de l'une à l'autre, et un code qu'aucun
+catalogue ne porte retombe sur la langue par défaut au lieu d'échouer.
+L'anglais est la source, écrite dans le balisage lui-même ; le français vit
+dans
+[`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po),
+un catalogue `gettext` standard lu par `os_helper.Catalog` — le chargeur
+partagé par la suite — si bien qu'un traducteur travaille dans le format que
+tous les outils de traduction parlent déjà, sur de vraies phrases plutôt que
+sur des noms de clés.
+
+Une chaîne que le catalogue français n'a pas rattrapée s'affiche en anglais
+lisible plutôt qu'en clé. Le risque est l'image inverse : reformulez l'anglais
+et son entrée française devient orpheline. Les tests donnent donc chaque chaîne
+source à `Catalog.problems`, qui fait échouer la construction au lieu de
+laisser la page se dé-traduire à moitié. Modifiez le `.po`, puis recompilez par
+`python -c "import os_helper as osh; osh.compile_catalogs('video_helper/locales')"`.
+
+Les libellés de paramètres restent volontairement dans une seule langue :
+chacun nomme le champ que la requête porte vraiment.
 
 Voir [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette, comparateur frame-first, zone de dépôt par lots ;

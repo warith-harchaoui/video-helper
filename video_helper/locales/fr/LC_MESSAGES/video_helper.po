@@ -1,0 +1,159 @@
+# fr catalogue for video-helper.
+#
+# msgid is the English source string as it appears in the code, so a
+# reworded source needs its entry reworded too — os_helper.Catalog.problems
+# reports the mismatch rather than letting the page half-revert to English.
+msgid ""
+msgstr ""
+"Project-Id-Version: video-helper\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "(optional)"
+msgstr "(optionnel)"
+
+msgid "Done."
+msgstr "Terminé."
+
+msgid "Download result"
+msgstr "Télécharger le résultat"
+
+msgid "Drop a file here, or click to choose"
+msgstr "Déposez un fichier ici ou cliquez pour en choisir un"
+
+msgid "Drop a video, pick an operation, run it on the local API, then compare input vs output and download the result. Everything runs on your machine — nothing is uploaded to a third party."
+msgstr "Déposez une vidéo, choisissez une opération, lancez-la sur l'API locale, puis comparez l'entrée à la sortie et téléchargez le résultat. Tout tourne sur votre machine — rien n'est envoyé à un tiers."
+
+msgid "Error "
+msgstr "Erreur "
+
+msgid "Input"
+msgstr "Entrée"
+
+msgid "Input video file"
+msgstr "Fichier vidéo d'entrée"
+
+msgid "Multiple files bundled as a .zip."
+msgstr "Plusieurs fichiers réunis dans un .zip."
+
+msgid "Operation"
+msgstr "Opération"
+
+msgid "Output"
+msgstr "Sortie"
+
+msgid "Pick an input file first."
+msgstr "Choisissez d'abord un fichier d'entrée."
+
+msgid "Raw flow array (.npy) — download only, no inline preview."
+msgstr "Tableau de flot brut (.npy) — téléchargement seulement, pas d'aperçu intégré."
+
+msgid "Request failed: {error}"
+msgstr "Échec de la requête : {error}"
+
+msgid "Run"
+msgstr "Lancer"
+
+msgid "Running…"
+msgstr "En cours…"
+
+msgid "The black operation needs no input; image-loop expects a still image here."
+msgstr "L'opération black n'a besoin d'aucune entrée ; image-loop attend ici une image fixe."
+
+msgid "Video Helper — Video Bench"
+msgstr "Video Helper — Banc vidéo"
+
+msgid "audio format"
+msgstr "format audio"
+
+msgid "audio track to attach"
+msgstr "piste audio à attacher"
+
+msgid "black — synthesize a solid-black clip"
+msgstr "black — synthétiser un clip noir uni"
+
+msgid "burn-subs needs a subtitles file."
+msgstr "burn-subs a besoin d'un fichier de sous-titres."
+
+msgid "burn-subs — burn subtitles into frames"
+msgstr "burn-subs — incruster les sous-titres dans les images"
+
+msgid "chunk — extract a [start, end] slice"
+msgstr "chunk — extraire une tranche [début, fin]"
+
+msgid "compress — two-pass compress to a target file size"
+msgstr "compress — compresser en deux passes vers une taille de fichier cible"
+
+msgid "concat — join multiple clips head-to-tail"
+msgstr "concat — joindre plusieurs clips bout à bout"
+
+msgid "convert — re-encode / resize / drop audio"
+msgstr "convert — ré-encoder / redimensionner / retirer le son"
+
+msgid "dimensions — width / height / duration / fps (JSON)"
+msgstr "dimensions — largeur / hauteur / durée / fps (JSON)"
+
+msgid "dis (fast, CPU, no extra install)"
+msgstr "dis (rapide, CPU, rien à installer de plus)"
+
+msgid "duration — length in seconds (JSON)"
+msgstr "duration — longueur en secondes (JSON)"
+
+msgid "extra clip(s) — concat needs at least a second video"
+msgstr "clip(s) supplémentaire(s) — concat exige au moins une deuxième vidéo"
+
+msgid "extract-audio — dump the audio track"
+msgstr "extract-audio — extraire la piste audio"
+
+msgid "extract-flow — dense optical flow (mp4 viz or .npy)"
+msgstr "extract-flow — flot optique dense (visualisation mp4 ou .npy)"
+
+msgid "extract-frames — PNG frames (zip)"
+msgstr "extract-frames — images PNG (zip)"
+
+msgid "farneback (CPU, no extra install)"
+msgstr "farneback (CPU, rien à installer de plus)"
+
+msgid "image to overlay"
+msgstr "image à incruster"
+
+msgid "image-loop — loop a still image into a clip"
+msgstr "image-loop — boucler une image fixe en clip"
+
+msgid "input still"
+msgstr "image fixe d'entrée"
+
+msgid "mux-audio needs an audio file."
+msgstr "mux-audio a besoin d'un fichier audio."
+
+msgid "mux-audio — attach an audio track"
+msgstr "mux-audio — attacher une piste audio"
+
+msgid "npy — raw (T, H, W, 2) flow array"
+msgstr "npy — tableau de flot brut (T, H, W, 2)"
+
+msgid "output still"
+msgstr "image fixe de sortie"
+
+msgid "overlay needs an image file."
+msgstr "overlay a besoin d'un fichier image."
+
+msgid "overlay — burn a still image onto the video"
+msgstr "overlay — incruster une image fixe sur la vidéo"
+
+msgid "raft (deep learning, needs the [flow] extra)"
+msgstr "raft (apprentissage profond, nécessite l'extra [flow])"
+
+msgid "srt2vtt — SRT → WebVTT + CSS (zip)"
+msgstr "srt2vtt — SRT → WebVTT + CSS (zip)"
+
+msgid "subtitles (.srt / .vtt / .ass)"
+msgstr "sous-titres (.srt / .vtt / .ass)"
+
+msgid "validate — is this a valid video? (JSON)"
+msgstr "validate — est-ce une vidéo valide ? (JSON)"
+
+msgid "video — HSV-visualization mp4"
+msgstr "video — mp4 de visualisation HSV"

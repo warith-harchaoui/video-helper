@@ -9,11 +9,18 @@ static asset the API returns verbatim.
 
 Where the words live
 --------------------
-Not here. Every human-readable string comes from ``locales/i18n.yaml``
-through :class:`os_helper.Locales`, the loader shared across the suite
-(``CODING.md`` 21.3). The markup below is tokenised — ``{{TOKEN}}`` in HTML,
-and a ``T`` object injected for the script — so one template serves every
-language and a translator never touches Python.
+In the markup, in English. Each one is wrapped as ``{{_("…")}}`` in the HTML,
+or listed in :data:`_JS_NAME_TO_SOURCE` for the script, and
+:class:`os_helper.Catalog` translates it through the compiled ``gettext``
+catalogues under ``locales/`` (``CODING.md`` 21.3).
+
+English is the msgid, so it needs no catalogue and cannot fall out of sync
+with one; a string the French catalogue has not caught up with renders as
+readable English instead of as a key. The cost is the mirror image: rewording
+the English here orphans its French entry, and gettext would quietly serve the
+English. That is what ``tests/test_gui_i18n.py`` exists to catch — it hands
+every source string in this module to :meth:`os_helper.Catalog.problems`, so
+an orphaned translation is a red build rather than a half-reverted page.
 
 The per-operation parameter labels stay out of the catalogue on purpose, and
 the locale file says why: each one names the form field the request actually
@@ -52,96 +59,76 @@ from __future__ import annotations
 import functools
 import html
 import json
+import re
 from pathlib import Path
 
 import os_helper as osh
 
-# Inside the package, not beside it: a file one level up is not package data
-# and does not travel in the wheel. best-engine shipped exactly that bug —
+# Inside the package, not beside it: a directory one level up is not package
+# data and does not travel in the wheel. best-engine shipped exactly that bug —
 # `pip install` gave a package whose every GUI string raised FileNotFoundError.
-_LOCALES_PATH = Path(__file__).resolve().parent / "locales" / "i18n.yaml"
+_LOCALES_DIR = Path(__file__).resolve().parent / "locales"
 
-#: The section of the locale file this module reads.
-_GUI_SECTION = "gui"
+#: The gettext domain, and therefore each ``.mo`` file's stem.
+_DOMAIN = "video_helper"
+
+#: The language served when the request names one we cannot render.
+_DEFAULT_LANGUAGE = "fr"
 
 
 @functools.lru_cache(maxsize=1)
-def _locales() -> osh.Locales:
-    """Parse ``locales/i18n.yaml`` once, through the suite's shared loader."""
-    return osh.Locales.from_path(_LOCALES_PATH)
+def _catalog() -> osh.Catalog:
+    """Resolve the catalogue directory once, through the suite's shared loader."""
+    return osh.Catalog.from_package(_LOCALES_DIR, _DOMAIN, default_language=_DEFAULT_LANGUAGE)
 
 
 def supported_languages() -> tuple[str, ...]:
-    """Language codes the GUI can render, as declared by the locale file."""
-    return tuple(_locales().supported_locales)
+    """Language codes the GUI can render: English plus every compiled catalogue."""
+    return _catalog().languages
 
 
 def default_language() -> str:
     """The language an unknown or absent ``?lang=`` falls back to."""
-    return _locales().default_locale
+    return _catalog().default_language
 
 
-# Two vocabularies meet here: the template's tokens and the locale file's
-# semantic keys. These maps bridge them. `_HTML_TOKEN_TO_KEY` fills {{TOKEN}}
-# placeholders; `_JS_NAME_TO_KEY` builds the `const T = {...}` the script reads.
-_HTML_TOKEN_TO_KEY: dict[str, str] = {
-    "PAGE_TITLE": "page_title",
-    "HERO_TITLE": "hero_title",
-    "HERO_P": "hero_subtitle",
-    "INPUT_LABEL": "input_label",
-    "DROP_HINT": "drop_hint",
-    "INPUT_NOTE": "input_note",
-    "FIELD_OPTIONAL": "field_optional",
-    "AUDIO_FORMAT_LABEL": "audio_format_label",
-    "OPERATION_LABEL": "operation_label",
-    "OP_VALIDATE": "op_validate",
-    "OP_DIMENSIONS": "op_dimensions",
-    "OP_DURATION": "op_duration",
-    "OP_CONVERT": "op_convert",
-    "OP_CHUNK": "op_chunk",
-    "OP_BLACK": "op_black",
-    "OP_COMPRESS": "op_compress",
-    "OP_IMAGE_LOOP": "op_image_loop",
-    "OP_CONCAT": "op_concat",
-    "OP_OVERLAY": "op_overlay",
-    "OP_EXTRACT_AUDIO": "op_extract_audio",
-    "OP_MUX_AUDIO": "op_mux_audio",
-    "OP_BURN_SUBS": "op_burn_subs",
-    "OP_SRT2VTT": "op_srt2vtt",
-    "OP_EXTRACT_FRAMES": "op_extract_frames",
-    "OP_EXTRACT_FLOW": "op_extract_flow",
-    "FLOW_DIS": "flow_dis",
-    "FLOW_FARNEBACK": "flow_farneback",
-    "FLOW_RAFT": "flow_raft",
-    "FLOW_OUT_VIDEO": "flow_out_video",
-    "FLOW_OUT_NPY": "flow_out_npy",
-    "EXTRA_CLIPS_LABEL": "extra_clips_label",
-    "OVERLAY_IMAGE_LABEL": "overlay_image_label",
-    "MUX_AUDIO_LABEL": "mux_audio_label",
-    "SUBS_LABEL": "subs_label",
-    "RUN_BUTTON": "run_button",
-    "INPUT_H2": "input_heading",
-    "OUTPUT_H2": "output_heading",
-    "INPUT_STILL_ALT": "input_still_alt",
-    "OUTPUT_STILL_ALT": "output_still_alt",
-    "DOWNLOAD_LINK": "download_link",
-    "LANG_HREF": "lang_toggle_href",
-    "LANG_FLAG": "lang_toggle_flag",
-    "LANG_ARIA": "lang_toggle_aria",
+# The language toggle is computed, not translated. Its three parts all mean
+# "the other language", which is data rather than copy: a msgid of
+# ``/gui?lang=fr`` whose translation is ``/gui?lang=en`` would be nonsense, and
+# `Catalog.problems` would rightly treat it as prose that had drifted.
+#
+#: Flag shown for a language — the flag of that language, not of the page.
+_FLAGS: dict[str, str] = {"fr": "🇫🇷", "en": "🇬🇧"}
+
+#: How each language names itself. Deliberately NOT translated: a French page
+#: offering English says "English version" in English, which is what a reader
+#: scanning for their own language actually looks for.
+_ENDONYMS: dict[str, str] = {"fr": "Version française", "en": "English version"}
+
+
+# The inline script's strings. The JS names are the contract between this
+# module and the script below; the English beside each one is the msgid, so
+# the script's copy lives in the same place as the markup's and is checked
+# by the same test. Injected as JSON, which is the one encoding an
+# apostrophe cannot break out of — and French copy is full of them.
+_JS_NAME_TO_SOURCE: dict[str, str] = {
+    "needInput": "Pick an input file first.",
+    "overlayNeedsImage": "overlay needs an image file.",
+    "muxNeedsAudio": "mux-audio needs an audio file.",
+    "burnSubsNeedsSubs": "burn-subs needs a subtitles file.",
+    "running": "Running…",
+    "errorPrefix": "Error ",
+    "done": "Done.",
+    "zipNote": "Multiple files bundled as a .zip.",
+    "npyNote": "Raw flow array (.npy) — download only, no inline preview.",
+    "requestFailed": "Request failed: {error}",
 }
 
-_JS_NAME_TO_KEY: dict[str, str] = {
-    "needInput": "js_need_input",
-    "overlayNeedsImage": "js_overlay_needs_image",
-    "muxNeedsAudio": "js_mux_needs_audio",
-    "burnSubsNeedsSubs": "js_burn_subs_needs_subs",
-    "running": "js_running",
-    "errorPrefix": "js_error_prefix",
-    "done": "js_done",
-    "zipNote": "js_zip_note",
-    "npyNote": "js_npy_note",
-    "requestFailed": "js_request_failed",
-}
+
+#: One ``{{_("…")}}`` site in the template. Non-greedy and newline-free, so a
+#: run of them on one line stays separate and an unterminated one is left
+#: alone rather than swallowing the rest of the page.
+_SOURCE_RE = re.compile(r'\{\{_\("(.*?)"\)\}\}')
 
 
 # One template, every language. Human-facing text is tokenised as {{TOKEN}}
@@ -153,7 +140,7 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{PAGE_TITLE}}</title>
+  <title>{{_("Video Helper — Video Bench")}}</title>
   <!-- Tailwind via CDN: keeps the page a single self-contained file, no build. -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -167,50 +154,50 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
       <!-- Language toggle: a flag that links to the other locale of this page. -->
       <a href="{{LANG_HREF}}" aria-label="{{LANG_ARIA}}"
          class="float-right text-xl hover:opacity-70">{{LANG_FLAG}}</a>
-      <h1 class="text-2xl font-semibold tracking-tight">{{HERO_TITLE}}</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">{{_("Video Helper — Video Bench")}}</h1>
       <p class="mt-1 text-sm text-slate-600">
-        {{HERO_P}}
+        {{_("Drop a video, pick an operation, run it on the local API, then compare input vs output and download the result. Everything runs on your machine — nothing is uploaded to a third party.")}}
       </p>
     </header>
 
     <!-- 1) File input: drag-and-drop zone doubling as a file picker. -->
     <section class="mb-5">
-      <label for="file" class="block text-sm font-medium mb-1">{{INPUT_LABEL}}</label>
+      <label for="file" class="block text-sm font-medium mb-1">{{_("Input video file")}}</label>
       <div id="drop" tabindex="0"
            class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed
                   border-slate-300 bg-white px-4 py-8 text-center cursor-pointer
                   focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400">
-        <p class="text-sm text-slate-500">{{DROP_HINT}}</p>
+        <p class="text-sm text-slate-500">{{_("Drop a file here, or click to choose")}}</p>
         <p id="filename" class="mt-2 text-sm font-medium text-slate-800"></p>
         <input id="file" type="file" accept="video/*,image/*" class="hidden" />
       </div>
       <p class="mt-1 text-xs text-slate-500">
-        {{INPUT_NOTE}}
+        {{_("The black operation needs no input; image-loop expects a still image here.")}}
       </p>
     </section>
 
     <!-- 2) Operation selector. Changing it reveals only the relevant fields. -->
     <section class="mb-5">
-      <label for="op" class="block text-sm font-medium mb-1">{{OPERATION_LABEL}}</label>
+      <label for="op" class="block text-sm font-medium mb-1">{{_("Operation")}}</label>
       <select id="op"
               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
                      focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="validate">{{OP_VALIDATE}}</option>
-        <option value="dimensions">{{OP_DIMENSIONS}}</option>
-        <option value="duration">{{OP_DURATION}}</option>
-        <option value="convert" selected>{{OP_CONVERT}}</option>
-        <option value="chunk">{{OP_CHUNK}}</option>
-        <option value="black">{{OP_BLACK}}</option>
-        <option value="compress">{{OP_COMPRESS}}</option>
-        <option value="image-loop">{{OP_IMAGE_LOOP}}</option>
-        <option value="concat">{{OP_CONCAT}}</option>
-        <option value="overlay">{{OP_OVERLAY}}</option>
-        <option value="extract-audio">{{OP_EXTRACT_AUDIO}}</option>
-        <option value="mux-audio">{{OP_MUX_AUDIO}}</option>
-        <option value="burn-subs">{{OP_BURN_SUBS}}</option>
-        <option value="srt2vtt">{{OP_SRT2VTT}}</option>
-        <option value="extract-frames">{{OP_EXTRACT_FRAMES}}</option>
-        <option value="extract-flow">{{OP_EXTRACT_FLOW}}</option>
+        <option value="validate">{{_("validate — is this a valid video? (JSON)")}}</option>
+        <option value="dimensions">{{_("dimensions — width / height / duration / fps (JSON)")}}</option>
+        <option value="duration">{{_("duration — length in seconds (JSON)")}}</option>
+        <option value="convert" selected>{{_("convert — re-encode / resize / drop audio")}}</option>
+        <option value="chunk">{{_("chunk — extract a [start, end] slice")}}</option>
+        <option value="black">{{_("black — synthesize a solid-black clip")}}</option>
+        <option value="compress">{{_("compress — two-pass compress to a target file size")}}</option>
+        <option value="image-loop">{{_("image-loop — loop a still image into a clip")}}</option>
+        <option value="concat">{{_("concat — join multiple clips head-to-tail")}}</option>
+        <option value="overlay">{{_("overlay — burn a still image onto the video")}}</option>
+        <option value="extract-audio">{{_("extract-audio — dump the audio track")}}</option>
+        <option value="mux-audio">{{_("mux-audio — attach an audio track")}}</option>
+        <option value="burn-subs">{{_("burn-subs — burn subtitles into frames")}}</option>
+        <option value="srt2vtt">{{_("srt2vtt — SRT → WebVTT + CSS (zip)")}}</option>
+        <option value="extract-frames">{{_("extract-frames — PNG frames (zip)")}}</option>
+        <option value="extract-flow">{{_("extract-flow — dense optical flow (mp4 viz or .npy)")}}</option>
       </select>
     </section>
 
@@ -223,17 +210,17 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
       </div>
       <div data-ops="convert black image-loop">
         <label class="block text-xs font-medium mb-1">width</label>
-        <input id="width" type="number" placeholder="{{FIELD_OPTIONAL}}"
+        <input id="width" type="number" placeholder="{{_("(optional)")}}"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="convert black image-loop">
         <label class="block text-xs font-medium mb-1">height</label>
-        <input id="height" type="number" placeholder="{{FIELD_OPTIONAL}}"
+        <input id="height" type="number" placeholder="{{_("(optional)")}}"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="convert black image-loop concat">
         <label class="block text-xs font-medium mb-1">frame_rate</label>
-        <input id="frame_rate" type="number" placeholder="{{FIELD_OPTIONAL}}"
+        <input id="frame_rate" type="number" placeholder="{{_("(optional)")}}"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="convert">
@@ -275,16 +262,16 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
       <div data-ops="extract-flow">
         <label class="block text-xs font-medium mb-1">method</label>
         <select id="flow_method" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-          <option value="dis" selected>{{FLOW_DIS}}</option>
-          <option value="farneback">{{FLOW_FARNEBACK}}</option>
-          <option value="raft">{{FLOW_RAFT}}</option>
+          <option value="dis" selected>{{_("dis (fast, CPU, no extra install)")}}</option>
+          <option value="farneback">{{_("farneback (CPU, no extra install)")}}</option>
+          <option value="raft">{{_("raft (deep learning, needs the [flow] extra)")}}</option>
         </select>
       </div>
       <div data-ops="extract-flow">
         <label class="block text-xs font-medium mb-1">output_format</label>
         <select id="flow_output_format" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-          <option value="video" selected>{{FLOW_OUT_VIDEO}}</option>
-          <option value="npy">{{FLOW_OUT_NPY}}</option>
+          <option value="video" selected>{{_("video — HSV-visualization mp4")}}</option>
+          <option value="npy">{{_("npy — raw (T, H, W, 2) flow array")}}</option>
         </select>
       </div>
       <div data-ops="extract-flow">
@@ -293,7 +280,7 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="extract-audio">
-        <label class="block text-xs font-medium mb-1">{{AUDIO_FORMAT_LABEL}}</label>
+        <label class="block text-xs font-medium mb-1">{{_("audio format")}}</label>
         <input id="audio_format" value="wav"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
@@ -322,23 +309,23 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
       <!-- Secondary file inputs, revealed per operation. -->
       <div data-ops="concat" class="col-span-2">
         <label class="block text-xs font-medium mb-1">
-          {{EXTRA_CLIPS_LABEL}}
+          {{_("extra clip(s) — concat needs at least a second video")}}
         </label>
         <input id="extra" type="file" accept="video/*" multiple
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="overlay" class="col-span-2">
-        <label class="block text-xs font-medium mb-1">{{OVERLAY_IMAGE_LABEL}}</label>
+        <label class="block text-xs font-medium mb-1">{{_("image to overlay")}}</label>
         <input id="overlay_image" type="file" accept="image/*"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="mux-audio" class="col-span-2">
-        <label class="block text-xs font-medium mb-1">{{MUX_AUDIO_LABEL}}</label>
+        <label class="block text-xs font-medium mb-1">{{_("audio track to attach")}}</label>
         <input id="mux_audio_file" type="file" accept="audio/*,video/*"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <div data-ops="burn-subs" class="col-span-2">
-        <label class="block text-xs font-medium mb-1">{{SUBS_LABEL}}</label>
+        <label class="block text-xs font-medium mb-1">{{_("subtitles (.srt / .vtt / .ass)")}}</label>
         <input id="subs_file" type="file" accept=".srt,.vtt,.ass,.ssa,text/plain"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
@@ -350,7 +337,7 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
               class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white
                      hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500
                      disabled:opacity-50">
-        {{RUN_BUTTON}}
+        {{_("Run")}}
       </button>
       <span id="status" class="ml-3 text-sm text-slate-600" role="status" aria-live="polite"></span>
     </section>
@@ -358,19 +345,19 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
     <!-- 5) Players + result. Input on the left, output on the right. -->
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div class="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 class="mb-2 text-sm font-medium">{{INPUT_H2}}</h2>
+        <h2 class="mb-2 text-sm font-medium">{{_("Input")}}</h2>
         <video id="in-video" controls class="w-full rounded"></video>
-        <img id="in-image" class="w-full rounded" hidden alt="{{INPUT_STILL_ALT}}" />
+        <img id="in-image" class="w-full rounded" hidden alt="{{_("input still")}}" />
       </div>
       <div class="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 class="mb-2 text-sm font-medium">{{OUTPUT_H2}}</h2>
+        <h2 class="mb-2 text-sm font-medium">{{_("Output")}}</h2>
         <video id="out-video" controls class="w-full rounded"></video>
-        <img id="out-image" class="w-full rounded" hidden alt="{{OUTPUT_STILL_ALT}}" />
+        <img id="out-image" class="w-full rounded" hidden alt="{{_("output still")}}" />
         <audio id="out-audio" controls class="w-full" hidden></audio>
         <pre id="out-json" class="mt-2 overflow-auto rounded bg-slate-100 p-2 text-xs" hidden></pre>
         <div id="out-extra" class="mt-2 text-sm text-slate-600"></div>
         <a id="download" class="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline"
-           hidden download>{{DOWNLOAD_LINK}}</a>
+           hidden download>{{_("Download result")}}</a>
       </div>
     </section>
   </div>
@@ -613,9 +600,9 @@ def render_gui(lang: str = "") -> str:
     Parameters
     ----------
     lang : str
-        Two-letter language code. Anything outside the locale file's
-        ``meta.supported_locales`` — including the empty string — falls back
-        to ``meta.default_locale``, so an unknown ``?lang=`` never 500s.
+        Two-letter language code. Anything without a compiled catalogue —
+        including the empty string — falls back to :data:`_DEFAULT_LANGUAGE`,
+        so an unknown ``?lang=`` never 500s.
 
     Returns
     -------
@@ -629,21 +616,35 @@ def render_gui(lang: str = "") -> str:
     >>> render_gui("tlh") == render_gui(default_language())
     True
     """
-    resolved = lang if lang in supported_languages() else default_language()
-    loc = _locales()
+    cat = _catalog()
+    resolved = cat.resolve(lang)
+    translate = cat.translator_for(resolved).gettext
 
-    page = _GUI_TEMPLATE.replace("{{LANG}}", html.escape(resolved, quote=True))
-    for token, key in _HTML_TOKEN_TO_KEY.items():
-        # Escape every value: these land in attributes (placeholder, alt, aria,
-        # href) as readily as in text nodes, and a stray quote would break out
-        # of the attribute it sits in.
-        value = html.escape(loc.text(_GUI_SECTION, key, resolved), quote=True)
-        page = page.replace("{{" + token + "}}", value)
+    # The other language, for the toggle. With two languages this is "the one
+    # that is not current"; with more it is the next one round, which keeps the
+    # flag a cycle rather than a dead end.
+    languages = cat.languages
+    other = languages[(languages.index(resolved) + 1) % len(languages)]
+
+    def _render_source(match: re.Match[str]) -> str:
+        """Translate one ``{{_("…")}}`` site and escape it for HTML.
+
+        Escaping is not optional: these land in attributes (placeholder, alt,
+        aria, title) as readily as in text nodes, and a French apostrophe in an
+        attribute would close it early.
+        """
+        return html.escape(translate(match.group(1)), quote=True)
+
+    page = _SOURCE_RE.sub(_render_source, _GUI_TEMPLATE)
+    page = page.replace("{{LANG}}", html.escape(resolved, quote=True))
+    page = page.replace("{{LANG_HREF}}", html.escape(f"/gui?lang={other}", quote=True))
+    page = page.replace("{{LANG_FLAG}}", _FLAGS.get(other, other.upper()))
+    page = page.replace("{{LANG_ARIA}}", html.escape(_ENDONYMS.get(other, other), quote=True))
 
     # The script's strings go in as JSON rather than as substituted text: it is
     # the encoding that cannot be broken out of by an apostrophe, and French
     # copy is full of them.
-    table = {name: loc.text(_GUI_SECTION, key, resolved) for name, key in _JS_NAME_TO_KEY.items()}
+    table = {name: translate(source) for name, source in _JS_NAME_TO_SOURCE.items()}
     return page.replace("{{T_JSON}}", json.dumps(table, ensure_ascii=False))
 
 

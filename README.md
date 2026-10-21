@@ -177,12 +177,22 @@ phrasings, commands, functions, file types), see
 [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
 The page speaks **French and English**. `GET /gui?lang=fr|en` picks one, a flag
-in the header toggles between them, and a code the locale file does not carry
-falls back to the default rather than failing. Every string lives in
-[`video_helper/locales/i18n.yaml`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/i18n.yaml),
-read through `os_helper.Locales` — the loader shared across the suite — so
-translating the page never means opening a Python file. The parameter labels
-stay in one language on purpose, and the file says why: each one names the form
+in the header toggles between them, and a code no catalogue carries falls back
+to the default rather than failing. The English is the source, written in the
+markup itself; the French lives in
+[`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po),
+a standard `gettext` catalogue read through `os_helper.Catalog` — the loader
+shared across the suite — so a translator works in the format every
+translation tool already speaks, on real sentences rather than on key names.
+
+A string the French catalogue has not caught up with renders as readable
+English instead of as a key. The mirror image is the risk: reword the English
+and its French entry is orphaned, so the tests hand every source string to
+`Catalog.problems`, which fails the build rather than letting the page
+half-revert. Edit the `.po`, then recompile with
+`python -c "import os_helper as osh; osh.compile_catalogs('video_helper/locales')"`.
+
+The parameter labels stay in one language on purpose: each one names the form
 field the request actually carries.
 
 See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe

@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-10-21
+
+### Changed
+
+- **The GUI's strings moved from `locales/i18n.yaml` to a `gettext`
+  catalogue.** The English is now the source, written in the markup itself as
+  `{{_("…")}}`; the French lives in
+  `video_helper/locales/fr/LC_MESSAGES/video_helper.po`, read through the new
+  `os_helper.Catalog` (os-helper 2.6.0). One mechanism for the whole suite,
+  and a translator now works in the format every translation tool already
+  speaks, on real sentences rather than on key names.
+
+  What this buys: a string the French catalogue has not caught up with renders
+  as **readable English** instead of as a key like `RUN_BUTTON`. What it costs:
+  rewording the English orphans its French entry, and gettext would quietly
+  serve the English — so `tests/test_gui_i18n.py` now hands every source
+  string to `Catalog.problems`, which names both halves of that fault. Proven
+  by doing it: rewording the Run button turned the suite red before this
+  shipped.
+
+  The language toggle is no longer translated. Its three parts all mean "the
+  other language", which is data rather than copy — a msgid of `/gui?lang=fr`
+  translating to `/gui?lang=en` would be nonsense — so they are computed from
+  the resolved language instead, and covered by their own test.
+
+### Fixed
+
+- **The compiled catalogue would never have shipped.** The stock Python
+  `.gitignore` this repository inherited carries a blanket `*.mo`, where a
+  `.mo` is a build artifact. Here it is the file the GUI reads at run time:
+  left ignored it would have been absent from the repository, therefore from
+  the sdist, therefore from the wheel, and **every string would have rendered
+  as English on an installed copy** while looking perfect locally, where the
+  file sits on disk either way. Negated for this package's own catalogues, and
+  held by a "tracked by git" test — the same bug this suite already shipped
+  twice, reached by a third route.
+
 ## [2.6.1] - 2026-10-21
 
 ### Changed

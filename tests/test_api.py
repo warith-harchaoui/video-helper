@@ -94,16 +94,20 @@ def test_openapi_lists_expected_endpoints(client) -> None:
 def _page_name() -> str:
     """The GUI's own name, in whatever language it renders by default.
 
-    Escaped the way the page escapes it and lower-cased for the comparisons
-    below: a French string can carry an apostrophe, which `render_gui` writes
-    as `&#x27;` — correct HTML that a browser renders as an apostrophe, and
-    not the literal the locale file holds.
+    Taken from the rendered default page rather than from a catalogue lookup,
+    so this says "the page shows its own title" in one language-independent
+    sentence. Lower-cased and escaped the way the page escapes it: a French
+    title can carry an apostrophe, which `render_gui` writes as `&#x27;` —
+    correct HTML that a browser renders as an apostrophe, and not the literal
+    the catalogue holds.
     """
-    import html
+    import re
 
     from video_helper import gui
 
-    return html.escape(gui._locales().text("gui", "hero_title"), quote=True).lower()
+    title = re.search(r"<title>([^<]*)</title>", gui.render_gui())
+    assert title, "the default page has no <title>"
+    return title.group(1).lower()
 
 
 def test_gui_and_root_routes_serve_html(client) -> None:
