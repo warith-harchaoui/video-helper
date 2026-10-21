@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-21
+
+### Added
+
+- **The video-bench GUI speaks French and English.** Every string it shows now
+  comes from `video_helper/locales/i18n.yaml` through `os_helper.Locales`, the
+  loader shared across the suite (CODING.md 21.3), instead of being written
+  into the markup. `GET /gui?lang=fr|en` picks the language; anything the file
+  does not carry — including a mistyped code and the empty default — falls
+  back to the declared default locale, so a bad `?lang=` returns a page rather
+  than a 500. A flag in the header toggles between the two.
+
+  The template is tokenised (`{{TOKEN}}` in HTML, a `T` object for the
+  script), so one piece of markup serves both languages and a translator never
+  opens a Python file. The script's strings are injected as JSON rather than
+  substituted as text: it is the encoding an apostrophe cannot break out of,
+  and French copy is full of them. All sixteen operation descriptions, the
+  three optical-flow methods and the two flow output formats are translated;
+  the operation names themselves are the API's own and stay.
+
+  `GUI_HTML` still resolves, via a module-level `__getattr__` that renders on
+  access — importers that predate this keep working, and the locale file is
+  not read by callers that never serve the GUI.
+
+  **The parameter labels stay out of the catalogue on purpose**: `width`,
+  `height`, `frame_rate`, `method`, `vcodec`, `target_size_mb` and the rest
+  each name the form field the request actually carries, so the wire's own
+  spelling is what makes a field checkable against the API documentation.
+  `audio format` was the one exception — the field it fills is
+  `output_format`, so that label is a description rather than a wire name, and
+  it is translated.
+
+  One deliberate simplification: the input hint lost the `<code>` wrappers
+  around `black` and `image-loop`. Keeping them would have cut one sentence
+  into three fragments, which a translator cannot reorder — the exact failure
+  localisation exists to prevent.
+
+### Changed
+
+- **The declared `os-helper` floor rises to 2.4.0**, the version that
+  introduced `Locales`. It was `>=2.0.0`, which the GUI can no longer honour:
+  a user installing against os-helper 2.0.x would get an `AttributeError` out
+  of the `/gui` route. Nothing would have caught it — pip resolves the newest
+  os-helper, never the floor. `tests/test_gui_i18n.py` now asserts the floor
+  against the feature it needs.
+
+### Fixed
+
+- **A GUI test asserted the default language rather than the page's
+  identity.** It looked for the literal `"video bench"`, which is no longer
+  what a French default renders. It now asks the locale file what the page is
+  called.
+
+### Notes
+
+- The locale file lives **inside** the package, is declared in
+  `package-data` (a table this project did not have), and is carved out of
+  this repository's blanket `*.yaml` ignore rule — the third member of the
+  suite to carry that rule and the third to need the carve-out. Three tests
+  hold those three properties; verified the way the sibling defect was found,
+  by opening the built wheel and finding the file inside it.
+
 ## [2.5.0] - 2026-10-19
 
 ### Fixed

@@ -179,6 +179,16 @@ Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
 fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
+La page parle **français et anglais**. `GET /gui?lang=fr|en` choisit la langue,
+un drapeau dans l'en-tête bascule de l'une à l'autre, et un code que le fichier
+de locales ne porte pas retombe sur la langue par défaut au lieu d'échouer.
+Toutes les chaînes vivent dans
+[`video_helper/locales/i18n.yaml`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/i18n.yaml),
+lu par `os_helper.Locales` — le chargeur partagé par la suite — si bien que
+traduire la page n'oblige jamais à ouvrir un fichier Python. Les libellés de
+paramètres restent volontairement dans une seule langue, et le fichier dit
+pourquoi : chacun nomme le champ que la requête porte vraiment.
+
 Voir [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) pour la feuille de route vers une GUI plus riche
 (canvas de recette, comparateur frame-first, zone de dépôt par lots ;
 le bench minimal `/gui` ci-dessus en est la première étape).

@@ -176,6 +176,15 @@ For the exhaustive catalogue of what triggers each operation (natural-language
 phrasings, commands, functions, file types), see
 [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
+The page speaks **French and English**. `GET /gui?lang=fr|en` picks one, a flag
+in the header toggles between them, and a code the locale file does not carry
+falls back to the default rather than failing. Every string lives in
+[`video_helper/locales/i18n.yaml`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/i18n.yaml),
+read through `os_helper.Locales` — the loader shared across the suite — so
+translating the page never means opening a Python file. The parameter labels
+stay in one language on purpose, and the file says why: each one names the form
+field the request actually carries.
+
 See [GUI.md](https://github.com/warith-harchaoui/video-helper/blob/main/GUI.md) for the roadmap toward a richer GUI (Recipe
 Canvas, frame-first comparator, batch drop zone: the minimal `/gui` bench
 above is the first step).

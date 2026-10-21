@@ -91,6 +91,21 @@ def test_openapi_lists_expected_endpoints(client) -> None:
     assert expected.issubset(set(paths.keys()))
 
 
+def _page_name() -> str:
+    """The GUI's own name, in whatever language it renders by default.
+
+    Escaped the way the page escapes it and lower-cased for the comparisons
+    below: a French string can carry an apostrophe, which `render_gui` writes
+    as `&#x27;` — correct HTML that a browser renders as an apostrophe, and
+    not the literal the locale file holds.
+    """
+    import html
+
+    from video_helper import gui
+
+    return html.escape(gui._locales().text("gui", "hero_title"), quote=True).lower()
+
+
 def test_gui_and_root_routes_serve_html(client) -> None:
     """``/gui`` and ``/`` both serve the self-contained video-bench HTML page,
     including the operation options and field ids the page's JS depends on."""
@@ -99,14 +114,17 @@ def test_gui_and_root_routes_serve_html(client) -> None:
     assert r.headers["content-type"].startswith("text/html")
     body = r.text.lower()
     assert "<!doctype html>" in body
-    assert "video bench" in body
+    # Ask the locale file what the page is called rather than hard-coding one
+    # language's wording: the page renders in French by default, so asserting
+    # the English copy would be testing the default locale, not the page.
+    assert _page_name() in body
     assert 'value="convert"' in r.text and 'value="extract-frames"' in r.text
     assert 'value="compress"' in r.text and 'value="extract-flow"' in r.text
     assert 'id="flow_method"' in r.text and 'id="flow_output_format"' in r.text
 
     root = client.get("/")  # TestClient follows redirects by default
     assert root.status_code == 200
-    assert "video bench" in root.text.lower()
+    assert _page_name() in root.text.lower()
 
 
 def test_route_schemas_expose_expected_param_defaults(client) -> None:

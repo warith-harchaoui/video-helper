@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-helper"
-version = "2.5.0"
+version = "2.6.0"
 description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (VidGear / PyAV / ffmpeg-pipe backends), dense optical flow (DIS/Farneback/RAFT), HTTP-headers passthrough, exact-size padded output, target-file-size two-pass compression, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Multimedia :: Video :: Conversion",
 ]
 dependencies = [
-    "os-helper>=2.0.0,<3",
+    "os-helper>=2.4.0,<3",
     "opencv-python>=4.10.0.84,<5",
     "ffmpeg-python>=0.2.0,<0.3",
     "vidgear>=0.3.3,<1",
@@ -114,6 +114,13 @@ Issues = "https://github.com/warith-harchaoui/video-helper/issues"
 [tool.setuptools.packages.find]
 include = ["video_helper*"]
 exclude = ["tests*", "assets*"]
+
+# setuptools ships `.py` files on its own; anything else needs declaring here,
+# and the patterns resolve relative to a PACKAGE directory, never to the repo
+# root. best-engine declared five data files beside its package and published
+# wheels that contained none of them.
+[tool.setuptools.package-data]
+"video_helper" = ["locales/*.yaml"]
 
 [tool.ruff]
 line-length = 100
