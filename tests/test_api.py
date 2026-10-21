@@ -341,7 +341,9 @@ def test_concat_overlay_and_mux_audio_routes_round_trip(client, tmp_path) -> Non
             ("files", ("a.mp4", a.read_bytes(), "video/mp4")),
             ("files", ("b.mp4", b.read_bytes(), "video/mp4")),
         ],
-        data={"reencode": "true", "frame_rate": "15"},
+        # Re-encoding is the default; naming it would now be the retired
+        # flag and earn a 400.
+        data={"frame_rate": "15"},
     )
     assert r.status_code == 200
     concatenated = tmp_path / "concat.mp4"
@@ -402,3 +404,78 @@ def test_extract_frames_and_extract_flow_routes_round_trip(client, tmp_path) -> 
     npy_path.write_bytes(r.content)
     arr = np.load(npy_path)
     assert arr.ndim == 4 and arr.shape[-1] == 2 and arr.dtype == np.float32
+
+
+# ---------------------------------------------------------------------------
+# /concat re-encode flag -- FastAPI 0.147 checkbox semantics.
+# ---------------------------------------------------------------------------
+
+
+def _two_tiny_uploads() -> list:
+    """Two multipart parts that satisfy ``/concat``'s 2-file minimum.
+
+    The bytes never reach ffmpeg: every test below patches ``concat_videos``,
+    so the guard is exercised without needing a real encoder.
+    """
+    return [
+        ("files", ("a.mp4", b"not-a-real-video", "video/mp4")),
+        ("files", ("b.mp4", b"not-a-real-video", "video/mp4")),
+    ]
+
+
+def test_concat_reencodes_when_the_flag_is_omitted(client, monkeypatch, tmp_path) -> None:
+    """An omitted flag must still mean "re-encode".
+
+    FastAPI 0.147 reads an omitted boolean form field as False whatever
+    default is declared, which is why the wire field is the off-by-default
+    ``no_reencode`` rather than an on-by-default ``reencode``. Re-encoding is
+    what lets inputs with differing codecs join cleanly, so losing it
+    silently produces broken output.
+    """
+    import video_helper.api as api_mod
+
+    captured = {}
+
+    def fake_concat(*, input_videos, output_video, reencode, frame_rate):
+        captured["reencode"] = reencode
+        Path(output_video).write_bytes(b"stub")
+
+    monkeypatch.setattr(api_mod, "concat_videos", fake_concat)
+    r = client.post("/concat", files=_two_tiny_uploads())
+    assert r.status_code == 200
+    assert captured["reencode"] is True
+
+
+def test_concat_no_reencode_is_forwarded(client, monkeypatch) -> None:
+    """``no_reencode=true`` must reach ``concat_videos`` as ``reencode=False``."""
+    import video_helper.api as api_mod
+
+    captured = {}
+
+    def fake_concat(*, input_videos, output_video, reencode, frame_rate):
+        captured["reencode"] = reencode
+        Path(output_video).write_bytes(b"stub")
+
+    monkeypatch.setattr(api_mod, "concat_videos", fake_concat)
+    r = client.post("/concat", files=_two_tiny_uploads(), data={"no_reencode": "true"})
+    assert r.status_code == 200
+    assert captured["reencode"] is False
+
+
+def test_concat_rejects_the_retired_reencode_flag(client, monkeypatch) -> None:
+    """A client still sending ``reencode`` gets a 400, never a silent flip.
+
+    FastAPI ignores unknown form fields, so without this guard an old client
+    asking for ``reencode=false`` would be silently re-encoded instead.
+    """
+    import video_helper.api as api_mod
+
+    def fake_concat(**_k):  # pragma: no cover - must never run
+        raise AssertionError("concat_videos() must not be reached for a retired flag")
+
+    monkeypatch.setattr(api_mod, "concat_videos", fake_concat)
+    r = client.post("/concat", files=_two_tiny_uploads(), data={"reencode": "false"})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "`reencode`" in detail
+    assert "`no_reencode`" in detail

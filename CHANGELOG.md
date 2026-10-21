@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-10-21
+
+### Changed
+
+- **`POST /concat` renames `reencode` to `no_reencode`, and the old name is
+  now a 400.** FastAPI **0.147.0** (2026-10-19) changed how omitted boolean
+  form fields resolve: they are read as `False` "matching unchecked HTML
+  checkboxes", explicitly "including required fields and fields with defaults
+  of `True` or `None`" (PR #16523).
+
+  `reencode` was declared `bool = Form(True)`. Every client that left it out
+  — including **this package's own GUI**, whose concat panel posts no such
+  field and relied on the server default — silently switched to stream-copy
+  concatenation. That is the mode that only works when every input already
+  shares a codec, profile and timebase; for anything else ffmpeg emits a file
+  that plays wrong or not at all. The HTTP surface was quietly producing
+  broken video.
+
+  Declaring the field `bool | None = Form(None)` does not escape it — the
+  upstream note names that case too. An off-by-default flag is the only shape
+  the new semantics cannot invert, so the wire field is now `no_reencode`,
+  which also matches the CLI's existing `--reencode/--no-reencode` pair.
+  Omitting it still means "re-encode", as documented.
+
+  Sending the retired `reencode` is a **400** naming the replacement, rather
+  than being ignored: FastAPI drops unknown form fields, so a client asking
+  for `reencode=false` would otherwise have been silently re-encoded instead
+  — the opposite of its request.
+
+  MINOR rather than MAJOR deliberately: `concat_videos(..., reencode=)` in
+  the Python API is untouched and no default behaviour is reversed; the change
+  restores the documented default upstream had inverted. Only HTTP callers
+  that named the flag explicitly are affected, and they get a loud error.
+
 ## [2.6.0] - 2026-10-21
 
 ### Added

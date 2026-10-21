@@ -251,6 +251,51 @@ def _cleanup_on_error(tmp: Path) -> Iterator[None]:
         raise
 
 
+def _reject_retired_flag(old: str, new: str, sent: str | None) -> None:
+    """
+    Fail loudly when a client sends a form flag that checkbox semantics retired.
+
+    FastAPI 0.147.0 made an omitted ``bool`` form field evaluate to ``False``
+    ("matching unchecked HTML checkboxes", PR #16523) regardless of the
+    declared default. An on-by-default flag such as the old ``reencode=True``
+    therefore inverted for every client that simply left it out, so the flag
+    was renamed to its off-by-default form -- which matches both the new
+    semantics and the CLI's own ``--no-reencode`` spelling.
+
+    The rename on its own would be worse than the bug it fixes: FastAPI
+    ignores unknown form fields, so a client still sending the old name would
+    be silently switched to the opposite behaviour. This turns that silent
+    flip into a 400 the caller cannot miss.
+
+    Parameters
+    ----------
+    old : str
+        The retired field name, spelled as a stale client would still send it.
+    new : str
+        The field name that replaced it.
+    sent : str or None
+        The raw value received for ``old``; ``None`` when absent, which is the
+        expected case for an up-to-date client.
+
+    Raises
+    ------
+    HTTPException
+        With status 400 when ``sent`` is anything other than ``None``.
+    """
+    if sent is None:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"The `{old}` form field was retired in favour of `{new}`. "
+            "FastAPI 0.147 reads an omitted boolean form field as False "
+            f"(unchecked-checkbox semantics), which silently inverted `{old}`, "
+            f"so the flag is now expressed off-by-default: send `{new}=true` "
+            f"for what used to be `{old}=false`, and omit it otherwise."
+        ),
+    )
+
+
 def _zip_folder(folder: Path) -> io.BytesIO:
     """Bundle ``folder``'s contents into an in-memory ZIP for streaming."""
     buf = io.BytesIO()
@@ -507,11 +552,30 @@ def image_loop(
 def concat(
     background: BackgroundTasks,
     files: list[UploadFile] = File(...),
-    reencode: bool = Form(True),
+    no_reencode: bool = Form(
+        False,
+        description=(
+            "Concatenate by stream copy instead of re-encoding. Mirrors the "
+            "CLI's --no-reencode; omit it to re-encode, which stays the "
+            "default and is what makes inputs with differing codecs join "
+            "cleanly."
+        ),
+    ),
+    # Declared, not hidden: `include_in_schema` is only honoured for query,
+    # path and header parameters, so a Form field cannot be kept out of the
+    # generated body model. Declaring it is also the only public way to see
+    # that a stale client sent it -- hence `deprecated`, which is the signal
+    # OpenAPI actually has for "present, but do not use".
+    reencode: str | None = Form(
+        None,
+        description="Retired -- send `no_reencode` instead.",
+        deprecated=True,
+    ),
     frame_rate: int | None = Form(None),
     output_format: str = Form("mp4"),
 ) -> FileResponse:
     """Concatenate multiple uploaded videos head-to-tail."""
+    _reject_retired_flag("reencode", "no_reencode", reencode)
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="concat needs at least 2 files")
     tmp = _new_tmpdir()
@@ -533,7 +597,7 @@ def concat(
         concat_videos(
             input_videos=srcs,
             output_video=str(dst),
-            reencode=reencode,
+            reencode=not no_reencode,
             frame_rate=frame_rate,
         )
     background.add_task(_cleanup, tmp)
