@@ -223,6 +223,60 @@ def srt2vtt(srt_file_path: str, vtt_file_path: str = None, css_file_path: str = 
     osh.info(f"WebVTT saved: {vtt_file_path}")
 
 
+def _refuse_output_over_input(output_path: str, inputs: list[str]) -> None:
+    """Refuse a destination that is also one of the sources.
+
+    Every writer here hands ffmpeg ``overwrite_output=True``, so pointing the
+    destination at a source truncates that source while ffmpeg is still reading
+    it. Two of them did it **without raising at all**: measured on disk,
+    ``extract_video_chunk(v, 0.2, 0.8, v)`` replaced a 41 781-byte video with a
+    10 604-byte fragment of itself, and ``concat_videos([v, w], v)`` overwrote
+    `v`, both returning normally. The caller is told nothing and the original is
+    gone.
+
+    The remaining writers happened to fail with an opaque ffmpeg error instead,
+    leaving the input intact by luck rather than by design. They are guarded too,
+    so the answer is the same sentence everywhere and so a later refactor cannot
+    turn their luck into the silent case.
+
+    Paths go through :func:`os_helper.relative2absolute_path`, so ``v.mp4``,
+    ``./v.mp4`` and ``sub/../v.mp4`` are recognised as one file.
+
+    Parameters
+    ----------
+    output_path : str
+        The destination about to be written.
+    inputs : list of str
+        Every path this operation reads.
+
+    Raises
+    ------
+    ValueError
+        When the destination resolves to one of the inputs.
+
+    Examples
+    --------
+    >>> _refuse_output_over_input("out.mp4", ["a.mp4", "b.mp4"]) is None
+    True
+    >>> _refuse_output_over_input("a.mp4", ["a.mp4"])
+    Traceback (most recent call last):
+    ValueError: a.mp4 is both an input and the output; refusing to overwrite a source file
+    """
+    if osh.emptystring(output_path):
+        # Not yet settled: the caller left the destination to the function,
+        # which derives it from the input's name. `compress_video` is the one
+        # writer here that allows it, and calling this guard before that
+        # derivation is how it should be called -- the derived name is checked
+        # on the second call, once it exists.
+        return
+    target = osh.relative2absolute_path(output_path)
+    for source in inputs:
+        if source and osh.relative2absolute_path(source) == target:
+            raise ValueError(
+                f"{source} is both an input and the output; refusing to overwrite a source file"
+            )
+
+
 def is_valid_video_file(video_file: str) -> bool:
     """
     Check that ``video_file`` exists, has a known video extension, and contains a video stream.
@@ -1954,6 +2008,7 @@ def extract_video_chunk(
     >>> extract_video_chunk("input.mp4", 10.0, 20.0, "output_chunk.mp4")
     >>> extract_video_chunk("intermediate.mp4", 10.0, 20.0, "chunk.mp4", copy=True)
     """
+    _refuse_output_over_input(output_video, [input_video])
     assert is_valid_video_file(input_video), f"Video file not okay:\n\t{input_video}"
     metadata = video_dimensions(input_video)
     duration = metadata["duration"]
@@ -2133,6 +2188,7 @@ def compress_video(
     >>> compress_video("meeting.mp4", "meeting-compressed.mp4", target_size_mb=97)
     'meeting-compressed.mp4'
     """
+    _refuse_output_over_input(output_video, [input_video])
     osh.info(f"Compressing video file (target {target_size_mb} MB):\n\t{input_video}")
     assert is_valid_video_file(input_video), f"Input video file not okay:\n\t{input_video}"
 
@@ -2144,6 +2200,10 @@ def compress_video(
     fo, bo, output_ext = osh.folder_name_ext(output_video)
     if osh.emptystring(output_ext):
         output_video = osh.join(fo, bo + ".mp4")
+    # Re-checked now that the name exists: the first call above saw `None`
+    # when the caller left it to us, and `<input>-compressed.mp4` is derived
+    # from the input, so it is exactly the place a collision could appear.
+    _refuse_output_over_input(output_video, [input_video])
 
     if not overwrite and osh.file_exists(output_video):
         osh.info(f"Compressed video already exists, skipping:\n\t{output_video}")
@@ -2450,6 +2510,7 @@ def concat_videos(
     --------
     >>> concat_videos(["intro.mp4", "body.mp4", "outro.mp4"], "final.mp4")
     """
+    _refuse_output_over_input(output_video, input_videos)
     assert len(input_videos) > 0, "concat_videos: empty input list"
     for v in input_videos:
         osh.checkfile(v, msg=f"Input video not found: {v}")
@@ -2530,6 +2591,7 @@ def overlay_image(
     ...               x="if(lt(t,2),100,400)", y="200",
     ...               scale_width=24)
     """
+    _refuse_output_over_input(output_video, [input_video, image])
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
     osh.checkfile(image, msg=f"Overlay image not found: {image}")
     quiet = osh.verbosity() <= 0
@@ -2592,6 +2654,7 @@ def extract_audio_track(
     >>> extract_audio_track("clip.mov", "clip.mp3",
     ...                     encoding="libmp3lame", sample_rate=22050)
     """
+    _refuse_output_over_input(output_audio, [input_video])
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
     assert is_valid_video_file(input_video), f"Invalid input video file: {input_video}"
     quiet = osh.verbosity() <= 0
@@ -2651,6 +2714,7 @@ def mux_audio_video(
     --------
     >>> mux_audio_video("silent.mp4", "voice.wav", "final.mp4")
     """
+    _refuse_output_over_input(output_video, [input_video, input_audio])
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
     osh.checkfile(input_audio, msg=f"Input audio not found: {input_audio}")
     quiet = osh.verbosity() <= 0
@@ -2730,6 +2794,7 @@ def burn_subtitles(
     >>> burn_subtitles("clip.mp4", "subs.vtt", "captioned.mp4",
     ...                force_style="FontName=Helvetica,FontSize=28,Outline=2")
     """
+    _refuse_output_over_input(output_video, [input_video, subtitles_file])
     osh.checkfile(input_video, msg=f"Input video not found: {input_video}")
     osh.checkfile(subtitles_file, msg=f"Subtitles file not found: {subtitles_file}")
     quiet = osh.verbosity() <= 0
