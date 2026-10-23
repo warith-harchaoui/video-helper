@@ -260,7 +260,7 @@ for frame in vh.extract_frames(
 | Aucun | défini | Redimensionne à cette hauteur, préserve le ratio, **sans padding** |
 | Aucun | Aucun | Dimensions natives (par défaut) |
 
-`pad_color` accepte `"black"` (par défaut), `"white"`, `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"gray"` / `"grey"`, ou un hex `"#RRGGBB"`. `"transparent"` n'est pas implémenté : il lève une `ValueError`, une sortie à 4 canaux serait nécessaire.
+`pad_color` accepte `"black"` (par défaut), `"white"`, `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"gray"` / `"grey"` ou un hex `"#RRGGBB"`. `"transparent"` n'est pas implémenté : il lève une `ValueError`, une sortie à 4 canaux serait nécessaire.
 
 Composable avec tout le reste : destinations, hwaccel, accès épars :
 
@@ -362,7 +362,7 @@ de vecteurs 2D, une paire `(vx, vy)` par pixel, `vx` pour le déplacement
 horizontal et `vy` pour le vertical, tous deux en pixels.
 
 `iter_frame_optical_flow` enveloppe **n'importe quel** itérateur de frames
-`(H, W, 3)` BGR uint8 (la sortie d'`extract_frames`, ou une source live
+`(H, W, 3)` BGR uint8 (la sortie d'`extract_frames` ou une source live
 partageant le même contrat comme `capture_helper.iter_camera_frames`) et
 réémet des tableaux `(H, W, 5)` float32 : la frame (canaux 0-2) plus le flux
 dense `vx`/`vy` (canaux 3-4) par rapport à la frame précédente. Cette
@@ -400,7 +400,7 @@ La toute première frame émise a toujours un flux nul (pas de frame
 précédente), donc le nombre de frames reste 1:1 avec l'itérateur d'entrée.
 `method="dis"` (par défaut) et `"farneback"` sont des appels OpenCV CPU
 uniquement ; `method="raft"` privilégie la qualité et est recommandé sur GPU
-(RAFT sur CPU n'est pas censé tourner en temps réel), et nécessite des
+(RAFT sur CPU n'est pas censé tourner en temps réel) et nécessite des
 frames d'au moins ~128px par côté (une contrainte propre à RAFT, pas à
 video-helper).
 
@@ -427,7 +427,7 @@ curl -F 'file=@clip.mp4' -F 'method=dis' -o clip-flow.mp4 http://localhost:8000/
 **Redimensionner un flux calculé :** `output_width`/`output_height` (les deux
 requis ensemble) passent par `resize_flow`, basé sur les ondelettes plutôt
 qu'une simple interpolation bilinéaire/bicubique, pour ne pas étaler une
-frontière de mouvement lors du redimensionnement, et rééchelonne correctement
+frontière de mouvement lors du redimensionnement et rééchelonne correctement
 la *magnitude* du flux par le même facteur que le redimensionnement spatial
 (nécessite `pip install "video-helper[flow]"` pour `PyWavelets`) :
 
