@@ -365,6 +365,13 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
     Uses :func:`ffmpeg.probe` (a thin wrapper over ``ffprobe``) for
     metadata extraction. ``http_headers`` are passed through ffprobe's
     ``-headers`` flag so URL-protected streams probe correctly.
+
+    Raises
+    ------
+    ValueError
+        If the file carries no video stream -- an audio file, most often.
+        Audio is audio-helper's half of the split; see
+        ``audio_helper.get_audio_duration``.
     """
     is_url = video_file.startswith(("http://", "https://"))
     if not is_url:
@@ -387,7 +394,21 @@ def video_dimensions(video_file: str, http_headers: dict | None = None) -> dict:
             )
 
     probe = ffmpeg.probe(video_file, **probe_kwargs)
-    video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
+    video_info = next((s for s in probe["streams"] if s["codec_type"] == "video"), None)
+    if video_info is None:
+        # A file with no video stream is almost always a caller reaching for
+        # the wrong half of a deliberate split -- audio belongs to
+        # audio-helper, as video_duration's own docstring says -- rather than a
+        # corrupt input. Name the other half. Until this guard existed the
+        # generator above raised a bare StopIteration from inside next(),
+        # which carries no file name, no cause, and reads as a bug in here.
+        has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
+        what = "it is audio-only" if has_audio else "it has no decodable video stream"
+        raise ValueError(
+            f"{video_file}: {what}, and video_dimensions requires a video stream. "
+            "For an audio file use audio_helper.get_audio_duration or "
+            "audio_helper.load_audio."
+        )
     width = int(video_info["width"])
     height = int(video_info["height"])
     duration = float(video_info["duration"])
