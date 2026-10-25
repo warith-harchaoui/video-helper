@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-helper"
-version = "2.7.0"
-description = "Video Helper — utility functions for video processing exposed as library, argparse CLI, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (VidGear / PyAV / ffmpeg-pipe backends), dense optical flow (DIS/Farneback/RAFT), HTTP-headers passthrough, exact-size padded output, target-file-size two-pass compression, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
+version = "2.8.0"
+description = "Video Helper — utility functions for video processing exposed as library, click CLI, FastAPI HTTP surface, and MCP tools. Validation, format conversion, frame extraction (VidGear / PyAV / ffmpeg-pipe backends), dense optical flow (DIS/Farneback/RAFT), HTTP-headers passthrough, exact-size padded output, target-file-size two-pass compression, subtitle conversion (SRT/VTT/CSS), and pipeline primitives (black video, image loop, concat, overlay, audio mux, subtitle burn)."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = {text = "BSD-3-Clause"}
@@ -27,7 +27,9 @@ classifiers = [
     "Topic :: Multimedia :: Video :: Conversion",
 ]
 dependencies = [
-    "os-helper>=2.6.0,<3",
+    "os-helper>=2.6.0,<4",
+    # The command line is the package's only CLI, so click is not optional.
+    "click>=8.1,<9",
     "opencv-python>=4.10.0.84,<5",
     "ffmpeg-python>=0.2.0,<0.3",
     "vidgear>=0.3.3,<1",
@@ -63,9 +65,6 @@ faces = [
 # discontinuity-aware resizing (needs PyWavelets). method="dis"/"farneback"
 # without resizing need no extra — opencv-python is already core.
 flow = ["torch>=2,<3", "torchvision>=0.15,<1", "PyWavelets>=1.4,<2"]
-# CLI-only-with-click extra. The argparse variant needs no runtime dep
-# and is always available.
-cli = ["click>=8.1,<9"]
 # FastAPI HTTP surface (video_helper.api). uvicorn + python-multipart
 # so multipart file uploads work out of the box.
 api = [
@@ -86,13 +85,12 @@ mcp = [
     "mcp>=1.12,<2",
 ]
 # `dev` keeps the bar low for CI — pytest + httpx (for FastAPI TestClient)
-# + click (so the click CLI import always resolves in tests) + api/mcp
-# so smoke tests exercise every surface.
+# + api/mcp so smoke tests exercise every surface. click needs no entry here:
+# it is a core dependency now that the CLI is no longer optional.
 dev = [
     "pytest>=8", "pytest-timeout>=2.3",
     "av>=12,<18",
     "httpx>=0.27",
-    "click>=8.1,<9",
     "fastapi>=0.111,<1",
     "python-multipart>=0.0.9,<1",
     "fastapi-mcp>=0.3,<1",
@@ -100,10 +98,8 @@ dev = [
 ]
 
 [project.scripts]
-# argparse-based CLI — no runtime dep beyond stdlib + core package.
-video-helper = "video_helper.cli_argparse:main"
-# click-based twin — install with [cli] extra.
-video-helper-click = "video_helper.cli_click:main"
+# The command line. One implementation (click), no library name in the command.
+video-helper = "video_helper.cli:main"
 # MCP server — install with [mcp] extra.
 video-helper-mcp = "video_helper.mcp:main"
 

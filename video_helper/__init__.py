@@ -8,11 +8,10 @@ Helpers suite.
 
 Multi-surface exposure
 ----------------------
-Every public function below is reachable from five surfaces:
+Every public function below is reachable from four surfaces:
 
 - Python library import (this module).
-- Argparse CLI: ``video-helper`` (stdlib-only, always installed).
-- Click CLI: ``video-helper-click`` (needs the ``[cli]`` extra).
+- CLI: ``video-helper`` (always installed).
 - FastAPI HTTP: ``video_helper.api`` (needs the ``[api]`` extra), which
   also serves a minimal browser "video bench" GUI at ``GET /gui``.
 - MCP: ``video-helper-mcp`` (needs the ``[mcp]`` extra), the same FastAPI

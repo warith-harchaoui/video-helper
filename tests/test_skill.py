@@ -1,8 +1,8 @@
 """Tests for the video-helper Claude / OpenCode skill packaging.
 
-The suite ships every helper with five surfaces: a library, two CLIs, a FastAPI
-HTTP app, MCP mounted on that same app, and an agent skill. These tests cover
-the fifth one: that ``skills/video-helper/SKILL.md`` exists, is well-formed against
+The suite ships every helper with four surfaces: a library, a command line, a
+FastAPI HTTP app with MCP mounted on it, and an agent skill. These tests cover
+the last one: that ``skills/video-helper/SKILL.md`` exists, is well-formed against
 the published Agent Skills standard, and that ``scripts/check_triggers.py``
 reports full trigger-bucket coverage — so a thin or drifted description fails
 the gate, not production.

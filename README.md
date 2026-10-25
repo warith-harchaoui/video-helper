@@ -51,12 +51,11 @@ We recommend using Python environments. Check this link if you're unfamiliar wit
 ### From PyPI (recommended)
 
 ```bash
-# Core video utilities (library + argparse CLI)
+# Core video utilities (library + CLI)
 pip install video-helper
 
 # Optional surfaces and backends
 pip install "video-helper[pyav]"      # PyAV frame backend
-pip install "video-helper[cli]"       # click-based CLI twin
 pip install "video-helper[api]"       # FastAPI HTTP surface
 pip install "video-helper[faces]"     # face-anchored speaker identity (YuNet / SFace / Light-ASD)
 ```
@@ -70,7 +69,6 @@ pip install -e .
 
 # Optional surfaces and backends
 pip install -e ".[pyav]"
-pip install -e ".[cli]"
 pip install -e ".[api]"
 ```
 
@@ -145,14 +143,13 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Multi-surface exposure
 
-Every public function is reachable from five surfaces, all
+Every public function is reachable from four surfaces, all
 systematically wired (nothing is CLI-only or library-only):
 
 | Surface | Install | Entry point |
 | --- | --- | --- |
 | Python library | `pip install video-helper` | `import video_helper as vh` |
-| Argparse CLI (stdlib) | `pip install video-helper` | `video-helper --help` |
-| Click CLI | `pip install 'video-helper[cli]'` | `video-helper-click --help` |
+| CLI | `pip install video-helper` | `video-helper --help` |
 | FastAPI HTTP + GUI | `pip install 'video-helper[api]'` | `uvicorn video_helper.api:app` |
 | MCP | `pip install 'video-helper[mcp]'` | `video-helper-mcp` (same app + `/mcp`) |
 

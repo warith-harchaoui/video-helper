@@ -28,8 +28,7 @@ grade, or run models on frames.
 | SRT → WebVTT (+ CSS) | `video-helper srt2vtt` | `srt2vtt` | `POST /srt2vtt` |
 | Extract frames as images | `video-helper extract-frames` | `extract_frames` | `POST /extract-frames` |
 
-Every operation is also reachable through the click CLI (`video-helper-click …`,
-same flags) and the browser GUI at `GET /gui`.
+Every operation is also reachable through the browser GUI at `GET /gui`.
 
 ## Natural-language phrasings that should fire
 

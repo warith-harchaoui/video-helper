@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-10-25
+
+### Changed
+
+- **One command line, built with click; the argparse CLI is gone.** The
+  package shipped two CLIs over the same sixteen operations — `video-helper`
+  (argparse, 1109 lines) and `video-helper-click` (click, 691 lines) — and a
+  flag naming the parsing library describes the implementation, not the
+  interface. `video_helper/cli_click.py` is now `video_helper/cli.py`,
+  `video_helper/cli_argparse.py` is deleted, and the single console script
+  `video-helper` points at it. `video-helper-mcp` is untouched: it starts
+  another surface, it is not a command line.
+
+  `click` moves out of the `[cli]` extra into the core `dependencies`, and
+  the `[cli]` extra is deleted — the CLI is no longer optional, so its
+  dependency cannot be either. The `os-helper` cap widens from `<3` to `<4`
+  (os-helper 3.0.0 drops its own CLI the same way).
+
+  **Parity was measured, not assumed.** Before the argparse module was
+  deleted, a script walked its subparsers and click's command table and
+  compared them flag by flag: 16 subcommands on each side, no flag present on
+  one side only, and no default differing except click's `Sentinel.UNSET`
+  standing where argparse writes `None` for a `required=True` option. The
+  tests that existed twice (once per CLI) collapsed onto the surviving one;
+  the assertions that existed *only* on the argparse side — the parsed values
+  for `compress`, `extract-flow` and `extract-frames`, not just their help
+  text and defaults — were ported rather than dropped, through click's
+  `Command.make_context`, which runs the parser and stops before the
+  callback.
+
+### Fixed
+
+- **`concat --inputs a.mp4 b.mp4 c.mp4` would have concatenated one clip, not
+  three.** The two CLIs agreed on the flag *name* and disagreed on its
+  arity: argparse declared `--inputs` with `nargs="+"`, click with
+  `multiple=True` (one `--inputs` per file). A flag-name comparison cannot see
+  this, and the failure is the bad kind — no error, just a shorter output file
+  than asked for. Since the surviving command is named `video-helper`, the
+  argparse spelling is the one users already have in their shell history and
+  in this module's own usage examples, so `concat` now accepts both: the files
+  listed after a single `--inputs` are picked up by a trailing catch-all
+  argument (click has no `nargs=-1` for options) and stitched back in order.
+  Mixing the two spellings is refused with a usage error instead of silently
+  reordered, because click reports the two halves with no record of how they
+  interleaved. Covered by a test that asserts the resulting *order*, and
+  proven by breaking the merge and watching it go red.
+
+- **`--version` named a command that no longer exists.** The click group
+  passed `prog_name="video-helper-click"`, so the surviving CLI would have
+  introduced itself under the deleted name. It now prints `video-helper`, and
+  answers to `-V` as well as `--version` (`-v` is left free: it reads as
+  "verbose" to everyone). The version still comes from the installed
+  distribution metadata, since this package exposes no `__version__` — so an
+  editable checkout reports whatever was last `pip install`ed.
+
+- **The group's help text described an architecture that is gone.** It read
+  "click twin of the argparse CLI. Same subcommands."; it now says what the
+  tool does. In the same pass, `chunk --help` stopped printing literal RST
+  backticks (click renders a command docstring verbatim), and the dead
+  `try: import click / except ImportError: install the [cli] extra` guard was
+  removed.
+
+- **The agent skill's CLI reference documented a command line that never
+  existed.** `skills/video-helper/references/cli-reference.md` showed
+  positional arguments (`video-helper convert IN OUT`) and the flags `--fps`,
+  `--no-audio`, `--position`, `--margin`, `--subtitles` and `--font-size`.
+  Not one of those is real: every operation takes long flags, and the real
+  names are `--input` / `--output`, `--frame-rate`, `--without-sound`,
+  `--x` / `--y` / `--scale-width`, `--subs` and `--force-style`. An agent
+  following that page would have failed on its first call. Rewritten against
+  the actual `-h` output of all sixteen subcommands, output contract included
+  (`dimensions` emits JSON, not `W H FPS`). `requirements.txt`, which listed
+  no `click` at all, now carries it among the core runtime deps.
+
+### Migration
+
+- `video-helper-click <cmd>` → `video-helper <cmd>`. Every subcommand, flag
+  and default is unchanged, so only the program name moves.
+- `pip install "video-helper[cli]"` now fails on an unknown extra. Drop the
+  extra: `pip install video-helper` installs the CLI and `click` with it.
+- `pip install -e ".[cli]"` → `pip install -e .`.
+
 ## [2.7.0] - 2026-10-21
 
 ### Changed

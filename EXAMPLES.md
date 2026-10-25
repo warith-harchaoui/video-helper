@@ -397,7 +397,6 @@ Same operation on every other surface, matching every other function in the suit
 
 ```bash
 video-helper extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
-video-helper-click extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
 curl -F 'file=@clip.mp4' -F 'method=dis' -o clip-flow.mp4 http://localhost:8000/extract-flow
 # MCP: auto-published as a tool from the same FastAPI route, no extra setup.
 ```

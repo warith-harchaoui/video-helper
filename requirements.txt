@@ -4,12 +4,14 @@
 #     pip install -r requirements.txt
 #     pip install -e .           # video-helper itself (editable) or `pip install .`
 #
-# Optional surfaces (CLI/API/MCP) live behind extras, e.g. `.[cli]`, `.[api,mcp]`.
+# The CLI is not optional — click is a core dependency. The other surfaces
+# (API/MCP) live behind extras, e.g. `.[api,mcp]`.
 # The os-helper pin is kept in lock-step with the release tag below.
 
 # --- Suite dependency -----------------------------------------------------
 os-helper>=1.5.0
 # --- Core runtime ---------------------------------------------------------
+click>=8.1,<9
 opencv-python>=4.10.0.84,<5
 ffmpeg-python>=0.2.0,<0.3
 vidgear>=0.3.3,<1

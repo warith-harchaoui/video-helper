@@ -11,8 +11,7 @@ description: >-
   "shrink this video", "merge these clips", "watermark a logo", "rip the
   audio", "replace the audio track", "burn in subtitles", "srt to vtt", "give
   me the frames", "how long / how big is this video", "optical flow", or names
-  `video-helper`, `video-helper-click`, `video-helper-mcp`, `import
-  video_helper as vh`. Do NOT use to transcribe speech (vocal-helper),
+  `video-helper`, `video-helper-mcp`, `import video_helper as vh`. Do NOT use to transcribe speech (vocal-helper),
   download video (youtube-helper), capture a camera (capture-helper), or
   colour-grade.
 license: BSD-3-Clause
@@ -28,13 +27,13 @@ metadata:
 `video-helper` transforms video **files** and reads or burns subtitle files.
 It is local-first and ffmpeg-backed: nothing is uploaded, there is no
 telemetry, no account. It does **not** transcribe, download, or colour-grade.
-The same operations are reachable five ways (library, two CLIs, HTTP API, MCP,
+The same operations are reachable five ways (library, CLI, HTTP API, MCP,
 browser GUI).
 
 ## Before anything: verify it is installed
 
 ```bash
-video-helper --help               # argparse CLI (ships with the package)
+video-helper --help               # the CLI (ships with the package)
 python -c "import video_helper"   # library import check
 ffmpeg -version                   # hard system dependency
 ```
@@ -48,7 +47,7 @@ pip install 'video-helper[torch]'        # + extract_frames(destination="torch")
 pip install 'video-helper[pil]'          # + extract_frames(destination="pil")
 pip install 'video-helper[faces]'        # + face identity + active-speaker detection
 pip install 'video-helper[flow]'         # + RAFT optical flow and wavelet resizing
-pip install 'video-helper[cli,api,mcp]'  # + click CLI, FastAPI, MCP tools
+pip install 'video-helper[api,mcp]'      # + FastAPI and MCP tools
 pip install 'video-helper[all]'          # everything
 ```
 

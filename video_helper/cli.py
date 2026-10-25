@@ -1,32 +1,56 @@
 """
-Video Helper — click-based command-line interface.
+Video Helper — command-line interface.
 
-Twin of :mod:`video_helper.cli_argparse`: same public surface (identical
-subcommand names, identical flag semantics), but implemented with
-:mod:`click` so users who already have a click-native shell setup
-(bash / zsh completion via ``click.shell_completion``, colored ``--help``,
-nested command groups) can plug it in without friction. Installed as
-the ``video-helper-click`` entry point in ``pyproject.toml``.
+The package's single command line: a thin dispatch over the pure functions
+in :mod:`video_helper.main`, exposing the whole toolkit as subcommands of
+one ``video-helper`` entry point. Built with :mod:`click`, which is a core
+dependency — the CLI is not an optional surface.
+
+Subcommands
+-----------
+- ``validate``      — probe a video file / URL for validity (boolean)
+- ``dimensions``    — dump width/height/duration/frame_rate/has_sound as JSON
+- ``duration``      — print the duration in seconds of a video
+- ``convert``       — re-encode / resize / drop audio
+- ``chunk``         — extract a ``[start, end]`` slice
+- ``black``         — synthesize a silent solid-black clip
+- ``compress``      — two-pass compress to a target file size
+- ``image-loop``    — loop a still image into a silent clip
+- ``concat``        — concatenate several videos head-to-tail
+- ``overlay``       — overlay a still image on a video (watermark / cursor)
+- ``extract-audio`` — dump the audio track of a video
+- ``mux-audio``     — mux a separate audio track onto a video
+- ``burn-subs``     — burn ``.srt`` / ``.vtt`` / ``.ass`` into the frames
+- ``srt2vtt``       — SRT → WebVTT with color-preserving CSS
+- ``extract-frames``— stream frames to disk (one PNG per sampled frame)
+- ``extract-flow``  — dense optical flow: HSV-visualization video or raw ``.npy``
 
 Design notes
 ------------
-- Subcommands mirror ``video-helper`` (the argparse twin) so both CLIs
-  can be introspected identically by higher layers (FastAPI).
-- Flags reuse the argparse names (``--input`` / ``--output`` / …) rather
-  than the more idiomatic click positional style: consistency across
-  the two CLIs beats micro-idiomaticity here.
+- Flags are spelled ``--input`` / ``--output`` / … rather than in the more
+  idiomatic click positional style: the HTTP and MCP surfaces name their
+  parameters the same way, so one vocabulary covers all of them.
 - A library exception is caught by ``main()`` (the console-script entry
   point) and printed as one clean ``Error: ...`` line + exit 1, instead of
   a raw Python traceback.
 
 Usage Example
 -------------
->>> #   video-helper-click validate      --input clip.mp4
->>> #   video-helper-click dimensions    --input clip.mp4
->>> #   video-helper-click convert       --input in.mov --output out.mp4 --width 640 --height 480
->>> #   video-helper-click chunk         --input in.mp4 --start 10 --end 20 --output cut.mp4
->>> #   video-helper-click extract-frames --input clip.mp4 --output-dir frames/ --frame-step 5
->>> #   video-helper-click extract-flow --input clip.mp4 --output clip-flow.mp4 --method dis
+>>> #   video-helper validate       --input clip.mp4
+>>> #   video-helper dimensions     --input clip.mp4
+>>> #   video-helper duration       --input clip.mp4
+>>> #   video-helper convert        --input in.mov --output out.mp4 --width 640 --height 480
+>>> #   video-helper chunk          --input in.mp4 --start 10 --end 20 --output cut.mp4
+>>> #   video-helper black          --duration 3 --width 1920 --height 1080 --output buffer.mp4
+>>> #   video-helper image-loop     --image title.png --duration 4 --output title.mp4
+>>> #   video-helper concat         --inputs a.mp4 b.mp4 c.mp4 --output final.mp4
+>>> #   video-helper overlay        --input clip.mp4 --image logo.png --output marked.mp4
+>>> #   video-helper extract-audio  --input clip.mp4 --output audio.wav
+>>> #   video-helper mux-audio      --input silent.mp4 --audio voice.wav --output final.mp4
+>>> #   video-helper burn-subs      --input clip.mp4 --subs subs.srt --output captioned.mp4
+>>> #   video-helper srt2vtt        --input subs.srt
+>>> #   video-helper extract-frames --input clip.mp4 --output-dir frames/ --frame-step 5
+>>> #   video-helper extract-flow   --input clip.mp4 --output clip-flow.mp4 --method dis
 
 Author
 ------
@@ -39,16 +63,9 @@ import json
 import os
 import sys
 
+import click
 import os_helper as osh
 
-try:
-    import click
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "The click CLI requires the [cli] extra. Install with: pip install 'video-helper[cli]'"
-    ) from exc
-
-# Same underlying functions as the argparse twin — one source of truth.
 from . import (
     black_video,
     burn_subtitles,
@@ -80,9 +97,14 @@ from . import (
 @click.group(
     context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100},
 )
-@click.version_option(package_name="video-helper", prog_name="video-helper-click")
+# ``None`` as the version: the package exposes no ``__version__``, so click
+# reads it from the installed distribution metadata via ``package_name``.
+# ``-V`` rather than ``-v``, which reads as "verbose" to everyone.
+@click.version_option(None, "-V", "--version", package_name="video-helper")
 def cli() -> None:
-    """Video Helper — click twin of the argparse CLI. Same subcommands."""
+    """Video Helper — validate, convert, cut, compress, assemble, subtitle
+    and sample video files, from one command.
+    """
     # Nothing to do at the group level — every subcommand carries its
     # own arguments and side effects.
 
@@ -192,7 +214,9 @@ def convert(
 @click.option("--end", type=float, required=True)
 @click.option("--output", required=True, type=click.Path())
 def chunk(input_: str, start: float, end: float, output: str) -> None:
-    """Extract a ``[start, end]`` slice of a video."""
+    # Plain brackets, not RST: click prints a command docstring verbatim,
+    # so ``...`` would reach the user as literal backticks.
+    """Extract a [start, end] slice of a video."""
     extract_video_chunk(
         input_video=input_,
         sample_start=start,
@@ -321,21 +345,54 @@ def image_loop(
 # ---------------------------------------------------------------------------
 
 
+def _ordered_inputs(flagged: tuple[str, ...], trailing: tuple[str, ...]) -> list[str]:
+    """Merge the two halves of ``concat --inputs`` back into playback order.
+
+    Concatenation order is the whole point of the command, and click reports
+    the ``--inputs`` occurrences and the trailing files as two separate
+    tuples with no record of how they interleaved. One ``--inputs`` followed
+    by its files is unambiguous; so is one ``--inputs`` per file. Mixing both
+    spellings is not, so it is refused rather than silently reordered.
+    """
+    if not trailing:
+        return list(flagged)
+    if len(flagged) == 1:
+        return [flagged[0], *trailing]
+    raise click.UsageError(
+        "Ambiguous --inputs order: list every video after a single --inputs, "
+        "or repeat --inputs once per video, but do not mix the two."
+    )
+
+
 @cli.command()
 @click.option(
     "--inputs",
     required=True,
     multiple=True,
     type=click.Path(exists=True),
-    help="Videos, in order (repeat --inputs for each).",
+    help="Videos, in order. Repeat --inputs, or list them after one --inputs.",
 )
+# The trailing catch-all exists so `--inputs a.mp4 b.mp4 c.mp4` keeps working.
+# click has no `nargs=-1` for options (only for arguments), while the argparse
+# CLI this command line replaced declared `--inputs` with `nargs="+"`. Without
+# this, that documented spelling would stop at the first file and concatenate
+# one video instead of three -- a wrong output file, not an error, which is the
+# worst way to break. click hands the remaining files to this argument, and
+# `_ordered_inputs` stitches the two halves back together.
+@click.argument("trailing_inputs", nargs=-1, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
 @click.option("--reencode/--no-reencode", default=True, show_default=True)
 @click.option("--frame-rate", "frame_rate", type=int, default=None)
-def concat(inputs: tuple[str, ...], output: str, reencode: bool, frame_rate: int | None) -> None:
+def concat(
+    inputs: tuple[str, ...],
+    trailing_inputs: tuple[str, ...],
+    output: str,
+    reencode: bool,
+    frame_rate: int | None,
+) -> None:
     """Concatenate several videos head-to-tail."""
     concat_videos(
-        input_videos=list(inputs),
+        input_videos=_ordered_inputs(inputs, trailing_inputs),
         output_video=output,
         reencode=reencode,
         frame_rate=frame_rate,
@@ -669,7 +726,7 @@ def extract_flow_cmd(
 
 
 def main() -> None:
-    """Console entry point (``video-helper-click``).
+    """Console entry point (``video-helper``).
 
     Click's own dispatch only special-cases ``ClickException``/``Abort``
     (and a broken pipe); a plain library exception (e.g. from
