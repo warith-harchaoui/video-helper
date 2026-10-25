@@ -30,10 +30,10 @@ output folder before uploading.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import os
 
+import click
 import os_helper as osh
 
 from video_helper.faces.models import REGISTRY
@@ -54,16 +54,37 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default="./model_mirror", help="Output folder to upload to your host.")
-    ap.add_argument(
-        "--allow-hf",
-        action="store_true",
-        help="Permit a one-time HuggingFace fetch for a weight available nowhere else.",
-    )
-    args = ap.parse_args()
-    osh.make_directory(args.out)
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option(
+    "--out",
+    default="./model_mirror",
+    show_default=True,
+    help="Output folder to upload to your host.",
+)
+@click.option(
+    "--allow-hf",
+    is_flag=True,
+    help="Permit a one-time HuggingFace fetch for a weight available nowhere else.",
+)
+def main(out: str, allow_hf: bool) -> None:
+    """Seed a self-hosted mirror of the face-stack model weights (run once).
+
+    \f
+
+    Everything after the form feed is for readers of the source: click truncates
+    ``--help`` there, so the numpydoc block below never reaches the terminal —
+    which also keeps the module docstring's RST markup out of it (argparse used
+    to print the whole thing, double backticks and section underlines included).
+
+    Parameters
+    ----------
+    out : str
+        Output folder the weights land in, to be uploaded to your host.
+    allow_hf : bool
+        Permit the one-time HuggingFace fetch for a weight available nowhere
+        else; off by default, and never used at runtime.
+    """
+    osh.make_directory(out)
 
     digests: dict[str, str] = {}
     for name, spec in REGISTRY.items():
@@ -71,15 +92,15 @@ def main() -> int:
         if not url:
             osh.warning(
                 f"{name}: no permissive upstream configured — export/drop "
-                f"'{spec.filename}' into {args.out} manually before uploading."
+                f"'{spec.filename}' into {out} manually before uploading."
             )
             continue
-        if "huggingface.co" in url and not args.allow_hf:
+        if "huggingface.co" in url and not allow_hf:
             osh.warning(
                 f"{name}: upstream is HuggingFace; re-run with --allow-hf to fetch it once."
             )
             continue
-        dest = osh.join(args.out, spec.filename)
+        dest = osh.join(out, spec.filename)
         osh.info(f"{name}: fetching {url}")
         osh.download_file(url, dest, check_url=False)
         digests[name] = _sha256(dest)
@@ -87,9 +108,8 @@ def main() -> int:
     osh.info("Seeded mirror. SHA-256 digests (paste into faces/models.py to pin integrity):")
     for name, digest in digests.items():
         osh.info(f'  {name}: sha256="{digest}"')
-    osh.info(f"Upload the contents of {os.path.abspath(args.out)} to your model base URL.")
-    return 0
+    osh.info(f"Upload the contents of {os.path.abspath(out)} to your model base URL.")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

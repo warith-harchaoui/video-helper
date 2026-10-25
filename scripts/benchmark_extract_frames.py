@@ -30,7 +30,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import shutil
 import subprocess
 import sys
@@ -39,6 +38,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import click
 import os_helper as osh
 
 import video_helper as vh
@@ -57,6 +57,10 @@ RESOLUTIONS = {
     "1080p": (1920, 1080),
     "4k": (3840, 2160),  # opt-in via --resolutions: encoding takes ~30-90s
 }
+
+# 4K is opt-in: HEVC encoding at 3840x2160 takes ~30-90 s per fixture, so the
+# default --resolutions subset leaves it out.
+DEFAULT_RESOLUTIONS = [r for r in RESOLUTIONS if r != "4k"]
 
 # Codec → (ffmpeg encoder, tag for display). HEVC is libx265 (slow encode,
 # fast decode); we accept the encode cost once when generating the clip.
@@ -317,35 +321,55 @@ def _emit_block(resolution: str, codec: str, cells: list[Cell]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    """Parse CLI arguments, generate fixtures, run the matrix, and print it.
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+# One occurrence of --resolutions carries the whole subset as a comma-separated
+# string ("720p,1080p"), exactly as argparse took it; click's multiple=True
+# would instead bind one value per occurrence and silently drop the rest, so
+# the single string plus the split below is what keeps the spelling working.
+@click.option(
+    "--resolutions",
+    "resolutions_arg",
+    default=",".join(DEFAULT_RESOLUTIONS),
+    show_default=True,
+    help=f"comma-separated subset of {list(RESOLUTIONS)} (default skips 4k)",
+)
+@click.option(
+    "--codecs",
+    "codecs_arg",
+    default=",".join(CODECS),
+    show_default=True,
+    help=f"comma-separated subset of {list(CODECS)}",
+)
+@click.option(
+    "--torch-device",
+    default=None,
+    help="If set (cpu|mps|cuda|auto), also bench destination='torch' "
+    "with batch_size=16 on the given device.",
+)
+def main(resolutions_arg: str, codecs_arg: str, torch_device: str | None) -> None:
+    """Per-backend benchmark for extract_frames, with a real cross-axis matrix.
+
+    \f
+
+    Everything after the form feed is for readers of the source: click truncates
+    ``--help`` there, so the numpydoc block below never reaches the terminal.
 
     Drives the whole benchmark: reads ``--resolutions`` / ``--codecs`` /
     ``--torch-device``, generates a test clip per (resolution, codec), then
     sweeps every (pattern, backend, hwaccel) cell and prints one block per
     fixture. Side effects only (stdout); returns nothing.
-    """
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    # 4K is opt-in: HEVC encoding at 3840×2160 takes ~30-90 s per fixture.
-    default_resolutions = [r for r in RESOLUTIONS if r != "4k"]
-    parser.add_argument(
-        "--resolutions",
-        default=",".join(default_resolutions),
-        help=f"comma-separated subset of {list(RESOLUTIONS)} (default skips 4k)",
-    )
-    parser.add_argument(
-        "--codecs", default=",".join(CODECS), help=f"comma-separated subset of {list(CODECS)}"
-    )
-    parser.add_argument(
-        "--torch-device",
-        default=None,
-        help="If set (cpu|mps|cuda|auto), also bench destination='torch' "
-        "with batch_size=16 on the given device.",
-    )
-    args = parser.parse_args()
 
-    resolutions = [r.strip() for r in args.resolutions.split(",") if r.strip()]
-    codecs = [c.strip() for c in args.codecs.split(",") if c.strip()]
+    Parameters
+    ----------
+    resolutions_arg, codecs_arg : str
+        Comma-separated subsets of :data:`RESOLUTIONS` / :data:`CODECS`; the
+        ``_arg`` suffix keeps the split lists below under the short names the
+        rest of the body uses.
+    torch_device : str or None
+        When set, also bench ``destination='torch'`` on that device.
+    """
+    resolutions = [r.strip() for r in resolutions_arg.split(",") if r.strip()]
+    codecs = [c.strip() for c in codecs_arg.split(",") if c.strip()]
 
     bad_res = [r for r in resolutions if r not in RESOLUTIONS]
     bad_codec = [c for c in codecs if c not in CODECS]
@@ -405,9 +429,9 @@ def main() -> None:
                 # Optional: torch destination cells (PyAV + batch_size=16).
                 # We only run this for the 'full' pattern — the wins (or losses)
                 # of host→device transfer are most visible there.
-                if args.torch_device:
+                if torch_device:
                     for hw in (None, "auto"):
-                        label = f"torch[{args.torch_device}, bs=16]"
+                        label = f"torch[{torch_device}, bs=16]"
                         try:
                             # Same B023 guard: capture ``clip`` and ``hw`` for
                             # this iteration via default arguments.
@@ -417,7 +441,7 @@ def main() -> None:
                                     backend="pyav",
                                     hwaccel=h,
                                     destination="torch",
-                                    device=args.torch_device,
+                                    device=torch_device,
                                     batch_size=16,
                                 )
                             )

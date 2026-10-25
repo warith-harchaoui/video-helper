@@ -22,9 +22,10 @@ Project maintainers.
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
+
+import click
 
 # Module-level logger so status output is routed through the logging
 # surface rather than bare prints (see CODING.md rule 6).
@@ -178,43 +179,76 @@ def write_pyproject_toml(content: str, file_path: str = 'pyproject.toml') -> Non
     with open(file_path, 'w') as f:
         f.write(content)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Generate pyproject.toml from requirements.txt")
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option('--project_name', default='my_project', show_default=True, help="The name of your project")
+@click.option('--description', default='A sample Python project', show_default=True, help="A description of your project")
+@click.option('--authors', default='Your Name <you@example.com>', show_default=True, help="List of authors")
+@click.option('--python_version', default='^3.8', show_default=True, help="Python version to be used in the project")
+@click.option('--requirements_file', default='requirements.txt', show_default=True, help="Path to requirements.txt file")
+@click.option('--output_file', default='pyproject.toml', show_default=True, help="Path to output pyproject.toml file")
+@click.option("--opensource", is_flag=True, help="Use this flag if your project is open source")
+def main(
+    project_name: str,
+    description: str,
+    authors: str,
+    python_version: str,
+    requirements_file: str,
+    output_file: str,
+    opensource: bool,
+) -> None:
+    """Generate pyproject.toml from requirements.txt.
 
-    parser.add_argument('--project_name', type=str, default='my_project', help="The name of your project")
-    parser.add_argument('--description', type=str, default='A sample Python project', help="A description of your project")
-    parser.add_argument('--authors', type=str, default='Your Name <you@example.com>', help="List of authors")
-    parser.add_argument('--python_version', type=str, default='^3.8', help="Python version to be used in the project")
-    parser.add_argument('--requirements_file', type=str, default='requirements.txt', help="Path to requirements.txt file")
-    parser.add_argument('--output_file', type=str, default='pyproject.toml', help="Path to output pyproject.toml file")
-    parser.add_argument("--opensource", action="store_true", help="Use this flag if your project is open source")
+    \f
 
-    args = parser.parse_args()
-    authors = args.authors.split(',')
-    authors = [author.strip() for author in authors]
-    authors = [a for a in authors if len(a) > 0]
+    Everything after the form feed is for readers of the source: click
+    truncates ``--help`` there, so the numpydoc block below never reaches the
+    terminal.
 
-    python_version = args.python_version
+    Parameters
+    ----------
+    project_name : str
+        Value written to ``[tool.poetry].name``.
+    description : str
+        Short project description.
+    authors : str
+        Comma-separated author entries, each formatted ``Name <email>``.
+    python_version : str
+        Python constraint; a leading ``^`` is added when missing.
+    requirements_file : str
+        Path to the pip requirements file to read.
+    output_file : str
+        Path of the ``pyproject.toml`` to write.
+    opensource : bool
+        Stamp a ``BSD-2-Clause`` license instead of leaving it empty.
+
+    Returns
+    -------
+    None
+    """
+    author_list = [author.strip() for author in authors.split(',')]
+    author_list = [a for a in author_list if len(a) > 0]
+
     if not python_version.startswith('^'):
         python_version = f'^{python_version}'
-
-    opensource = args.opensource
 
     # Emit user-facing status through logging so verbosity stays
     # controllable from one place instead of scattered prints.
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    if not os.path.exists(args.requirements_file):
-        logger.error("Error: %s not found.", args.requirements_file)
+    if not os.path.exists(requirements_file):
+        logger.error("Error: %s not found.", requirements_file)
     else:
-        requirements = read_requirements(args.requirements_file)
+        requirements = read_requirements(requirements_file)
         toml_content = generate_pyproject_toml(
             requirements,
-            project_name=args.project_name,
-            description=args.description,
-            authors=authors,
+            project_name=project_name,
+            description=description,
+            authors=author_list,
             python_version=python_version,
             opensource=opensource
         )
-        write_pyproject_toml(toml_content, file_path=args.output_file)
-        logger.info("pyproject.toml has been generated successfully at %s.", args.output_file)
+        write_pyproject_toml(toml_content, file_path=output_file)
+        logger.info("pyproject.toml has been generated successfully at %s.", output_file)
+
+if __name__ == '__main__':
+    main()
