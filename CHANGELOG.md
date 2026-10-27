@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Documentation
+
+- **The three document pairs now carry the suite's spine (CODING.md 16-18).**
+  `README.md` renames `## Usage` to `## Quick start` and `LISEZMOI.md` renames
+  `## Utilisation` to `## Prise en main rapide`, the two words the rest of the
+  suite uses. `LANDSCAPE.md` / `PAYSAGE.md` gain `## Sources and as-of date` /
+  `## Sources et date de relevé`: every competitor version and release date in
+  them was read on 2026-10-27 from that project's own PyPI release metadata, and
+  the `decord` rating is now justified by its published wheel list rather than
+  by assertion. `EXAMPLES.md` / `EXEMPLES.md` get the language-switch links they
+  were missing, `## Mise en place` as the French twin of `## Setup`, numbered
+  example sections, a `## Command line` section covering every sub-command, and
+  a `## Troubleshooting` / `## Dépannage` section.
+
+- **Every snippet in the examples files was run, and the outputs are the
+  measured ones.** Three corrections came out of doing that: the probe example
+  claimed a rounded `'duration': 12.34` where the container reports
+  `12.333333`; `extract_unique_colors` was printed as a bare `set`, whose
+  iteration order Python does not promise, so the documented line was true only
+  by luck (it now sorts); and the `http_headers` example called an undefined
+  `process(frame)`. The torch-destination performance note still described the
+  state of v1.4.1 and promised a v1.5 C++ extension that never shipped — the
+  mechanism it describes is unchanged, the version framing is gone. The French
+  twin pointed at the English `EXAMPLES.md` in three places.
+
+- **`stabilize=True` drops the tail of the video, and now says so.** VidGear's
+  stabilizer smooths over a trailing window (radius 25 by default) that is never
+  flushed at end of stream. Measured on a 2 s / 30 fps clip: 60 frames without
+  it, 35 with, and stabilized frame *k* is source frame *k+1*. Nothing in the
+  documentation mentioned it. `compress_video` also gained the example section
+  it never had, despite being in the API table and having its own sub-command.
+
 ## [2.8.0] - 2026-10-25
 
 ### Changed

@@ -1,47 +1,52 @@
 # Exemples Video Helper
 
-Recettes pratiques pour la surface publique de `video-helper`. Chaque
-extrait suppose :
+🇫🇷 Français · [🇬🇧 EXAMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXAMPLES.md)
 
-```python
-import video_helper as vh
-import os_helper as osh
-```
-
-et que `ffmpeg` est installé et accessible dans le `PATH`. La recette
-`burn_subtitles` exige en plus un ffmpeg compilé avec `libass`.
+Recettes pratiques pour la surface publique de `video-helper`. Chaque section
+numérotée est un scénario, pas un catalogue de fonctions. Chaque extrait a été
+vérifié contre le code et tous ceux qui tournent hors ligne sur une vidéo locale
+ont été exécutés pendant la rédaction de ce fichier : les sorties affichées sont
+celles qui sont revenues. Quelques-uns réclament ce qu'un simple clone ne
+fournit pas (un ffmpeg compilé avec `libass`, une URL vivante filtrée par
+en-têtes, les poids de visages récupérés à la première utilisation) ; chacun le
+signale à l'endroit où il apparaît.
 
 ---
 
 ## Table des matières
 
-1. [Installation](#installation)
-2. [Sonder & valider](#sonder--valider)
-3. [Convertir & redimensionner](#convertir--redimensionner)
-4. [Accès aux frames](#accès-aux-frames)
-   - [Parcourir les frames](#parcourir-les-frames)
-   - [Accès épars / aléatoire](#accès-épars--aléatoire)
-   - [Choisir un backend](#choisir-un-backend)
-   - [Accélération matérielle](#accélération-matérielle)
-   - [Destination : tenseurs numpy ou torch](#destination--tenseurs-numpy-ou-torch)
-   - [Flux optique](#flux-optique)
-   - [Écrire des frames vers une vidéo](#écrire-des-frames-vers-une-vidéo)
-5. [Découpe temporelle](#découpe-temporelle)
-6. [Primitives de pipeline](#primitives-de-pipeline)
-   - [Vidéo noire](#vidéo-noire)
-   - [Boucle d'image](#boucle-dimage)
-   - [Concaténer](#concaténer)
-   - [Incruster une image](#incruster-une-image)
-   - [Extraire / muxer l'audio](#extraire--muxer-laudio)
-   - [Incruster des sous-titres](#incruster-des-sous-titres)
-7. [Outils de sous-titrage](#outils-de-sous-titrage)
-   - [SRT → VTT + CSS](#srt--vtt--css)
-   - [Couleurs uniques](#couleurs-uniques)
-8. [Identité de locuteur ancrée sur le visage](#identité-de-locuteur-ancrée-sur-le-visage)
+- [Mise en place](#mise-en-place)
+- [1. Sonder & valider](#1-sonder--valider)
+- [2. Convertir & redimensionner](#2-convertir--redimensionner)
+- [3. Accès aux frames](#3-accès-aux-frames)
+  - [Parcourir les frames](#parcourir-les-frames)
+  - [Accès épars / aléatoire](#accès-épars--aléatoire)
+  - [Choisir un backend](#choisir-un-backend)
+  - [Accélération matérielle](#accélération-matérielle)
+  - [En-têtes HTTP (URL protégées par authentification)](#en-têtes-http-url-protégées-par-authentification)
+  - [Taille de sortie exacte avec padding préservant le ratio](#taille-de-sortie-exacte-avec-padding-préservant-le-ratio)
+  - [Destination : numpy, torch ou PIL](#destination--numpy-torch-ou-pil)
+  - [Flux optique](#flux-optique)
+  - [Écrire des frames vers une vidéo](#écrire-des-frames-vers-une-vidéo)
+- [4. Découpe temporelle](#4-découpe-temporelle)
+- [5. Primitives de pipeline](#5-primitives-de-pipeline)
+  - [Vidéo noire](#vidéo-noire)
+  - [Boucle d'image](#boucle-dimage)
+  - [Concaténer](#concaténer)
+  - [Incruster une image](#incruster-une-image)
+  - [Extraire / muxer l'audio](#extraire--muxer-laudio)
+  - [Incruster des sous-titres](#incruster-des-sous-titres)
+  - [Compresser vers une taille cible](#compresser-vers-une-taille-cible)
+- [6. Outils de sous-titrage](#6-outils-de-sous-titrage)
+  - [SRT → VTT + CSS](#srt--vtt--css)
+  - [Couleurs uniques](#couleurs-uniques)
+- [7. Identité de locuteur ancrée sur le visage](#7-identité-de-locuteur-ancrée-sur-le-visage)
+- [Ligne de commande](#ligne-de-commande)
+- [Dépannage](#dépannage)
 
 ---
 
-## Installation
+## Mise en place
 
 ```bash
 # Base uniquement : vidgear + opencv + ffmpeg-python (sans backend optionnel).
@@ -55,30 +60,48 @@ Extras optionnels, à combiner entre eux ou à installer en bloc via `[all]` :
 # [pyav]  : meilleur décodeur séquentiel par fenêtre + accès épars. Honore hwaccel.
 # [torch] : destination="torch" (NCHW / CTHW RGB sur cpu / mps / cuda).
 # [pil]   : destination="pil" (PIL.Image, RGB, size=(W, H)).
-# [all]   : tout (pyav + torch + pillow).
+# [flow]  : method="raft" et le redimensionnement de flux par ondelettes.
+# [faces] : identité de locuteur ancrée sur le visage (section 7).
+# [all]   : pyav + torch + pillow + torchvision + PyWavelets.
 
 pip install --force-reinstall --no-cache-dir \
   "video-helper[all]"
 ```
 
-Il faut aussi `ffmpeg`. macOS : `brew install ffmpeg` (installez `brew` grâce à [brew.sh](https://brew.sh/)). Linux : `apt install ffmpeg`. Windows : voir le [site ffmpeg](https://ffmpeg.org/download.html).
+À partir d'ici, chaque extrait suppose cet import, rien de plus :
 
-Pour utiliser [`burn_subtitles`](#incruster-des-sous-titres), le build ffmpeg doit inclure
-`libass`. Vérifiez avec `ffmpeg -filters | grep subtitles` ; si absent sur
-macOS, essayez `brew uninstall ffmpeg && brew install ffmpeg --HEAD`
-(installez `brew` grâce à [brew.sh](https://brew.sh/)).
+```python
+import video_helper as vh
+```
 
-## Sonder & valider
+Quelques extraits construisent ou inspectent directement des tableaux et
+ajoutent `import numpy as np` ; chacun montre l'import là où il en a besoin.
+
+Il faut aussi `ffmpeg` dans le `PATH`. macOS : `brew install ffmpeg`
+(installez `brew` grâce à [brew.sh](https://brew.sh/)). Linux :
+`apt install ffmpeg`. Windows : voir le
+[site ffmpeg](https://ffmpeg.org/download.html).
+
+[`burn_subtitles`](#incruster-des-sous-titres) exige un ffmpeg compilé avec
+`libass`, que toutes les distributions binaires ne fournissent pas : voir
+[Dépannage](#dépannage).
+
+## 1. Sonder & valider
 
 ```python
 if vh.is_valid_video_file("clip.mp4"):
     info = vh.video_dimensions("clip.mp4")
     print(info)
-    # {'width': 1920, 'height': 1080, 'duration': 12.34,
+    # {'width': 1920, 'height': 1080, 'duration': 12.333333,
     #  'frame_rate': 30.0, 'has_sound': True}
 
-duration_seconds = vh.video_duration("clip.mp4")
+print(vh.video_duration("clip.mp4"))
+# 12.333333
 ```
+
+`duration` est ce que le conteneur déclare, en pleine précision flottante :
+n'attendez pas la durée que vous avez demandée à ffmpeg en fabriquant le
+fichier.
 
 `is_valid_video_file` rejette les faux fichiers `.mp4` (sans flux vidéo)
 **et** les vidéos valides portant une extension non vidéo.
@@ -89,7 +112,7 @@ pour un contenu résolu par yt-dlp (YouTube en direct, réservé aux
 abonnés ou soumis à vérification d'âge) qui exige des en-têtes
 spécifiques pour être lisible.
 
-## Convertir & redimensionner
+## 2. Convertir & redimensionner
 
 `video_converter` ré-encode une vidéo avec des changements optionnels de
 fréquence d'échantillonnage, de fps et de dimensions. Comportement par
@@ -110,7 +133,7 @@ vh.video_converter(
 
 Ne passez que `width` ou que `height` pour préserver le ratio d'aspect.
 
-## Accès aux frames
+## 3. Accès aux frames
 
 ### Parcourir les frames
 
@@ -170,6 +193,19 @@ frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2, back
 frames = list(vh.extract_frames("clip.mp4", stabilize=True))
 ```
 
+**`stabilize=True` renvoie moins de frames que la vidéo n'en contient.** Le
+stabilisateur de VidGear lisse sur une fenêtre glissante (rayon 25 par défaut)
+qui n'est jamais vidée à la fin du flux : les ~25 dernières frames y restent
+donc coincées. Mesuré sur un extrait de 2 s à 30 fps : 60 frames sans
+stabilisation, 35 avec, la frame stabilisée *k* correspondant à la frame source
+*k+1*. Demandez une plage un peu plus longue que nécessaire et ne comptez pas
+sur l'égalité des deux décomptes.
+
+```python
+print(len(list(vh.extract_frames("tiny30.mp4"))))  # 60
+print(len(list(vh.extract_frames("tiny30.mp4", stabilize=True))))  # 35
+```
+
 ### Accélération matérielle
 
 Par défaut `hwaccel=None` (décodage logiciel). Activez-la via
@@ -226,8 +262,12 @@ for frame in vh.extract_frames(
     http_headers=headers,
     backend="pyav",  # ou "ffmpeg-pipe" ; vidgear avertit + ignore
 ):
-    process(frame)
+    print(frame.shape)
 ```
+
+*Vérifié contre le code sans être exécuté : l'URL doit être un flux vivant,
+filtré par en-têtes, résolu quelques minutes plus tôt, ce qu'aucune fixture ne
+peut remplacer.*
 
 Le backend VidGear journalise un avertissement et ignore `http_headers` :
 OpenCV ne les expose pas proprement. Utilisez `backend="pyav"`
@@ -344,15 +384,15 @@ for im in vh.extract_frames("clip.mp4", destination="pil"):
 
 `device="auto"` pour torch se résout dans l'ordre `cuda` → `mps` → `cpu`.
 
-**Note honnête sur la performance :** au moment de la v1.4.1, le chemin
-torch matérialise chaque frame en numpy avant de l'empiler et de
-l'envoyer au device. C'est un aller-retour par lot, pas un zéro-copie.
-Une future extension C++ (prévue pour la v1.5+) permettra à
-VideoToolbox / NVDEC de remettre les frames directement à torch sur le
-device, sans passage par numpy ; voir `SPEED_ANALYSIS.md` pour les
-dernières mesures. Le chemin par lots actuel reste déjà un gain de
-5-20× par rapport à envelopper chaque frame à la main dans
-`torch.from_numpy(...).to(device)`.
+**Note honnête sur la performance :** le chemin torch matérialise chaque frame
+en numpy puis la remet avec `torch.from_numpy(...).to(device)` ; il y a donc un
+aller-retour hôte→device par lot, pas un zéro-copie. Laisser VideoToolbox /
+NVDEC remettre les frames directement à torch sur le device demanderait une
+extension C++ : elle figure dans les travaux en attente de
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md),
+sans échéance. C'est le traitement par lots qui rend le chemin actuel
+intéressant : le même document le mesure à 5-20× le débit de l'enveloppement
+frame par frame.
 
 ### Flux optique
 
@@ -455,7 +495,7 @@ frames = [np.zeros((72, 128, 3), dtype=np.uint8) for _ in range(30)]
 vh.dump_frames(frames, "buffer.mp4", fps=15)
 ```
 
-## Découpe temporelle
+## 4. Découpe temporelle
 
 `extract_video_chunk(input, start_s, end_s, output)` découpe une tranche
 `[start, end]`. Des bornes hors plage lèvent une `AssertionError`. Le
@@ -471,7 +511,7 @@ vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4")
 vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4", copy=True)
 ```
 
-## Primitives de pipeline
+## 5. Primitives de pipeline
 
 ### Vidéo noire
 
@@ -550,6 +590,10 @@ Incruster les sous-titres de façon permanente dans les frames de la
 vidéo. Accepte `.srt`, `.vtt`, `.ass`, `.ssa`. Nécessite ffmpeg avec
 `libass`.
 
+*Vérifié contre le code sans être exécuté ici : le ffmpeg de cette machine n'a
+pas de filtre `subtitles`, ce qui est exactement la panne décrite dans
+[Dépannage](#dépannage).*
+
 ```python
 # SRT simple, style par défaut.
 vh.burn_subtitles("clip.mp4", "subs.srt", "captioned.mp4")
@@ -566,7 +610,45 @@ vh.burn_subtitles(
 )
 ```
 
-## Outils de sous-titrage
+### Compresser vers une taille cible
+
+`compress_video` résout le débit vidéo qui fait tenir tout le fichier dans
+`target_size_mb` compte tenu de sa durée, puis encode à ce débit en deux
+passes. Pensé pour « le fichier qu'on embarque dans un lecteur web », pas pour
+un master d'archivage.
+
+```python
+import os
+
+# Un extrait 1080p de 12,3 s, 1,776 Mo sur le disque, à faire tenir dans 1 Mo.
+out = vh.compress_video("big.mp4", "web.mp4", target_size_mb=1.0)
+print(out, round(os.path.getsize(out) / 1e6, 3), "MB")
+# web.mp4 1.002 MB
+```
+
+Le codec par défaut est HEVC (`libx265`) étiqueté `hvc1`, parce que l'étiquette
+`hev1` que ffmpeg pose par défaut n'est pas reconnue par QuickTime ni par les
+lecteurs Apple.
+
+```python
+# macOS : HEVC matériel en une passe. Bien plus rapide, un peu moins bon par bit.
+vh.compress_video("big.mp4", "vt.mp4", target_size_mb=1.0, vcodec="hevc_videotoolbox")
+
+# Déjà assez petit : simple remultiplexage (qui ajoute +faststart), sans ré-encodage.
+vh.compress_video("clip.mp4", "remux.mp4", vcodec="copy")
+```
+
+Une cible si petite que le débit résolu passe sous `min_video_bitrate_kbps`
+(200 par défaut) n'est pas honorée en silence : le plancher gagne, la sortie
+dépasse la cible et vous l'apprenez dans le journal plutôt qu'en mesurant le
+fichier.
+
+```
+compress_video: target 0.3 MB over 12 sec would need 76 kbps for video —
+below the 200 kbps floor. Using the floor instead; the output will exceed 0.3 MB.
+```
+
+## 6. Outils de sous-titrage
 
 ### SRT → VTT + CSS
 
@@ -586,13 +668,23 @@ trouvées dans les balises `<font color>` d'un SRT. Utile pour
 prévisualiser la palette avant une conversion.
 
 ```python
-print(vh.extract_unique_colors("subs.srt"))
-# {'#FF0000', '#00FF00', '#0000FF'}
+print(sorted(vh.extract_unique_colors("subs.srt")))
+# ['#0000FF', '#00FF00', '#FF0000']
 ```
 
-## Identité de locuteur ancrée sur le visage
+La valeur de retour est un `set` : triez-la avant de l'afficher ou de la
+comparer, car l'ordre d'itération d'un ensemble ne fait pas partie du contrat
+de Python et change d'une exécution à l'autre.
+
+## 7. Identité de locuteur ancrée sur le visage
 
 Nécessite l'extra `[faces]` : `pip install "video-helper[faces]"`.
+
+*Les extraits de cette section ont été vérifiés contre le code sans être
+exécutés : le premier appel télécharge les poids YuNet / SFace / Light-ASD (voir
+[`video_helper.faces.models`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/models.py)),
+donc leur sortie dépend d'une récupération réseau et des visages de votre propre
+extrait. Aucune sortie n'est montrée ci-dessous pour cette raison.*
 
 La diarisation audio seule (segmenter un enregistrement en « qui parle
 quand » à partir du son) dit qu'une grappe de voix existe, mais pas à
@@ -656,3 +748,141 @@ et `mouth_openness` (le signal de mouvement des lèvres), `get_engine`
 (l'estimation gratuite face au modèle PyTorch précis Light-ASD) et
 `build_asd_digest` (l'étape interne de compaction des extraits
 qu'`active_speaker_map` utilise sur les longs enregistrements).
+
+## Ligne de commande
+
+Une seule ligne de commande `click` couvre les mêmes opérations : un script
+shell n'a donc pas besoin d'une enveloppe Python. `--help` sur le groupe liste
+toutes les sous-commandes, `--help` sur une sous-commande liste ses options.
+
+```bash
+video-helper --help
+video-helper extract-frames --help
+video-helper --version
+# video-helper, version 2.8.0
+```
+
+Les trois commandes en lecture seule n'écrivent que sur la sortie standard,
+elles se branchent donc dans un tube :
+
+```bash
+$ video-helper validate --input clip.mp4
+true
+
+$ video-helper duration --input clip.mp4
+12.333333
+
+$ video-helper dimensions --input clip.mp4
+{
+  "width": 1920,
+  "height": 1080,
+  "duration": 12.333333,
+  "frame_rate": 30.0,
+  "has_sound": true
+}
+```
+
+Chaque commande qui écrit un seul fichier affiche en retour le chemin écrit,
+ce qui s'enchaîne avec `$(…)` :
+
+```bash
+video-helper convert   --input clip.mp4 --output small.mp4 \
+                       --width 640 --height 360 --frame-rate 15 --without-sound
+video-helper chunk     --input clip.mp4 --start 6 --end 9 --output highlight.mp4
+video-helper compress  --input big.mp4  --output web.mp4 --target-size-mb 1
+video-helper black     --duration 0.5 --width 1280 --height 720 --output black.mp4
+video-helper image-loop --image title.png --duration 2 --output title.mp4 \
+                       --width 1280 --height 720
+video-helper overlay   --input clip.mp4 --image cursor.png --output overlaid.mp4 \
+                       --x 100 --y 200 --scale-width 24
+video-helper extract-audio --input clip.mp4 --output track.wav
+video-helper mux-audio --input title.mp4 --audio track.wav --output narrated.mp4 --shortest
+video-helper burn-subs --input clip.mp4 --subs subs.srt --output captioned.mp4
+video-helper srt2vtt   --input subs.srt --output subs.vtt --css subs.css
+```
+
+`concat` est la seule commande dont l'option est au **pluriel**, parce qu'elle
+prend une liste. Les deux écritures fonctionnent et l'ordre est préservé :
+
+```bash
+video-helper concat --inputs intro.mp4 body.mp4 outro.mp4 --output final.mp4
+video-helper concat --inputs intro.mp4 --inputs body.mp4 --inputs outro.mp4 --output final.mp4
+```
+
+Sur `concat`, `--input` est une erreur plutôt qu'une concaténation silencieuse
+d'un seul fichier :
+
+```
+Error: No such option '--input'. (Did you mean one of: '--inputs', '--output'?)
+```
+
+`extract-frames` écrit un PNG par frame échantillonnée et rend le manifeste en
+JSON, pour que l'étape suivante d'un script shell puisse le lire avec `jq` :
+
+```bash
+$ video-helper extract-frames --input clip.mp4 --output-dir frames \
+      --frame-interval 2 --start 0 --end 6
+{
+  "frames": [
+    "frames/frame_000000000.png",
+    "frames/frame_000000001.png",
+    "frames/frame_000000002.png",
+    "frames/frame_000000003.png"
+  ],
+  "count": 4
+}
+```
+
+`extract-flow` reflète [Flux optique](#flux-optique) : l'extension de sortie
+choisit le type, `.npy` pour le tableau brut `(T, H, W, 2)` et n'importe quoi
+d'autre pour la vidéo de visualisation HSV.
+
+```bash
+video-helper extract-flow --input clip.mp4 --output flow.npy --method dis \
+      --start 0 --end 1 --output-width 160 --output-height 90
+# flow.npy
+```
+
+## Dépannage
+
+**`RuntimeError: ffmpeg has no 'subtitles' filter (libass missing)`** —
+`burn_subtitles` et `video-helper burn-subs` exigent un ffmpeg compilé avec
+`--enable-libass` ; plusieurs distributions binaires (dont certains paquets
+homebrew-core) n'en fournissent pas. Vérifiez-le avant d'en avoir besoin :
+
+```bash
+ffmpeg -hide_banner -filters | grep subtitles
+```
+
+Aucune sortie signifie aucun libass. Sur macOS,
+`brew uninstall ffmpeg && brew install ffmpeg --HEAD` en construit un qui
+l'embarque. Rien d'autre dans le paquet n'est concerné : `srt2vtt` et
+`extract_unique_colors` analysent les sous-titres en Python et fonctionnent
+dans les deux cas.
+
+**`ValueError` sur `pad_color="transparent"`** — c'est délibéré. La
+transparence demanderait des frames à 4 canaux BGRA/RGBA, ce qui casserait le
+contrat `(H, W, 3)` que chaque destination promet. Remplissez avec une couleur
+inutilisée et portez le masque vous-même.
+
+**L'accès épars semble lent** — `frame_indices` / `frame_times` ne cherchent
+par image-clé que sur le backend PyAV. Sans l'extra `[pyav]`, le répartiteur
+retombe sur VidGear, qui décode depuis t=0 puis filtre : le coût est alors
+celui d'une lecture complète du fichier. `pip install "video-helper[pyav]"`.
+
+**`hwaccel="auto"` a ralenti les choses** — c'est attendu pour
+`destination="numpy"` et c'est mesuré dans
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md) :
+le décodage part sur le moteur média, puis les frames doivent revenir par le
+bus et traverser swscale pour atterrir en tableaux BGR. C'est un gain
+d'énergie et de parallélisme, pas un gain de latence. Pour
+`destination="torch"` sur un device GPU, le répartiteur l'active de lui-même,
+là où cela paie.
+
+**`faces` ne produit rien et ne dit pas pourquoi** — les poids sont récupérés à la
+première utilisation (voir
+[7. Identité de locuteur ancrée sur le visage](#7-identité-de-locuteur-ancrée-sur-le-visage)).
+Si aucune source n'est joignable, `ensure_model` renvoie `None`, la détection
+est désactivée avec un avertissement dans le journal et la pile ASD retombe sur
+l'estimation gratuite par mouvement des lèvres. Dégrader au lieu de planter est
+l'intention : regardez le journal plutôt que le code de sortie.

@@ -50,7 +50,9 @@ does *not* try to compete with `PyAV` on the low-level packet API or
 `PIL` **optional**: you only pay their install cost if you actually
 call `destination="torch"` / `destination="pil"`. That trade-off is the
 main differentiator against `torchvision.io` (torch mandatory) and
-against `decord` (ffmpeg4 source build required).
+against `decord`, whose newest release ships no wheel for Apple Silicon
+nor for any Python ≥ 3.9 on macOS, so it has to be built from source
+against `ffmpeg@4`.
 
 Where the ratings come from, in a sentence each: multi-format I/O
 leans on ffmpeg-native probing and muxing; frame extraction is a
@@ -83,3 +85,50 @@ default with torch and PIL available on request.
 - **`ffmpeg-python`**: you want to compose an arbitrary filter graph
   and don't need numpy interop.
 - **`scenedetect`**: you specifically need shot-boundary detection.
+
+## Sources and as-of date
+
+Checked on **27 October 2026**. Every version and date below was read that day
+from each project's own release metadata on PyPI
+(`https://pypi.org/pypi/<name>/json`), which is the publisher's own record
+rather than a third-party summary:
+
+| Project | Newest release | Published |
+|---|---|---|
+| moviepy | 2.2.1 | 2025-05-21 |
+| av (PyAV) | 19.0.2 | 2026-10-21 |
+| decord | 0.6.0 | 2021-06-14 |
+| torchvision | 0.29.1 | 2026-09-30 |
+| vidgear | 0.3.6 | 2026-10-26 |
+| opencv-python | 5.0.0.93 | 2026-07-02 |
+| ffmpeg-python | 0.2.0 | 2019-07-06 |
+| imageio | 2.38.1 | 2026-10-08 |
+| scenedetect | 0.7.2 | 2026-10-12 |
+
+Two rows of that table carry most of the weight of the star table above.
+
+- `decord`'s ⭐⭐ on **Light install** is its wheel list, not an opinion: release
+  0.6.0 publishes `macosx_10_15_x86_64` (CPython 3.6–3.8), `manylinux2010_x86_64`
+  and `win_amd64`, and nothing else. `video-helper` prototyped a decord backend
+  during v1.4 development and dropped it for that reason; the reasoning is in
+  [SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md)
+  under *History*.
+- `ffmpeg-python`'s ⭐⭐⭐⭐⭐ on **Light install** and its 2019 release date are the
+  same fact seen twice: it is a small, finished argument builder over the ffmpeg
+  CLI, which is also why `video-helper` depends on it.
+
+The competitor columns are a judgement of **fit to this niche**, read off each
+project's own documentation and public API. They are not a head-to-head
+benchmark, and no number here was produced by running one. A claim that could
+not be sourced was left out rather than estimated.
+
+`video-helper`'s own row is not a third-party claim: the capabilities behind it
+are the functions listed in
+[README.md](https://github.com/warith-harchaoui/video-helper/blob/main/README.md)
+and exercised by the test suite. The decode figures behind **GPU decode** and
+**Frame extraction** come from
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md),
+measured on Apple Silicon / macOS (Darwin 25.5.0) with system ffmpeg 8.1.2 and
+PyAV 17.1.0. That snapshot dates from the v1.4.0 backend redesign and has not
+been re-measured since, so read it as an order of magnitude rather than as
+today's milliseconds.

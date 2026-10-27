@@ -52,8 +52,9 @@ ni `torchvision.io` sur les tenseurs torch natifs et il garde `torch` et
 `PIL` **optionnels** : vous n'en payez le coût d'installation que si vous
 appelez réellement `destination="torch"` / `destination="pil"`. Ce
 compromis est le principal facteur de différenciation face à
-`torchvision.io` (torch obligatoire) et face à `decord` (compilation depuis
-les sources d'ffmpeg4 requise).
+`torchvision.io` (torch obligatoire) et face à `decord`, dont la dernière
+publication ne fournit aucune roue pour Apple Silicon ni pour un Python ≥ 3.9
+sur macOS : il faut donc le compiler depuis les sources contre `ffmpeg@4`.
 
 D'où viennent les notes, en une phrase chacune : les E/S multi-formats
 reposent sur le sondage et le multiplexage natifs ffmpeg ; l'extraction
@@ -90,3 +91,53 @@ numpy par défaut, avec torch et PIL disponibles sur demande.
   et vous n'avez pas besoin d'interopérabilité numpy.
 - **`scenedetect`** : vous avez spécifiquement besoin de la détection des
   limites de plans.
+
+## Sources et date de relevé
+
+Relevé le **27 octobre 2026**. Chaque version et chaque date ci-dessous ont été
+lues ce jour-là dans les métadonnées de publication que chaque projet dépose
+lui-même sur PyPI (`https://pypi.org/pypi/<nom>/json`) : c'est le registre de
+l'éditeur, pas un résumé de seconde main.
+
+| Projet | Dernière publication | Date |
+|---|---|---|
+| moviepy | 2.2.1 | 2025-05-21 |
+| av (PyAV) | 19.0.2 | 2026-10-21 |
+| decord | 0.6.0 | 2021-06-14 |
+| torchvision | 0.29.1 | 2026-09-30 |
+| vidgear | 0.3.6 | 2026-10-26 |
+| opencv-python | 5.0.0.93 | 2026-07-02 |
+| ffmpeg-python | 0.2.0 | 2019-07-06 |
+| imageio | 2.38.1 | 2026-10-08 |
+| scenedetect | 0.7.2 | 2026-10-12 |
+
+Deux lignes de ce tableau portent l'essentiel du tableau d'étoiles ci-dessus.
+
+- Les ⭐⭐ de `decord` en **installation légère** ne sont pas un avis, c'est sa
+  liste de roues : la version 0.6.0 publie `macosx_10_15_x86_64` (CPython
+  3.6–3.8), `manylinux2010_x86_64` et `win_amd64`, rien d'autre.
+  `video-helper` a prototypé un backend decord pendant le développement de la
+  v1.4 puis l'a retiré pour cette raison précise ; le raisonnement figure dans
+  [SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md),
+  section *History*.
+- Les ⭐⭐⭐⭐⭐ de `ffmpeg-python` en **installation légère** et sa date de
+  publication de 2019 sont un seul et même fait vu deux fois : c'est un petit
+  constructeur d'arguments, terminé, posé sur la ligne de commande ffmpeg. C'est
+  aussi la raison pour laquelle `video-helper` en dépend.
+
+Les colonnes des autres bibliothèques sont un jugement d'**adéquation à ce
+créneau**, lu dans la documentation et l'API publique de chaque projet. Ce n'est
+pas un comparatif chronométré et aucun chiffre présenté ici ne sort d'un tel
+comparatif. Une affirmation que nous n'avons pas pu sourcer a été retirée
+plutôt qu'estimée.
+
+La ligne de `video-helper` n'est pas une affirmation sur le logiciel d'autrui :
+les capacités qui la fondent sont les fonctions listées dans
+[LISEZMOI.md](https://github.com/warith-harchaoui/video-helper/blob/main/LISEZMOI.md)
+et couvertes par la suite de tests. Les chiffres de décodage derrière
+**décodage GPU** et **extraction d'images** viennent de
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md),
+mesurés sur Apple Silicon / macOS (Darwin 25.5.0) avec le ffmpeg système 8.1.2
+et PyAV 17.1.0. Cet instantané date de la refonte des backends en v1.4.0 et n'a
+pas été remesuré depuis : à lire comme un ordre de grandeur plutôt que comme
+les millisecondes du jour.

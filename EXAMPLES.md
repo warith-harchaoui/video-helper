@@ -1,43 +1,47 @@
 # Video Helper Examples
 
-Practical recipes for the public surface of `video-helper`. Every
-snippet assumes:
+[🇫🇷 EXEMPLES.md](https://github.com/warith-harchaoui/video-helper/blob/main/EXEMPLES.md) · 🇬🇧 English
 
-```python
-import video_helper as vh
-import os_helper as osh
-```
-
-and that `ffmpeg` is installed and on `PATH`. The `burn_subtitles`
-recipe additionally requires ffmpeg to be built with `libass`.
+Practical recipes for the public surface of `video-helper`. Each numbered
+section is a scenario, not a function listing. Every snippet was checked against
+the code, and every snippet that can run offline on a local clip was run while
+this file was written — the outputs shown are what came back. A few of them need
+something a plain checkout cannot supply (an ffmpeg built with `libass`, a live
+header-gated URL, the face weights fetched on first use); each says so where it
+appears.
 
 ---
 
 ## Table of Contents
 
-1. [Setup](#setup)
-2. [Probe & Validate](#probe--validate)
-3. [Convert & Resize](#convert--resize)
-4. [Frame Access](#frame-access)
-   - [Iterate Frames](#iterate-frames)
-   - [Sparse / Random Access](#sparse--random-access)
-   - [Choosing a Backend](#choosing-a-backend)
-   - [Hardware Acceleration](#hardware-acceleration)
-   - [Destination: numpy or torch tensors](#destination-numpy-or-torch-tensors)
-   - [Optical Flow](#optical-flow)
-   - [Dump Frames to a Video](#dump-frames-to-a-video)
-5. [Temporal Crop](#temporal-crop)
-6. [Pipeline Primitives](#pipeline-primitives)
-   - [Black Video](#black-video)
-   - [Image Loop](#image-loop)
-   - [Concatenate](#concatenate)
-   - [Overlay Image](#overlay-image)
-   - [Extract / Mux Audio](#extract--mux-audio)
-   - [Burn Subtitles](#burn-subtitles)
-7. [Subtitle Tools](#subtitle-tools)
-   - [SRT → VTT + CSS](#srt--vtt--css)
-   - [Unique Colors](#unique-colors)
-8. [Face-Anchored Speaker Identity](#face-anchored-speaker-identity)
+- [Setup](#setup)
+- [1. Probe & Validate](#1-probe--validate)
+- [2. Convert & Resize](#2-convert--resize)
+- [3. Frame Access](#3-frame-access)
+  - [Iterate Frames](#iterate-frames)
+  - [Sparse / Random Access](#sparse--random-access)
+  - [Choosing a Backend](#choosing-a-backend)
+  - [Hardware Acceleration](#hardware-acceleration)
+  - [HTTP Headers (auth-protected URLs)](#http-headers-auth-protected-urls)
+  - [Exact Output Size with Aspect-Preserving Padding](#exact-output-size-with-aspect-preserving-padding)
+  - [Destination: numpy, torch, or PIL](#destination-numpy-torch-or-pil)
+  - [Optical Flow](#optical-flow)
+  - [Dump Frames to a Video](#dump-frames-to-a-video)
+- [4. Temporal Crop](#4-temporal-crop)
+- [5. Pipeline Primitives](#5-pipeline-primitives)
+  - [Black Video](#black-video)
+  - [Image Loop](#image-loop)
+  - [Concatenate](#concatenate)
+  - [Overlay Image](#overlay-image)
+  - [Extract / Mux Audio](#extract--mux-audio)
+  - [Burn Subtitles](#burn-subtitles)
+  - [Compress to a Target Size](#compress-to-a-target-size)
+- [6. Subtitle Tools](#6-subtitle-tools)
+  - [SRT → VTT + CSS](#srt--vtt--css)
+  - [Unique Colors](#unique-colors)
+- [7. Face-Anchored Speaker Identity](#7-face-anchored-speaker-identity)
+- [Command line](#command-line)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -55,30 +59,46 @@ Optional extras (mix and match, or install `[all]`):
 # [pyav]:  best windowed-sequential + sparse decoder. Honors hwaccel.
 # [torch]: destination="torch" (NCHW / CTHW RGB on cpu / mps / cuda).
 # [pil]:   destination="pil" (PIL.Image, RGB, size=(W, H)).
-# [all]:   everything (pyav + torch + pillow).
+# [flow]:  method="raft" and the wavelet flow resize.
+# [faces]: face-anchored speaker identity (section 7).
+# [all]:   pyav + torch + pillow + torchvision + PyWavelets.
 
 pip install --force-reinstall --no-cache-dir \
   "video-helper[all]"
 ```
 
-You also need `ffmpeg`. macOS: `brew install ffmpeg` (install `brew` thanks to [brew.sh](https://brew.sh/)). Linux: `apt install ffmpeg`. Windows: see the [ffmpeg site](https://ffmpeg.org/download.html).
+Every snippet from here on assumes this import, and nothing else:
 
-To use [`burn_subtitles`](#burn-subtitles), the ffmpeg build must include
-`libass`. Verify with `ffmpeg -filters | grep subtitles`; if missing on
-macOS, try `brew uninstall ffmpeg && brew install ffmpeg --HEAD`
-(install `brew` thanks to [brew.sh](https://brew.sh/)).
+```python
+import video_helper as vh
+```
 
-## Probe & Validate
+A handful of snippets build or inspect arrays directly and add
+`import numpy as np`; each one shows the import where it needs it.
+
+You also need `ffmpeg` on `PATH`. macOS: `brew install ffmpeg` (install `brew`
+thanks to [brew.sh](https://brew.sh/)). Linux: `apt install ffmpeg`. Windows:
+see the [ffmpeg site](https://ffmpeg.org/download.html).
+
+[`burn_subtitles`](#burn-subtitles) needs an ffmpeg built with `libass`, which
+not every binary distribution ships — see
+[Troubleshooting](#troubleshooting).
+
+## 1. Probe & Validate
 
 ```python
 if vh.is_valid_video_file("clip.mp4"):
     info = vh.video_dimensions("clip.mp4")
     print(info)
-    # {'width': 1920, 'height': 1080, 'duration': 12.34,
+    # {'width': 1920, 'height': 1080, 'duration': 12.333333,
     #  'frame_rate': 30.0, 'has_sound': True}
 
-duration_seconds = vh.video_duration("clip.mp4")
+print(vh.video_duration("clip.mp4"))
+# 12.333333
 ```
+
+`duration` is whatever the container reports, to full float precision: do not
+expect it to equal the duration you asked ffmpeg for when you made the file.
 
 `is_valid_video_file` rejects fake `.mp4` files (no video stream) **and**
 valid videos with non-video extensions.
@@ -88,7 +108,7 @@ optional `http_headers` dict forwarded to ffprobe: useful for
 yt-dlp-resolved YouTube live, members-only, or age-gated content that
 needs specific headers to be readable at all.
 
-## Convert & Resize
+## 2. Convert & Resize
 
 `video_converter` re-encodes a video with optional sample-rate, fps,
 and dimension changes. Default container behaviour: same-container
@@ -109,7 +129,7 @@ vh.video_converter(
 
 Pass only `width` or only `height` to preserve the aspect ratio.
 
-## Frame Access
+## 3. Frame Access
 
 ### Iterate Frames
 
@@ -167,6 +187,18 @@ frames = list(vh.extract_frames("clip.mp4", start_instant=0, end_instant=2, back
 frames = list(vh.extract_frames("clip.mp4", stabilize=True))
 ```
 
+**`stabilize=True` returns fewer frames than the video has.** VidGear's
+stabilizer smooths over a trailing window (radius 25 by default) and that
+window is never flushed at end of stream, so the last ~25 frames stay inside
+it. Measured on a 2 s / 30 fps clip: 60 frames plain, 35 stabilized, and
+stabilized frame *k* is source frame *k+1*. Ask for a slightly longer range
+than you need, and do not rely on the two counts matching.
+
+```python
+print(len(list(vh.extract_frames("tiny30.mp4"))))  # 60
+print(len(list(vh.extract_frames("tiny30.mp4", stabilize=True))))  # 35
+```
+
 ### Hardware Acceleration
 
 Default is `hwaccel=None` (software decode). Opt in via `hwaccel="auto"`
@@ -217,8 +249,11 @@ for frame in vh.extract_frames(
     http_headers=headers,
     backend="pyav",  # or "ffmpeg-pipe"; vidgear warns + ignores
 ):
-    process(frame)
+    print(frame.shape)
 ```
+
+*Checked against the code but not run: the URL has to be a live, header-gated
+stream resolved minutes earlier, which no fixture can stand in for.*
 
 The VidGear backend logs a warning and ignores `http_headers`; OpenCV doesn't surface them cleanly. Use `backend="pyav"` (preferred) or `"ffmpeg-pipe"` for auth-protected URLs.
 
@@ -330,14 +365,15 @@ for im in vh.extract_frames("clip.mp4", destination="pil"):
 
 `device="auto"` for torch resolves to `cuda` → `mps` → `cpu` in that order.
 
-**Honest performance note:** at the time of v1.4.1, the torch path
-materializes each frame as numpy before stacking and shipping to
-device. That's one round-trip per batch, not zero-copy. A future C++
-extension (planned for v1.5+) will let VideoToolbox / NVDEC hand
-frames directly to torch on-device without the numpy intermediate;
-see `SPEED_ANALYSIS.md` for the latest measurements. The current
-batched path is already a 5-20× win over manually wrapping each frame
-in `torch.from_numpy(...).to(device)`.
+**Honest performance note:** the torch path materializes each frame as numpy
+and hands it over with `torch.from_numpy(...).to(device)`, so there is one
+host→device round-trip per batch, not zero-copy. Letting VideoToolbox / NVDEC
+hand frames straight to torch on-device would need a C++ extension; it is
+listed as pending work in
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md),
+not scheduled. Batching is still what makes the current path worth using: the
+same document measures it at 5-20× the throughput of wrapping each frame
+individually.
 
 ### Optical Flow
 
@@ -432,7 +468,7 @@ frames = [np.zeros((72, 128, 3), dtype=np.uint8) for _ in range(30)]
 vh.dump_frames(frames, "buffer.mp4", fps=15)
 ```
 
-## Temporal Crop
+## 4. Temporal Crop
 
 `extract_video_chunk(input, start_s, end_s, output)` cuts a `[start, end]`
 slice. Out-of-range bounds raise `AssertionError`. The output container
@@ -447,7 +483,7 @@ vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4")
 vh.extract_video_chunk("podcast.mp4", 60.0, 75.0, "highlight.mp4", copy=True)
 ```
 
-## Pipeline Primitives
+## 5. Pipeline Primitives
 
 ### Black Video
 
@@ -523,6 +559,10 @@ video side.
 Permanently bake subtitles into the video frames. Accepts `.srt`, `.vtt`,
 `.ass`, `.ssa`. Requires ffmpeg with `libass`.
 
+*Checked against the code but not run here: the ffmpeg on this machine has no
+`subtitles` filter, which is exactly the failure described under
+[Troubleshooting](#troubleshooting).*
+
 ```python
 # Plain SRT, default style.
 vh.burn_subtitles("clip.mp4", "subs.srt", "captioned.mp4")
@@ -539,7 +579,43 @@ vh.burn_subtitles(
 )
 ```
 
-## Subtitle Tools
+### Compress to a Target Size
+
+`compress_video` solves for the video bitrate that lands the whole file on
+`target_size_mb` given its duration, then encodes at that bitrate in two
+passes. Built for "the file that gets embedded in a web player", not for an
+archival master.
+
+```python
+import os
+
+# A 12.3 s 1080p clip, 1.776 MB on disk, asked to fit in 1 MB.
+out = vh.compress_video("big.mp4", "web.mp4", target_size_mb=1.0)
+print(out, round(os.path.getsize(out) / 1e6, 3), "MB")
+# web.mp4 1.002 MB
+```
+
+The default codec is HEVC (`libx265`) tagged `hvc1`, because ffmpeg's own
+default `hev1` tag is not recognised by QuickTime and Apple players.
+
+```python
+# macOS: single-pass hardware HEVC. Much faster, slightly worse per bit.
+vh.compress_video("big.mp4", "vt.mp4", target_size_mb=1.0, vcodec="hevc_videotoolbox")
+
+# Already small enough: remux only (adds +faststart), no re-encode at all.
+vh.compress_video("clip.mp4", "remux.mp4", vcodec="copy")
+```
+
+A target so small that the solved bitrate falls under `min_video_bitrate_kbps`
+(200 by default) is not silently honoured: the floor wins, the output overshoots
+the target, and you get told so on the log rather than after measuring the file.
+
+```
+compress_video: target 0.3 MB over 12 sec would need 76 kbps for video —
+below the 200 kbps floor. Using the floor instead; the output will exceed 0.3 MB.
+```
+
+## 6. Subtitle Tools
 
 ### SRT → VTT + CSS
 
@@ -559,13 +635,22 @@ color>` tags of an SRT. Useful for previewing the palette before a
 conversion.
 
 ```python
-print(vh.extract_unique_colors("subs.srt"))
-# {'#FF0000', '#00FF00', '#0000FF'}
+print(sorted(vh.extract_unique_colors("subs.srt")))
+# ['#0000FF', '#00FF00', '#FF0000']
 ```
 
-## Face-Anchored Speaker Identity
+The return value is a `set`, so sort it before printing or comparing: set
+iteration order is not part of Python's contract and changes between runs.
+
+## 7. Face-Anchored Speaker Identity
 
 Needs the `[faces]` extra: `pip install "video-helper[faces]"`.
+
+*The snippets in this section were checked against the code and not run: the
+first call downloads the YuNet / SFace / Light-ASD weights (see
+[`video_helper.faces.models`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/models.py)),
+so their output depends on a network fetch and on the faces in your own clip.
+No output is shown below for that reason.*
 
 Audio-only diarization (splitting a recording into "who spoke when" from the
 sound alone) tells you a voice cluster exists, but not which on-screen face
@@ -624,3 +709,136 @@ full picture: `FaceRecognizer` (SFace embeddings), `mouth_roi` /
 proxy vs. the accurate Light-ASD PyTorch model), and `build_asd_digest`
 (the internal clip-compaction step `active_speaker_map` uses on long
 recordings).
+
+## Command line
+
+One `click` command line covers the same operations, so a shell script needs no
+Python wrapper. `--help` on the group lists every sub-command, and `--help` on
+any sub-command lists its options.
+
+```bash
+video-helper --help
+video-helper extract-frames --help
+video-helper --version
+# video-helper, version 2.8.0
+```
+
+The three read-only commands print to stdout and nothing else, so they pipe:
+
+```bash
+$ video-helper validate --input clip.mp4
+true
+
+$ video-helper duration --input clip.mp4
+12.333333
+
+$ video-helper dimensions --input clip.mp4
+{
+  "width": 1920,
+  "height": 1080,
+  "duration": 12.333333,
+  "frame_rate": 30.0,
+  "has_sound": true
+}
+```
+
+Every command that writes a single file echoes the path it wrote, so `$(…)`
+chains:
+
+```bash
+video-helper convert   --input clip.mp4 --output small.mp4 \
+                       --width 640 --height 360 --frame-rate 15 --without-sound
+video-helper chunk     --input clip.mp4 --start 6 --end 9 --output highlight.mp4
+video-helper compress  --input big.mp4  --output web.mp4 --target-size-mb 1
+video-helper black     --duration 0.5 --width 1280 --height 720 --output black.mp4
+video-helper image-loop --image title.png --duration 2 --output title.mp4 \
+                       --width 1280 --height 720
+video-helper overlay   --input clip.mp4 --image cursor.png --output overlaid.mp4 \
+                       --x 100 --y 200 --scale-width 24
+video-helper extract-audio --input clip.mp4 --output track.wav
+video-helper mux-audio --input title.mp4 --audio track.wav --output narrated.mp4 --shortest
+video-helper burn-subs --input clip.mp4 --subs subs.srt --output captioned.mp4
+video-helper srt2vtt   --input subs.srt --output subs.vtt --css subs.css
+```
+
+`concat` is the one command whose option is **plural**, because it takes a list.
+Both spellings work and order is preserved:
+
+```bash
+video-helper concat --inputs intro.mp4 body.mp4 outro.mp4 --output final.mp4
+video-helper concat --inputs intro.mp4 --inputs body.mp4 --inputs outro.mp4 --output final.mp4
+```
+
+`--input` on `concat` is an error rather than a silent one-file concat:
+
+```
+Error: No such option '--input'. (Did you mean one of: '--inputs', '--output'?)
+```
+
+`extract-frames` writes one PNG per sampled frame and reports the manifest as
+JSON, so the next step in a shell pipeline can read it with `jq`:
+
+```bash
+$ video-helper extract-frames --input clip.mp4 --output-dir frames \
+      --frame-interval 2 --start 0 --end 6
+{
+  "frames": [
+    "frames/frame_000000000.png",
+    "frames/frame_000000001.png",
+    "frames/frame_000000002.png",
+    "frames/frame_000000003.png"
+  ],
+  "count": 4
+}
+```
+
+`extract-flow` mirrors [Optical Flow](#optical-flow): the output extension picks
+the kind, `.npy` for the raw `(T, H, W, 2)` array and anything else for the HSV
+visualization video.
+
+```bash
+video-helper extract-flow --input clip.mp4 --output flow.npy --method dis \
+      --start 0 --end 1 --output-width 160 --output-height 90
+# flow.npy
+```
+
+## Troubleshooting
+
+**`RuntimeError: ffmpeg has no 'subtitles' filter (libass missing)`** —
+`burn_subtitles` and `video-helper burn-subs` need an ffmpeg built with
+`--enable-libass`, and several binary distributions (including some
+homebrew-core bottles) ship without it. Check before you need it:
+
+```bash
+ffmpeg -hide_banner -filters | grep subtitles
+```
+
+No output means no libass. On macOS, `brew uninstall ffmpeg && brew install
+ffmpeg --HEAD` builds one that has it. Nothing else in the package is affected:
+`srt2vtt` and `extract_unique_colors` parse subtitles in Python and work either
+way.
+
+**`ValueError` on `pad_color="transparent"`** — deliberate. Transparency would
+require 4-channel BGRA/RGBA frames, which would break the `(H, W, 3)` contract
+every destination promises. Pad with an unused colour and carry the mask
+yourself.
+
+**Sparse access feels slow** — `frame_indices` / `frame_times` keyframe-seek
+only on the PyAV backend. Without the `[pyav]` extra the dispatcher falls back
+to VidGear, which decodes from t=0 and then filters, so the cost is the same as
+reading the whole file. `pip install "video-helper[pyav]"`.
+
+**`hwaccel="auto"` made it slower** — expected for `destination="numpy"`, and
+measured in
+[SPEED_ANALYSIS.md](https://github.com/warith-harchaoui/video-helper/blob/main/SPEED_ANALYSIS.md):
+the decode moves to the media engine, then the frames have to come back over
+the bus and through swscale to land as BGR arrays. It is a power and
+parallelism win, not a latency win. For `destination="torch"` on a GPU device
+the dispatcher enables it on its own, where it does pay.
+
+**`faces` quietly produces nothing** — the weights are fetched on first use
+(see [7. Face-Anchored Speaker Identity](#7-face-anchored-speaker-identity)). If
+no source can be reached, `ensure_model` returns `None`, detection is disabled
+with a warning on the log and the ASD stack falls back to the zero-weight
+lip-motion proxy. Degrading instead of crashing is the intent; check the log
+rather than the exit code.
