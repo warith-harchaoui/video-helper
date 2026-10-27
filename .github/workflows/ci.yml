@@ -32,27 +32,35 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: System deps (ffmpeg)
+      - name: ffmpeg + ffprobe (pinned static build, not apt)
         run: |
-          # A bounded, retried apt. This step is the only thing that has ever made
-          # this workflow slow: it normally takes ~20 s, but a stalled Azure mirror
-          # has made it take 31 minutes. Each attempt is capped so a stall is
-          # abandoned and retried rather than waited on; `timeout` exits 124 when it
-          # fires, which separates "mirror stalled" from "no such package" in the log.
-          for attempt in 1 2 3; do
-            # The failure code is read in the `else` branch on purpose: after a plain
-            # `if ...; fi`, `$?` is the status of the `if` itself, which is 0 even when
-            # the condition failed. Reporting that would print "exit 0" next to the word
-            # "failed" and send the next reader looking in the wrong place.
-            if timeout 240 sudo apt-get update && timeout 240 sudo apt-get install -y ffmpeg; then
-              exit 0
-            else
-              echo "apt attempt ${attempt} failed or stalled (exit $?); retrying"
-            fi
-            sleep 5
-          done
-          echo "apt-get install ffmpeg failed three times - the mirror is down, not your change."
-          exit 1
+          set -euo pipefail
+          # Deliberately not `apt-get install ffmpeg`. That pulls 89 packages and
+          # 69 MB from azure.archive.ubuntu.com, and that mirror is the only thing
+          # that has ever turned this workflow red: on 2026-10-27 three capped
+          # retries spent twelve minutes and then gave up, with nothing wrong in
+          # the repository. One tarball off a GitHub release travels the runner's
+          # own network and carries both binaries the tests shell out to.
+          #
+          # The tag is pinned, so the toolchain under the gate only moves when a
+          # human moves it; re-pin from github.com/BtbN/FFmpeg-Builds/releases
+          # (tag and build name must move together: they name the same commit).
+          # The stall detector is the part that matters: --speed-time abandons a
+          # transfer that has gone quiet instead of sitting on it until the job
+          # timeout, which is precisely how apt failed.
+          tag=autobuild-2026-10-26-14-25
+          build=ffmpeg-n8.1.3-24-g92611900bb-linux64-gpl-shared-8.1
+          mkdir -p "$HOME/ffmpeg"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/BtbN/FFmpeg-Builds/releases/download/${tag}/${build}.tar.xz" \
+            | tar -xJ --strip-components=1 -C "$HOME/ffmpeg" "${build}/bin" "${build}/lib"
+          # The binaries carry RUNPATH $ORIGIN/../lib, so putting bin on PATH is the
+          # whole of the wiring; no LD_LIBRARY_PATH leaks into the test environment.
+          echo "$HOME/ffmpeg/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/ffmpeg/bin/ffmpeg" -version | head -1
+          "$HOME/ffmpeg/bin/ffprobe" -version | head -1
       - name: Install package + dev extras
         run: |
           python -m pip install --upgrade pip
