@@ -38,6 +38,10 @@ video-helper follows the same discipline as the rest of the suite. Every change 
 - **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
 - **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra): audio-only diarization tells you a voice cluster exists but not which on-screen face it belongs to. This submodule answers that by detecting faces (YuNet), tracking them across frames, and scoring which tracked face's lip motion lines up with a given speaker's audio activity, a technique called active-speaker detection (ASD: catching who is actually talking on screen, not just whose voice is on the track). `FaceDetector` / `FaceRecognizer` (YuNet + SFace, OpenCV's own DNN wrappers, no HuggingFace at runtime), `track_faces` (IoU tracking), `get_engine` (a zero-weight lip-motion proxy, or the accurate Light-ASD PyTorch model), and `active_speaker_map`, the harness that ties it together: it samples a handful of short clips instead of decoding the whole recording, growing the sample only for speakers it isn't yet sure about. See the [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) for the full picture.
 
+## How it works
+
+![How video-helper works: a video in, frames and motion out, without leaving your machine](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/diagrams/how-it-works.png)
+
 ## Installation
 
 **Prerequisites:** **Python 3.10–3.13** and **git**, **ffmpeg**, cross-platform:

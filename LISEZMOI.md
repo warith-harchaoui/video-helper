@@ -38,6 +38,10 @@ video-helper suit la même discipline que le reste de la suite. Chaque changemen
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
 - **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`) : la diarisation audio seule (segmenter un enregistrement en « qui parle quand » à partir du son) dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond. Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné ; cette technique porte un nom, la détection du locuteur actif (« active-speaker detection » ou ASD : repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste). `FaceDetector` / `FaceRecognizer` (YuNet et SFace, les enveloppes DNN natives d'OpenCV, sans HuggingFace à l'exécution), `track_faces` (suivi par recouvrement de boîtes), `get_engine` (une estimation gratuite par mouvement des lèvres ou le modèle PyTorch précis Light-ASD), `active_speaker_map`, la mécanique qui relie tout cela : elle échantillonne une poignée de courts extraits au lieu de décoder tout l'enregistrement, en élargissant l'échantillon seulement pour les locuteurs encore incertains. Voir la [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) pour le tableau complet.
 
+## Comment ça marche
+
+![Comment video-helper fonctionne : une vidéo en entrée, des images et du mouvement en sortie, sans quitter votre machine](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/diagrams/comment-ca-marche.png)
+
 ## Installation
 
 **Prérequis :** **Python 3.10–3.13** et **git**, **ffmpeg**, multiplateforme :
