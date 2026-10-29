@@ -141,3 +141,15 @@ mesurés sur Apple Silicon / macOS (Darwin 25.5.0) avec le ffmpeg système 8.1.2
 et PyAV 17.1.0. Cet instantané date de la refonte des backends en v1.4.0 et n'a
 pas été remesuré depuis : à lire comme un ordre de grandeur plutôt que comme
 les millisecondes du jour.
+
+## Idées à reprendre
+
+Étudié plutôt que deviné : ce que chaque voisin fait mieux, puis ce que cette bibliothèque devrait changer pour l'égaler. Rien ici n'est un engagement : c'est la liste de lecture dont part la version suivante.
+
+- **`torchcodec` — le décodeur vers lequel PyTorch pointe désormais** — Un décodage processeur de premier plan avec une accélération CUDA, la vidéo étant exposée comme une suite d'images indexable par position ou par instant de présentation. Cela compte doublement ici : l'API vidéo de `torchvision.io`, que ce tableau note encore, est en train d'être remplacée par lui, donc cette ligne relève désormais de l'héritage plutôt que d'une alternative vivante.
+
+- **`decord` puis `deffcode` — le positionnement à l'image près comme garantie énoncée** — Se placer sur un horodatage puis obtenir l'image demandée — et non l'image clé la plus proche — est la propriété que les appelants supposent sans la vérifier. `deffcode` (avril 2026) en fait son argument principal.
+
+- **`scenedetect` — les frontières de plan comme opération de premier rang** — Couper sur le contenu plutôt que sur un intervalle fixe est ce que veulent réellement la plupart des usages en aval, puis cela se compose avec le découpage que cette bibliothèque fait déjà.
+
+- **`VidGear` — un tampon de lecture en fil d'exécution devant le consommateur** — Décoder sur le fil appelant fait payer à chaque consommateur toute la latence de décodage par image. Un tampon d'avance borné coûte peu, puis c'est la leçon qu'a tirée le jumeau Rust de capture à propos des files bornées.

@@ -132,3 +132,15 @@ measured on Apple Silicon / macOS (Darwin 25.5.0) with system ffmpeg 8.1.2 and
 PyAV 17.1.0. That snapshot dates from the v1.4.0 backend redesign and has not
 been re-measured since, so read it as an order of magnitude rather than as
 today's milliseconds.
+
+## Ideas worth stealing
+
+Researched rather than guessed: what each neighbour does better, and what this library would have to change to match it. Nothing here is a commitment — it is the reading list the next version starts from.
+
+- **`torchcodec` — the decoder PyTorch now points at** — Best-in-class CPU decoding plus CUDA-accelerated decoding, with a video exposed as a sequence of frames indexable by position or by presentation time. It matters doubly here: `torchvision.io`'s video API, which this table still rates, is being superseded by it, so that row is now legacy rather than a live alternative.
+
+- **`decord` and `deffcode` — frame-accurate seeking as a stated guarantee** — Seeking to a timestamp and getting the frame you asked for — rather than the nearest keyframe — is the property callers assume and rarely verify. `deffcode` (April 2026) makes precise key-frame seeking its headline.
+
+- **`scenedetect` — shot boundaries as a first-class operation** — Cutting on content rather than on a fixed interval is what most downstream uses actually want, and it composes with the chunking this library already does.
+
+- **`VidGear` — a threaded read buffer ahead of the consumer** — Decoding on the calling thread makes every consumer pay full decode latency per frame. A bounded read-ahead buffer is cheap and is the same lesson the Rust capture twin learned about bounded queues.
