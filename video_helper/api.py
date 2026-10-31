@@ -84,10 +84,12 @@ from . import (
     is_valid_video_file,
     mux_audio_video,
     overlay_image,
+    split_sentences,
     srt2vtt,
     video_converter,
     video_dimensions,
     video_duration,
+    vtt2srt,
 )
 
 # ---------------------------------------------------------------------------
@@ -123,8 +125,8 @@ app = FastAPI(
     description=(
         "HTTP surface for the video-helper utilities: validate, dimensions, "
         "duration, convert, chunk, black-video, image-loop, concat, overlay, "
-        "extract-audio, mux-audio, burn-subtitles, srt2vtt, extract-frames, "
-        "extract-flow. "
+        "extract-audio, mux-audio, burn-subtitles, srt2vtt, vtt2srt, "
+        "split-sentences, extract-frames, extract-flow. "
         "A minimal browser 'bench' is served at GET /gui (GET / redirects there)."
     ),
     version=_resolve_version(),
@@ -755,6 +757,35 @@ def srt2vtt_route(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="srt2vtt.zip"'},
     )
+
+
+@app.post("/vtt2srt", tags=["actions"])
+def vtt2srt_route(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+) -> FileResponse:
+    """Convert an uploaded WebVTT to SubRip.
+
+    One file back rather than a ZIP, unlike ``/srt2vtt``: there is no
+    stylesheet going this way, because SubRip carries its colours inline.
+    """
+    tmp = _new_tmpdir()
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp, suffix_hint=".vtt")
+        out = tmp / "output.srt"
+        vtt2srt(vtt_file_path=str(src), srt_file_path=str(out))
+    background.add_task(_cleanup, tmp)
+    return FileResponse(str(out), filename="output.srt", media_type="text/plain")
+
+
+@app.post("/split-sentences", tags=["reads"])
+def split_sentences_route(text: str = Form(...)) -> JSONResponse:
+    """Split prose into sentences: the unit a caption line is cut out of.
+
+    Pure, like every other read here: the text arrives in the request and
+    nothing touches the disk.
+    """
+    return JSONResponse({"sentences": split_sentences(text)})
 
 
 @app.post("/extract-frames", tags=["actions"])

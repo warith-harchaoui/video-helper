@@ -79,10 +79,12 @@ from . import (
     is_valid_video_file,
     mux_audio_video,
     overlay_image,
+    split_sentences,
     srt2vtt,
     video_converter,
     video_dimensions,
     video_duration,
+    vtt2srt,
 )
 
 # ---------------------------------------------------------------------------
@@ -522,6 +524,47 @@ def srt2vtt_cmd(input_: str, output: str | None, css: str | None) -> None:
     else:
         stem, _ = os.path.splitext(input_)
         click.echo(stem + ".vtt")
+
+
+# ---------------------------------------------------------------------------
+# vtt2srt
+# ---------------------------------------------------------------------------
+
+
+@cli.command("vtt2srt")
+@click.option("--input", "input_", required=True, type=click.Path(exists=True))
+@click.option(
+    "--output", type=click.Path(), default=None, help="Output .srt (default: sibling of input)."
+)
+def vtt2srt_cmd(input_: str, output: str | None) -> None:
+    """Convert a WebVTT to SubRip.
+
+    Not the mirror of srt2vtt: that one also lifts font colours into cue
+    classes and writes the stylesheet. Going this way, a voice tag becomes
+    the "Name:" prefix players render. Every platform that takes a caption
+    upload takes SubRip; plenty still do not take WebVTT.
+    """
+    click.echo(vtt2srt(vtt_file_path=input_, srt_file_path=output))
+
+
+# ---------------------------------------------------------------------------
+# split-sentences
+# ---------------------------------------------------------------------------
+
+
+@cli.command("split-sentences")
+@click.option("--text", default=None, help="Prose to split. Omitted, the text is read from stdin.")
+def split_sentences_cmd(text: str | None) -> None:
+    """Split prose into one sentence per line.
+
+    The unit a caption line is cut out of, and the unit a read-along
+    follows. Handles decimals, initials and a bilingual abbreviation list,
+    so "Dr. Martin" and "v2.5" stay whole.
+    """
+    # `sys.stdin` rather than `click.get_text_stream`, which Click 9 removes.
+    source = text if text is not None else sys.stdin.read()
+    for sentence in split_sentences(source):
+        click.echo(sentence)
 
 
 # ---------------------------------------------------------------------------

@@ -676,6 +676,66 @@ La valeur de retour est un `set` : triez-la avant de l'afficher ou de la
 comparer, car l'ordre d'itération d'un ensemble ne fait pas partie du contrat
 de Python et change d'une exécution à l'autre.
 
+### Les cues : lire et écrire les deux formats
+
+`video_helper.subtitles` est la couche du texte minuté : un lecteur, deux
+écrivains, et l'extension qui décide lequel tourne. Bibliothèque standard
+plus `os-helper`, donc importer un écrivain de sous-titres ne coûte rien :
+les imports lourds restent dans `main`.
+
+```python
+cues = [
+    vh.Cue(start=0.0, end=2.4, text="Open source", identifier="0"),
+    vh.Cue(start=2.4, end=5.0, text="12 septembre 2026", identifier="1"),
+]
+vh.write(cues, "sous-titres.vtt")  # WebVTT, les identifiants gardés
+vh.write(cues, "sous-titres.srt")  # SubRip, numéroté de 1 à n
+```
+
+`parse` lit l'un ou l'autre et garde les sauts de ligne d'une cue, parce que
+ce sont eux qu'un lecteur casse à l'affichage et qu'un audit de largeur
+compte :
+
+```python
+cues = vh.parse(open("sous-titres.vtt", encoding="utf-8").read())
+print(cues[0].lines)  # ['première ligne', 'seconde ligne']
+print(cues[0].collapsed().text)  # 'première ligne seconde ligne'
+```
+
+Deux différences à connaître, voulues toutes les deux. Un locuteur s'écrit en
+balise `<v Nom>` en WebVTT et en préfixe `Nom :` en SubRip, qui n'a pas de
+balise de voix ; et `write_vtt(..., voices=False)` n'en écrit aucune, parce
+que le W3C réserve les balises de voix à la piste `captions` de même langue
+et qu'une piste traduite est du dialogue.
+
+### VTT → SRT
+
+```python
+vh.vtt2srt("sous-titres.vtt")  # → sous-titres.srt
+vh.vtt2srt("sous-titres.vtt", "sortie.srt")  # chemin explicite
+```
+
+Ce n'est pas le miroir de `srt2vtt` : celui-là fait aussi remonter les
+couleurs de police en classes de cue et écrit la feuille de style, ce qui n'a
+pas d'équivalent dans ce sens puisque SubRip porte ses couleurs en ligne. Il
+existe parce que toutes les plateformes qui acceptent un dépôt de sous-titres
+acceptent le SubRip, et que beaucoup refusent encore le WebVTT.
+
+### Les phrases
+
+Un sous-titre se casse à une largeur de ligne, et une ligne se taille dans
+une phrase.
+
+```python
+vh.split_sentences("Dr. Rosling l'a dit. Cela coûte 3.14 euros. Sorti en v2.5.")
+# ["Dr. Rosling l'a dit.", 'Cela coûte 3.14 euros.', 'Sorti en v2.5.']
+```
+
+Volontairement un petit jeu de règles plutôt qu'un modèle : il doit donner la
+même réponse pour la page et pour son audio, tourner sans dépendance, et
+rester inspectable quand il se trompe. Décimales, initiales, points de
+suspension et une liste bilingue d'abréviations sont pris en charge.
+
 ## 7. Identité de locuteur ancrée sur le visage
 
 Nécessite l'extra `[faces]` : `pip install "video-helper[faces]"`.

@@ -26,6 +26,10 @@ grade, or run models on frames.
 | Mux a new audio track on | `video-helper mux-audio` | `mux_audio_video` | `POST /mux-audio` |
 | Burn subtitles into frames | `video-helper burn-subs` | `burn_subtitles` | `POST /burn-subs` |
 | SRT → WebVTT (+ CSS) | `video-helper srt2vtt` | `srt2vtt` | `POST /srt2vtt` |
+| WebVTT → SRT | `video-helper vtt2srt` | `vtt2srt` | `POST /vtt2srt` |
+| Write cues as WebVTT or SRT | — | `write` / `write_vtt` / `write_srt` | — |
+| Read a WebVTT or SRT into cues | — | `parse` | — |
+| Split prose into sentences | `video-helper split-sentences` | `split_sentences` | `POST /split-sentences` |
 | Extract frames as images | `video-helper extract-frames` | `extract_frames` | `POST /extract-frames` |
 
 Every operation is also reachable through the browser GUI at `GET /gui`.
@@ -42,7 +46,10 @@ Every operation is also reachable through the browser GUI at `GET /gui`.
 - **Concat**: "merge / join / stitch these clips", "combine into one".
 - **Overlay**: "watermark a logo", "add a badge in the corner".
 - **Extract-audio / mux-audio**: "rip the audio", "attach / replace the audio track".
-- **Burn-subs / srt2vtt**: "hardcode the subtitles", "SRT to WebVTT".
+- **Burn-subs / srt2vtt / vtt2srt**: "hardcode the subtitles", "SRT to
+  WebVTT", "WebVTT to SRT", "convert the captions", "YouTube wants an SRT".
+- **Subtitle authoring**: "write a caption file", "write these cues as SRT",
+  "read this VTT", "split this into sentences", "one sentence per caption".
 - **Extract-frames**: "sample frames as images", "one frame every N", "keyframes".
 - **Probe**: "how long is this", "what resolution / fps", "is this a valid video".
 - **Surfaces**: "run the video API server", "open the video GUI", "install

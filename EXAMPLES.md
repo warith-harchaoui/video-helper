@@ -642,6 +642,62 @@ print(sorted(vh.extract_unique_colors("subs.srt")))
 The return value is a `set`, so sort it before printing or comparing: set
 iteration order is not part of Python's contract and changes between runs.
 
+### Cues: reading and writing both formats
+
+`video_helper.subtitles` is the timed-text layer: one reader, two writers,
+and the extension deciding which writer runs. Stdlib plus `os-helper`, so
+importing a caption writer costs nothing — the heavy imports stay in `main`.
+
+```python
+cues = [
+    vh.Cue(start=0.0, end=2.4, text="Open source", identifier="0"),
+    vh.Cue(start=2.4, end=5.0, text="September 12, 2026", identifier="1"),
+]
+vh.write(cues, "captions.vtt")  # WebVTT, identifiers kept
+vh.write(cues, "captions.srt")  # SubRip, numbered 1..n
+```
+
+`parse` reads either format and keeps a cue's newlines, because they are what
+a renderer breaks lines on and what a line-width audit counts:
+
+```python
+cues = vh.parse(open("captions.vtt", encoding="utf-8").read())
+print(cues[0].lines)  # ['first line', 'second line']
+print(cues[0].collapsed().text)  # 'first line second line'
+```
+
+Two differences worth knowing, both deliberate. A speaker is written as a
+`<v Name>` tag in WebVTT and as a `Name:` prefix in SubRip, which has no
+voice tags; and `write_vtt(..., voices=False)` writes none at all, because
+W3C reserves voice tags for the same-language `captions` track and a
+translated subtitle track is dialogue.
+
+### VTT → SRT
+
+```python
+vh.vtt2srt("captions.vtt")  # → captions.srt
+vh.vtt2srt("captions.vtt", "out.srt")  # explicit path
+```
+
+Not the mirror of `srt2vtt`: that one also lifts font colors into cue classes
+and writes the stylesheet, which has no counterpart going this way because
+SubRip carries its colors inline. It exists because every platform that takes
+a caption upload takes SubRip, and plenty still do not take WebVTT.
+
+### Sentences
+
+A caption is broken at a line width, and a line is broken out of a sentence.
+
+```python
+vh.split_sentences("Dr. Rosling said so. It cost 3.14 euros. Released as v2.5.")
+# ['Dr. Rosling said so.', 'It cost 3.14 euros.', 'Released as v2.5.']
+```
+
+Deliberately a small rule set rather than a model: it has to give the same
+answer for a page and for its audio, run with no dependency, and be
+inspectable when it gets one wrong. Decimals, initials, ellipses and a
+bilingual abbreviation list are handled.
+
 ## 7. Face-Anchored Speaker Identity
 
 Needs the `[faces]` extra: `pip install "video-helper[faces]"`.

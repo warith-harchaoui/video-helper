@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-31
+
+### Added
+
+- **`video_helper.subtitles`: the timed-text format layer, read and written
+  in one place.** `Cue`, `parse`, `write_vtt`, `write_srt`, `write`,
+  `format_timestamp`, `from_centiseconds`, `split_sentences`, `vtt2srt`.
+
+  This package already burned subtitles into frames and already converted
+  SubRip to WebVTT, while the reading and writing of the formats themselves
+  sat in `sprezzature-audio`, which had consolidated four writers and two
+  readers of its own. That consolidation was right and every difference it
+  kept is kept here; what was wrong was the address. A caption file is what a
+  player shows over a picture, so the package that knows players owns the
+  format, and the speech packages ask it instead of each keeping a writer.
+
+  What did **not** move: counting samples while an engine concatenates audio
+  is a fact about synthesis, not about subtitles, so `Timeline` and
+  `SpeechCue` stay where the voices are.
+
+  Verified against the departing implementations before anything was rewired:
+  on the sixteen WebVTT tracks of a real site, reading, re-writing as WebVTT
+  and writing as SubRip all came out identical, and the sentence splitter
+  agreed on 288 real sentences.
+
+- **`vtt2srt`**, the direction that was missing, as `video-helper vtt2srt`
+  and `POST /vtt2srt`. Not the mirror of `srt2vtt`, and the asymmetry is
+  deliberate: that one also lifts `<font color>` tags into cue classes and
+  writes the stylesheet that binds them, which has no counterpart going the
+  other way because SubRip carries its colours inline. It exists because
+  every platform that takes a caption upload takes SubRip, and plenty still
+  do not take WebVTT: a package that could only convert *towards* WebVTT
+  could not deliver a caption file to the places films actually go.
+
+- **`write(cues, "captions.srt")`: the extension picks the format.** A caller
+  naming a file has already said what it wants, and making it repeat itself
+  in a second argument is how the two come apart.
+
+- **`split_sentences`**, as `video-helper split-sentences` and
+  `POST /split-sentences`. A caption is broken at a line width and a line is
+  broken out of a sentence, so the splitter belongs beside the writers. The
+  two copies it replaces disagreed: one broke `v2.5` into three pieces and
+  `Dr. Martin` into two, which puts a caption break mid-phrase. Decimals,
+  initials, ellipses and a bilingual abbreviation list are handled, and a
+  closing quote that ends a block is no longer a sentence of its own.
+
+### Changed
+
+- **The heavy public names are imported on first use (PEP 562), not at
+  package import.** Everything in `main` and `flow` pulls OpenCV, vidgear,
+  ffmpeg-python and numpy: about half a second and a hundred megabytes of
+  wheels. That is the right price for decoding video and the wrong one for
+  writing a caption file, and this package now holds both.
+
+  Measured: `import video_helper.subtitles` went from pulling all four to
+  pulling none, 133 ms against 575. Every name stays reachable exactly as
+  before, by attribute or by `from video_helper import …`; only the moment of
+  the import changes, and `dir()` still lists the lot.
+
+  It matters beyond this package: the subtitle layer moved here *from* a
+  speech package, so packages whose whole job is speech now import this one.
+  Making them pay for OpenCV to write a `.vtt` would have been a good reason
+  to keep a fifth writer.
+
+### Fixed
+
+- **`parse` tolerates a byte-order mark and CRLF endings.** Both arrive
+  routinely from Windows subtitle tools, and both used to land inside the
+  first cue's identifier, where they are invisible in a diff and fatal to a
+  parser.
+
+
 ### Documentation
 
 - **The three document pairs now carry the suite's spine (CODING.md 16-18).**
