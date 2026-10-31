@@ -18,7 +18,13 @@ Video Helper is a Python library that provides utility functions for processing 
 
 ## Battle-tested
 
-video-helper follows the same discipline as the rest of the suite. Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)); that exact tag is what's published on [PyPI](https://pypi.org/project/video-helper/), so what you `pip install` matches what was tested. It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. [youtube-helper](https://github.com/warith-harchaoui/youtube-helper), the suite's download layer, depends on video-helper directly for every clip it hands off for processing. This is meant to be built on, not experimented with.
+video-helper follows the same discipline as the rest of the suite.
+
+Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
+
+It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. In the other direction, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) depends on video-helper directly for every clip it hands off for processing.
+
+This is meant to be built on, not experimented with.
 
 ## Documentation
 
@@ -36,7 +42,13 @@ video-helper follows the same discipline as the rest of the suite. Every change 
 - **Temporal crop**: `extract_video_chunk`, `video_duration`.
 - **Pipeline primitives**: `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
-- **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra): audio-only diarization tells you a voice cluster exists but not which on-screen face it belongs to. This submodule answers that by detecting faces (YuNet), tracking them across frames, and scoring which tracked face's lip motion lines up with a given speaker's audio activity, a technique called active-speaker detection (ASD: catching who is actually talking on screen, not just whose voice is on the track). `FaceDetector` / `FaceRecognizer` (YuNet + SFace, OpenCV's own DNN wrappers, no HuggingFace at runtime), `track_faces` (IoU tracking), `get_engine` (a zero-weight lip-motion proxy, or the accurate Light-ASD PyTorch model), and `active_speaker_map`, the harness that ties it together: it samples a handful of short clips instead of decoding the whole recording, growing the sample only for speakers it isn't yet sure about. See the [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) for the full picture.
+- **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra). Audio-only diarization tells you a voice cluster exists, but not which on-screen face it belongs to. This submodule answers that: it detects faces (YuNet), tracks them across frames, then scores which tracked face's lip motion lines up with a given speaker's audio activity — a technique called **active-speaker detection** (ASD: catching who is actually talking on screen, not just whose voice is on the track). The pieces:
+  - `FaceDetector` / `FaceRecognizer` — YuNet + SFace, OpenCV's own DNN wrappers, no HuggingFace at runtime;
+  - `track_faces` — IoU tracking;
+  - `get_engine` — a zero-weight lip-motion proxy, or the accurate Light-ASD PyTorch model;
+  - `active_speaker_map` — the harness that ties it together: it samples a handful of short clips instead of decoding the whole recording, growing the sample only for speakers it is not yet sure about.
+
+  The [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) has the full picture.
 
 ## How it works
 
@@ -177,14 +189,9 @@ For the exhaustive catalogue of what triggers each operation (natural-language
 phrasings, commands, functions, file types), see
 [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
-The page speaks **French and English**. `GET /gui?lang=fr|en` picks one, a flag
-in the header toggles between them, and a code no catalogue carries falls back
-to the default rather than failing. The English is the source, written in the
-markup itself; the French lives in
-[`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po),
-a standard `gettext` catalogue read through `os_helper.Catalog` — the loader
-shared across the suite — so a translator works in the format every
-translation tool already speaks, on real sentences rather than on key names.
+The page speaks **French and English**. `GET /gui?lang=fr|en` picks one, a flag in the header toggles between them, and a code no catalogue carries falls back to the default rather than failing.
+
+The English is the source, written in the markup itself. The French lives in [`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po), a standard `gettext` catalogue read through `os_helper.Catalog` — the loader shared across the suite — so a translator works in the format every translation tool already speaks, on real sentences rather than on key names.
 
 A string the French catalogue has not caught up with renders as readable
 English instead of as a key. The mirror image is the risk: reword the English

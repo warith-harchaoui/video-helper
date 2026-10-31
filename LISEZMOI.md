@@ -18,7 +18,13 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 ## Éprouvé en production
 
-video-helper suit la même discipline que le reste de la suite. Chaque changement passe par l'intégration continue avant d'atteindre `main` ; l'intégration continue reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)) ; c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/). Ce que vous installez avec `pip` correspond donc à ce qui a été testé. La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. [youtube-helper](https://github.com/warith-harchaoui/youtube-helper), la couche de téléchargement de la suite, dépend directement de video-helper pour chaque extrait qu'il traite. Une bibliothèque faite pour être construite dessus, pas pour être bricolée à la légère.
+video-helper suit la même discipline que le reste de la suite.
+
+Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
+
+La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation puis la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
+
+Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 
 ## Documentation
 
@@ -36,7 +42,13 @@ video-helper suit la même discipline que le reste de la suite. Chaque changemen
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
 - **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
-- **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`) : la diarisation audio seule (segmenter un enregistrement en « qui parle quand » à partir du son) dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond. Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné ; cette technique porte un nom, la détection du locuteur actif (« active-speaker detection » ou ASD : repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste). `FaceDetector` / `FaceRecognizer` (YuNet et SFace, les enveloppes DNN natives d'OpenCV, sans HuggingFace à l'exécution), `track_faces` (suivi par recouvrement de boîtes), `get_engine` (une estimation gratuite par mouvement des lèvres ou le modèle PyTorch précis Light-ASD), `active_speaker_map`, la mécanique qui relie tout cela : elle échantillonne une poignée de courts extraits au lieu de décoder tout l'enregistrement, en élargissant l'échantillon seulement pour les locuteurs encore incertains. Voir la [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) pour le tableau complet.
+- **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`). La diarisation audio seule — segmenter un enregistrement en « qui parle quand » à partir du son — dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond. Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné. Cette technique porte un nom : la **détection du locuteur actif** (« active-speaker detection », ASD : repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste). Les pièces :
+  - `FaceDetector` / `FaceRecognizer` — YuNet avec SFace, les enveloppes DNN natives d'OpenCV, sans HuggingFace à l'exécution ;
+  - `track_faces` — suivi par recouvrement de boîtes ;
+  - `get_engine` — soit une estimation gratuite par mouvement des lèvres, soit le modèle PyTorch précis Light-ASD ;
+  - `active_speaker_map` — la mécanique qui relie tout cela : elle échantillonne une poignée de courts extraits au lieu de décoder tout l'enregistrement, en élargissant l'échantillon seulement pour les locuteurs encore incertains.
+
+  La [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) donne le tableau complet.
 
 ## Comment ça marche
 
@@ -180,16 +192,9 @@ Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
 fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
-La page parle **français et anglais**. `GET /gui?lang=fr|en` choisit la langue,
-un drapeau dans l'en-tête bascule de l'une à l'autre et un code qu'aucun
-catalogue ne porte retombe sur la langue par défaut au lieu d'échouer.
-L'anglais est la source, écrite dans le balisage lui-même ; le français vit
-dans
-[`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po),
-un catalogue `gettext` standard lu par `os_helper.Catalog` — le chargeur
-partagé par la suite — si bien qu'un traducteur travaille dans le format que
-tous les outils de traduction parlent déjà, sur de vraies phrases plutôt que
-sur des noms de clés.
+La page parle **français puis anglais**. `GET /gui?lang=fr|en` choisit la langue, un drapeau dans l'en-tête bascule de l'une à l'autre, puis un code qu'aucun catalogue ne porte retombe sur la langue par défaut au lieu d'échouer.
+
+L'anglais est la source, écrite dans le balisage lui-même. Le français vit dans [`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po), un catalogue `gettext` standard lu par `os_helper.Catalog` — le chargeur partagé par la suite — si bien qu'un traducteur travaille dans le format que tous les outils de traduction parlent déjà, sur de vraies phrases plutôt que sur des noms de clés.
 
 Une chaîne que le catalogue français n'a pas rattrapée s'affiche en anglais
 lisible plutôt qu'en clé. Le risque est l'image inverse : reformulez l'anglais
