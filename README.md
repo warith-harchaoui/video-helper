@@ -42,11 +42,17 @@ This is meant to be built on, not experimented with.
 - **Temporal crop**: `extract_video_chunk`, `video_duration`.
 - **Pipeline primitives**: `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
-- **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra). Audio-only diarization tells you a voice cluster exists, but not which on-screen face it belongs to. This submodule answers that: it detects faces (YuNet), tracks them across frames, then scores which tracked face's lip motion lines up with a given speaker's audio activity — a technique called **active-speaker detection** (ASD: catching who is actually talking on screen, not just whose voice is on the track). The pieces:
+- **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra). Audio-only diarization tells you a voice cluster exists, but not which on-screen face it belongs to.
+
+  This submodule answers that: it detects faces (YuNet), tracks them across frames, then scores which tracked face's lip motion lines up with a given speaker's audio activity. The technique has a name — **active-speaker detection** (ASD): catching who is actually talking on screen, not just whose voice is on the track.
+
+  The pieces:
   - `FaceDetector` / `FaceRecognizer` — YuNet + SFace, OpenCV's own DNN wrappers, no HuggingFace at runtime;
   - `track_faces` — IoU tracking;
   - `get_engine` — a zero-weight lip-motion proxy, or the accurate Light-ASD PyTorch model;
   - `active_speaker_map` — the harness that ties it together: it samples a handful of short clips instead of decoding the whole recording, growing the sample only for speakers it is not yet sure about.
+
+  The [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) has the full picture.
 
   The [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) has the full picture.
 

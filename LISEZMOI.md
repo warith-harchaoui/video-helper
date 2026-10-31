@@ -42,11 +42,17 @@ Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
 - **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
-- **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`). La diarisation audio seule — segmenter un enregistrement en « qui parle quand » à partir du son — dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond. Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné. Cette technique porte un nom : la **détection du locuteur actif** (« active-speaker detection », ASD : repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste). Les pièces :
+- **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`). La diarisation audio seule — segmenter un enregistrement en « qui parle quand » à partir du son — dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond.
+
+  Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné. Cette technique porte un nom : la **détection du locuteur actif** (« active-speaker detection », ASD) — repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste.
+
+  Les pièces :
   - `FaceDetector` / `FaceRecognizer` — YuNet avec SFace, les enveloppes DNN natives d'OpenCV, sans HuggingFace à l'exécution ;
   - `track_faces` — suivi par recouvrement de boîtes ;
   - `get_engine` — soit une estimation gratuite par mouvement des lèvres, soit le modèle PyTorch précis Light-ASD ;
   - `active_speaker_map` — la mécanique qui relie tout cela : elle échantillonne une poignée de courts extraits au lieu de décoder tout l'enregistrement, en élargissant l'échantillon seulement pour les locuteurs encore incertains.
+
+  La [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) donne le tableau complet.
 
   La [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) donne le tableau complet.
 
