@@ -98,12 +98,18 @@ To *transform* the extracted audio (resample, mono, trim), hand it to
 ```bash
 video-helper burn-subs --input IN --subs FILE.srt --output OUT [--force-style "…"]
 video-helper srt2vtt   --input IN.srt [--output OUT.vtt] [--css OUT.css]
+video-helper vtt2srt   --input IN.vtt [--output OUT.srt]
+video-helper split-sentences [--text "…"]       # or pipe the prose on stdin
 ```
 
 `burn-subs` renders the text into the pixels (irreversible, needed where
 players strip tracks); `--force-style` takes an ASS style override, e.g.
 `--force-style "FontSize=28,Outline=2"`. `srt2vtt` keeps the text selectable —
 prefer it for the web — and defaults both outputs to siblings of the input.
+`vtt2srt` goes the other way for the platforms that only take SubRip; a voice
+tag becomes the `Name:` prefix players render. `split-sentences` prints one
+sentence per line, keeping decimals, initials and abbreviations (`Dr. Martin`,
+`v2.5`) whole: the unit a caption line is cut from.
 
 ## Frames and optical flow
 
@@ -114,9 +120,12 @@ video-helper extract-frames --input IN --output-dir OUTDIR \
                             [--backend auto|vidgear|pyav|ffmpeg-pipe] \
                             [--width W] [--height H] [--pad-color black|'#RRGGBB']
 video-helper extract-flow   --input IN [--output OUT] [--method dis|farneback|raft] \
-                            [--dis-preset ultrafast|fast|medium] [--frame-step N] \
+                            [--dis-preset ultrafast|fast|medium] \
+                            [--raft-variant small|large] [--device cpu|mps|cuda|auto] \
+                            [--frame-step N | --frame-interval SECONDS] \
                             [--start S] [--end E] [--fps N] [--clip-flow PX] \
-                            [--output-width W --output-height H] [--no-overwrite]
+                            [--output-width W --output-height H] [--wavelet db2] \
+                            [--no-overwrite]
 ```
 
 Sampling is by stride (`--frame-step`, default 1) or by period

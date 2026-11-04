@@ -72,28 +72,31 @@ install ffmpeg`, Windows 🪟 `winget install Gyan.FFmpeg`.
 | Attach / replace audio | `video-helper mux-audio` | `mux_audio_video` |
 | Burn subtitles into frames | `video-helper burn-subs` | `burn_subtitles` |
 | SRT → WebVTT (+ CSS) | `video-helper srt2vtt` | `srt2vtt` |
+| WebVTT → SRT | `video-helper vtt2srt` | `vtt2srt` |
+| Prose → one sentence per line | `video-helper split-sentences` | `split_sentences` |
 | Frames as arrays or images | `video-helper extract-frames` | `extract_frames`, `dump_frames` |
 | Optical flow | `video-helper extract-flow` | `extract_optical_flow` |
 
 Quick examples:
 
 ```bash
-video-helper convert clip.mov clip.mp4 --height 720
-video-helper chunk talk.mp4 cut.mp4 --start 10 --end 20
-video-helper compress big.mp4 small.mp4 --target-size-mb 100
-video-helper extract-audio talk.mp4 talk.wav
-video-helper burn-subs talk.mp4 subbed.mp4 --subtitles talk.srt
+video-helper convert       --input clip.mov --output clip.mp4 --height 720
+video-helper chunk         --input talk.mp4 --output cut.mp4 --start 10 --end 20
+video-helper compress      --input big.mp4 --output small.mp4 --target-size-mb 100
+video-helper extract-audio --input talk.mp4 --output talk.wav
+video-helper burn-subs     --input talk.mp4 --subs talk.srt --output subbed.mp4
 ```
 
 ```python
 import video_helper as vh
 
-w, h, fps = vh.video_dimensions("clip.mp4")
-for frame in vh.extract_frames("clip.mp4", fps=1):  # BGR uint8 arrays
+dims = vh.video_dimensions("clip.mp4")  # dict: width, height, duration, frame_rate, has_sound
+for frame in vh.extract_frames("clip.mp4", frame_interval=1.0):  # one BGR uint8 array per second
     ...
 ```
 
-`vh` is the suite's canonical alias. `extract_frames` is a generator — it
+Every flag is named (`--input`, `--output`, …): there are no positional
+arguments. `vh` is the suite's canonical alias. `extract_frames` is a generator — it
 streams, so a long film does not land in RAM; `dump_frames` writes them to
 disk instead.
 

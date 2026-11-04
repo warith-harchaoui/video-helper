@@ -54,8 +54,6 @@ Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 
   La [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) donne le tableau complet.
 
-  La [documentation du module `faces`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) donne le tableau complet.
-
 ## Comment ça marche
 
 ![Comment video-helper fonctionne : une vidéo en entrée, des images et du mouvement en sortie, sans quitter votre machine](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/diagrams/comment-ca-marche.png)
@@ -166,9 +164,12 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Exposition multi-surface
 
-Chaque fonction publique est accessible depuis quatre surfaces, toutes
-câblées systématiquement (rien n'est réservé à la CLI ou à la
-bibliothèque) :
+Chaque opération est accessible depuis quatre surfaces : les dix-huit
+sous-commandes de la CLI répondent une à une aux dix-huit routes HTTP, dont les
+outils MCP sont l'exact reflet. Les briques de plus bas niveau restent réservées
+à la bibliothèque : `dump_frames`, `iter_frame_optical_flow`, `resize_flow`,
+`extract_unique_colors`, `hw_vcodec`, la couche de sous-titres `Cue` ainsi que
+`video_helper.faces`.
 
 | Surface | Installation | Point d'entrée |
 | --- | --- | --- |

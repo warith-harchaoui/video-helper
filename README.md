@@ -54,8 +54,6 @@ This is meant to be built on, not experimented with.
 
   The [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) has the full picture.
 
-  The [`faces` module docstring](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/faces/__init__.py) has the full picture.
-
 ## How it works
 
 ![How video-helper works: a video in, frames and motion out, without leaving your machine](https://raw.githubusercontent.com/warith-harchaoui/video-helper/main/assets/diagrams/how-it-works.png)
@@ -165,8 +163,12 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Multi-surface exposure
 
-Every public function is reachable from four surfaces, all
-systematically wired (nothing is CLI-only or library-only):
+Every operation is reachable from four surfaces: the eighteen CLI
+subcommands and the eighteen HTTP routes mirror each other one-to-one, and the
+MCP tools are those routes. The lower-level building blocks stay library-only:
+`dump_frames`, `iter_frame_optical_flow`, `resize_flow`,
+`extract_unique_colors`, `hw_vcodec`, the subtitle `Cue` layer and
+`video_helper.faces`.
 
 | Surface | Install | Entry point |
 | --- | --- | --- |

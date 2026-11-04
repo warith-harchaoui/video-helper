@@ -12,7 +12,13 @@ import video_helper as vh
 `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`,
 `burn_subtitles`, `srt2vtt`, `extract_frames`, `dump_frames`,
 `extract_unique_colors`, `extract_optical_flow`, `iter_frame_optical_flow`,
-`resize_flow`, `hw_vcodec`.
+`resize_flow`, `hw_vcodec`, and the timed-text layer: `Cue`, `parse`,
+`write`, `write_vtt`, `write_srt`, `vtt2srt`, `format_timestamp`,
+`from_centiseconds`, `split_sentences`, `ABBREVIATIONS`.
+
+The timed-text layer is stdlib plus os-helper and is imported eagerly; every
+video name is resolved on first use, so `import video_helper` to write a
+caption file never loads OpenCV.
 
 Logging and file management route through `os_helper` — the suite convention.
 
@@ -25,13 +31,14 @@ Logging and file management route through `os_helper` — the suite convention.
 
 ```bash
 pip install 'video-helper[api]'
-python -m video_helper.api          # 127.0.0.1:8000, OpenAPI docs at /docs
+uvicorn video_helper.api:app --port 8000   # OpenAPI docs at /docs
 ```
 
 One route per operation: `/validate`, `/dimensions`, `/duration`, `/convert`,
 `/compress`, `/chunk`, `/black`, `/image-loop`, `/concat`, `/overlay`,
-`/extract-audio`, `/mux-audio`, `/burn-subs`, `/srt2vtt`, `/extract-frames`,
-`/extract-flow`, plus `/health`, `/` and `/gui`.
+`/extract-audio`, `/mux-audio`, `/burn-subs`, `/srt2vtt`, `/vtt2srt`,
+`/split-sentences`, `/extract-frames`, `/extract-flow`, plus `/health`, `/`
+and `/gui`.
 
 Uploads are multipart; responses stream the produced file back, or return JSON
 for the probing routes.
@@ -63,8 +70,14 @@ See the repo's `GUI.md`.
 `video_helper.faces` is a separate module, not part of the core transforms:
 YuNet face detection and SFace recognition (through opencv-python's own DNN
 wrappers), PySceneDetect shot segmentation, and a LightASD active-speaker
-engine in PyTorch. Weights are fetched on first use from the suite's own
-mirror — `light_asd.onnx`, not the upstream `.pth`.
+engine run as a real PyTorch net (no ONNX export: its MFCC front-end does not
+survive one faithfully). Weights are fetched on first use, first from
+`AI_HELPERS_MODEL_BASE_URL` (the suite's own mirror by default), then from a
+HuggingFace-free upstream (the OpenCV Zoo for the YuNet and SFace `.onnx`
+files), and cached under `~/.cache/ai-helpers/models/` (`VIDEO_HELPER_MODEL_DIR`
+overrides). `light_asd.pth` is sha256-checked. When no source answers,
+active-speaker detection degrades to a lip-motion proxy that needs no weights,
+with a warning, rather than failing.
 
 Reach for it when the question is "which face is speaking in this shot", and
 only then: it is heavier than everything else in the package, and the core
