@@ -1216,6 +1216,9 @@ def _extract_via_ffmpeg_pipe(
     ffmpeg is. Hwaccel is honored when supported by the local build.
     HTTP headers (``http_headers``) are passed via ``-headers`` and
     placed before ``-i`` so they reach the input demuxer.
+
+    Raises ``RuntimeError`` (after the frames already delivered) when ffmpeg
+    exits non-zero, so a failed read is never mistaken for the end of the range.
     """
     start_s = start_index / frame_rate
     end_s = (end_index + 1) / frame_rate
@@ -1238,12 +1241,25 @@ def _extract_via_ffmpeg_pipe(
 
     frame_size = width * height * 3
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    delivered = 0
     try:
         while True:
             raw = proc.stdout.read(frame_size)
             if not raw or len(raw) < frame_size:
                 break
             yield np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3)).copy()
+            delivered += 1
+        # stdout closed on its own. That is the end of the range only if ffmpeg
+        # says so: an HTTP error, a fired -rw_timeout or a corrupt input close
+        # the pipe exactly the same way, and a caller must not take a truncated
+        # frame sequence for the whole one.
+        proc.wait()
+        if proc.returncode != 0:
+            err = proc.stderr.read().decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                f"ffmpeg exited with code {proc.returncode} after {delivered} frame(s) "
+                f"of {video_path!r}: {err[-800:] or '(no stderr)'}"
+            )
     finally:
         if proc.poll() is None:
             proc.terminate()

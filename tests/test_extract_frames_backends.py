@@ -433,3 +433,61 @@ def test_pil_destination_yields_rgb_images_and_rejects_batch_size(clip) -> None:
                 clip, start_instant=0.0, end_instant=0.2, destination="pil", batch_size=4
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# ffmpeg-pipe: a failing ffmpeg must not pass for the end of the range
+# ---------------------------------------------------------------------------
+
+
+def _fake_ffmpeg(monkeypatch: pytest.MonkeyPatch, script: str) -> None:
+    """Run ``python -c script`` wherever the ffmpeg-pipe backend spawns ffmpeg."""
+    import subprocess
+    import sys
+
+    import video_helper.main as main_mod
+
+    real_popen = subprocess.Popen
+
+    def fake_popen(_cmd, *args, **kwargs):
+        return real_popen([sys.executable, "-c", script], *args, **kwargs)
+
+    monkeypatch.setattr(main_mod.subprocess, "Popen", fake_popen)
+
+
+def test_ffmpeg_pipe_raises_when_ffmpeg_fails_mid_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An HTTP error or a fired -rw_timeout closes stdout like a normal end.
+
+    Before 2.9.1 the generator stopped there with a log line, so a caller got
+    a truncated frame sequence and no way to tell it from the whole range.
+    """
+    from video_helper.main import _extract_via_ffmpeg_pipe
+
+    w, h = 4, 2
+    _fake_ffmpeg(
+        monkeypatch,
+        "import sys\n"
+        f"sys.stdout.buffer.write(b'\\x00' * {w * h * 3 * 2})\n"
+        "sys.stdout.flush()\n"
+        "sys.stderr.write('Server returned 403 Forbidden')\n"
+        "sys.exit(1)\n",
+    )
+    frames = []
+    with pytest.raises(RuntimeError, match=r"code 1 after 2 frame\(s\).*403 Forbidden"):
+        for frame in _extract_via_ffmpeg_pipe(
+            "https://example.com/v.mp4", 0, 99, 1, 25.0, w, h, None
+        ):
+            frames.append(frame)
+    assert len(frames) == 2
+
+
+def test_ffmpeg_pipe_clean_end_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    from video_helper.main import _extract_via_ffmpeg_pipe
+
+    w, h = 4, 2
+    _fake_ffmpeg(
+        monkeypatch,
+        f"import sys\nsys.stdout.buffer.write(b'\\x00' * {w * h * 3 * 3})\n",
+    )
+    frames = list(_extract_via_ffmpeg_pipe("clip.mp4", 0, 2, 1, 25.0, w, h, None))
+    assert len(frames) == 3

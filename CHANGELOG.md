@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-11-04
+
+### Fixed
+
+- **The `ffmpeg-pipe` frame backend ended quietly when ffmpeg failed.** An HTTP
+  error, a fired `-rw_timeout` or a corrupt input close ffmpeg's stdout exactly
+  like the end of the requested range does, and the generator stopped there
+  with one log line: a caller got a truncated frame sequence and no way to
+  tell it from the whole one. `extract_frames(backend="ffmpeg-pipe")` (and
+  `"auto"` when it picks that backend) now raises `RuntimeError` after the
+  frames it did deliver, with ffmpeg's exit code and last stderr lines. Same
+  defect as podcast-helper 1.6.2.
+
+### Documentation
+
+- The skill's quick examples used positional arguments the CLI refuses
+  (`video-helper convert clip.mov clip.mp4`) and a `--subtitles` flag that is
+  `--subs`; its Python example unpacked `video_dimensions` (a dict) into three
+  names and passed `fps=` to `extract_frames`, which has no such parameter.
+  `vtt2srt` and `split-sentences` were missing from the skill's tables and
+  CLI reference, `/vtt2srt` and `/split-sentences` from its route list, the
+  subtitle layer from its `__all__` list. The face stack was said to fetch
+  `light_asd.onnx`; it fetches `light_asd.pth` and runs it in PyTorch.
+- README / LISEZMOI claimed every public function was reachable from all four
+  surfaces. The eighteen CLI subcommands and the eighteen HTTP routes match one
+  to one; the lower-level building blocks are library-only. A new test holds
+  the parity and the printed count.
+
 ## [2.9.0] - 2026-10-31
 
 ### Added
