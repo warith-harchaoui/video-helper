@@ -20,9 +20,9 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 video-helper suit la même discipline que le reste de la suite.
 
-Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
+Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.1`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
 
-La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation puis la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
+La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
 
 Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 
@@ -41,7 +41,7 @@ Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 - **Flux optique** : une estimation, pixel par pixel, du mouvement entre deux images (`vx`/`vy`, le déplacement horizontal et vertical de chaque pixel). `iter_frame_optical_flow` enveloppe n'importe quel itérateur de frames BGR avec un flux dense `vx`/`vy`, couleur ou `grayscale=True` (DIS/Farneback gratuits, RAFT via l'extra `[flow]`) ; `extract_optical_flow` est le raccourci fichier vidéo (visualisation `.mp4` ou `.npy` brut) ; `resize_flow` redimensionne le flux par ondelettes, en préservant les discontinuités.
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
 - **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
-- **Sous-titres** : `srt2vtt` (avec CSS compagnon), `extract_unique_colors`.
+- **Sous-titres** : `srt2vtt` (avec CSS compagnon), `vtt2srt`, `extract_unique_colors` ainsi que la couche de texte minuté : `Cue`, `parse` (lit WebVTT comme SubRip), `write` / `write_vtt` / `write_srt`, `format_timestamp`, `from_centiseconds`, `split_sentences`. Cette couche n'importe ni OpenCV ni ffmpeg-python.
 - **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`). La diarisation audio seule — segmenter un enregistrement en « qui parle quand » à partir du son — dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond.
 
   Ce sous-module répond à la question : il détecte les visages (YuNet), les suit d'une image à l'autre, puis évalue quel visage suivi a un mouvement des lèvres qui colle à l'activité audio d'un locuteur donné. Cette technique porte un nom : la **détection du locuteur actif** (« active-speaker detection », ASD) — repérer qui parle réellement à l'écran, pas seulement quelle voix est sur la piste.
@@ -78,6 +78,10 @@ pip install video-helper
 pip install "video-helper[pyav]"      # backend de frames PyAV
 pip install "video-helper[api]"       # surface HTTP FastAPI
 pip install "video-helper[faces]"     # identité de locuteur ancrée sur le visage (YuNet / SFace / Light-ASD)
+pip install "video-helper[flow]"      # flux optique RAFT + redimensionnement du flux par ondelettes
+pip install "video-helper[torch]"     # destination="torch"
+pip install "video-helper[pil]"       # destination="pil"
+pip install "video-helper[mcp]"       # outils MCP (tire [api])
 ```
 
 ### Depuis les sources (sans PyPI)
@@ -199,7 +203,7 @@ Pour le catalogue exhaustif de ce qui déclenche chaque opération
 (formulations en langage naturel, commandes, fonctions, types de
 fichiers), voir [TRIGGERS.md](https://github.com/warith-harchaoui/video-helper/blob/main/TRIGGERS.md).
 
-La page parle **français puis anglais**. `GET /gui?lang=fr|en` choisit la langue, un drapeau dans l'en-tête bascule de l'une à l'autre, puis un code qu'aucun catalogue ne porte retombe sur la langue par défaut au lieu d'échouer.
+La page parle **français et anglais**. `GET /gui?lang=fr|en` choisit la langue, un drapeau dans l'en-tête bascule de l'une à l'autre, puis un code qu'aucun catalogue ne porte retombe sur la langue par défaut au lieu d'échouer.
 
 L'anglais est la source, écrite dans le balisage lui-même. Le français vit dans [`video_helper/locales/fr/LC_MESSAGES/video_helper.po`](https://github.com/warith-harchaoui/video-helper/blob/main/video_helper/locales/fr/LC_MESSAGES/video_helper.po), un catalogue `gettext` standard lu par `os_helper.Catalog` — le chargeur partagé par la suite — si bien qu'un traducteur travaille dans le format que tous les outils de traduction parlent déjà, sur de vraies phrases plutôt que sur des noms de clés.
 
@@ -228,11 +232,25 @@ déclencheurs — `scripts/check_triggers.py` maintient la description du skill
 alignée dessus ; la suite de tests échoue si une capacité cesse d'être
 nommée.
 
+## Variables d'environnement
+
+| Variable | Défaut | Effet |
+| --- | --- | --- |
+| `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` | `127.0.0.1` / `8000` | Adresse d'écoute de `video-helper-mcp`. |
+| `VIDEO_HELPER_MAX_THREADS` | `4` | `-threads` de ffmpeg sur les encodages lourds, pour que plusieurs conversions simultanées ne saturent pas les cœurs. |
+| `VIDEO_HELPER_FFMPEG_LOCK` | `/tmp/video_helper_ffmpeg_encode.lock` | Verrou de fichier qui sérialise les encodages lourds entre processus. Tous les processus de la machine doivent utiliser le même chemin. |
+| `VIDEO_HELPER_RW_TIMEOUT` | `60` (secondes) | Durée pendant laquelle une lecture réseau de ffmpeg peut rester bloquée sur une URL avant d'abandonner ; `0` désactive la limite. |
+| `VIDEO_HELPER_MODEL_DIR` | `~/.cache/ai-helpers/models` | Cache des poids de `video_helper.faces`. |
+| `AI_HELPERS_MODEL_BASE_URL` | le miroir de la suite | Première source essayée pour les poids des visages, avant les sources amont. |
+| `NH_ASD_DEVICE` | `auto` | Matériel de Light-ASD : `cpu`, `cuda`, `mps` ou `auto` (CUDA, puis MPS, puis CPU). |
+| `NH_FACES_MAX_HEIGHT` | `720` | Les images sont réduites à cette hauteur avant la détection de visages. |
+| `PYTORCH_ENABLE_MPS_FALLBACK` | mis à `1` à l'import | Laisse les quelques opérations PyTorch sans noyau MPS tourner sur CPU ; un `0` explicite l'emporte. |
+
 ## Référence d'API
 
 | Fonction | Signature | Description |
 | --- | --- | --- |
-| `is_valid_video_file` | `(video_file: str) -> bool` | Vrai si le fichier existe, a une extension vidéo reconnue et que `ffmpeg.probe` y trouve un flux vidéo. |
+| `is_valid_video_file` | `(video_file: str) -> bool` | Vrai si le fichier existe, a une extension vidéo reconnue et que `ffmpeg.probe` y trouve un flux vidéo. Une URL HTTP(S) renvoie `True` sans être téléchargée ; une URL fautive échoue plus tard, dans ffmpeg. |
 | `video_dimensions` | `(video_file: str, http_headers: dict \| None = None) -> dict` | Retourne `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. `video_file` accepte une URL ; `http_headers` transmet les en-têtes à ffprobe pour les URL qui en ont besoin. |
 | `video_duration` | `(input_video: str) -> float` | Durée en secondes (wrapper léger sur `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Ré-encode avec fps optionnel, redimensionnement (padding noir préservant le ratio quand width et height sont fournis) et suppression de l'audio. |
@@ -249,6 +267,15 @@ nommée.
 | `burn_subtitles` | `(input_video, subtitles_file, output_video, force_style=None)` | Incruste des `.srt` / `.vtt` / `.ass` / `.ssa` dans les frames (requiert ffmpeg compilé avec libass). |
 | `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None)` | Convertit SRT → WebVTT en sortant les balises `<font color>` dans un fichier CSS compagnon. |
 | `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Ensemble des couleurs hexadécimales uniques trouvées dans les balises `<font color>` d'un SRT. |
+| `hw_vcodec` | `(software: str, hardware: str) -> str` | Renvoie `hardware` (par exemple `"hevc_videotoolbox"`) sur macOS quand `ffmpeg -encoders` le liste, sinon `software`. Une sonde en échec retombe sur `software` au lieu de lever. |
+| `vtt2srt` | `(vtt_file_path, srt_file_path=None) -> str` | Convertit WebVTT → SubRip ; une balise de voix `<v Nom>` devient un préfixe `Nom:`. Renvoie le chemin écrit (par défaut `<base>.srt` à côté de l'entrée). |
+| `Cue` | `(start, end, text, speaker=None, identifier=None)` | Un sous-titre minuté. Les retours à la ligne de `text` sont conservés : c'est là qu'un lecteur coupe les lignes. |
+| `parse` | `(text: str) -> list[Cue]` | Lit un document WebVTT ou SubRip en cues, dans l'ordre chronologique. |
+| `write` | `(cues, output_path=None, *, subtitle_format="", voices=True) -> str` | Rend les cues en WebVTT ou SubRip, l'extension de sortie choisissant le format (`subtitle_format="vtt"`/`"srt"` quand il n'y a pas de chemin), puis les écrit si un chemin est donné. |
+| `write_vtt` / `write_srt` | `(cues, *, voices=True) -> str` / `(cues) -> str` | Rend un format en chaîne. `voices=False` retire les balises `<v Nom>`, pour une piste de sous-titres traduite. |
+| `format_timestamp` | `(seconds: float, *, srt=False) -> str` | `HH:MM:SS.mmm` (WebVTT) ou `HH:MM:SS,mmm` (SubRip) ; une valeur négative est ramenée à zéro. |
+| `from_centiseconds` | `(value: int) -> float` | Horodatage whisper.cpp (unités de 10 ms) → secondes. |
+| `split_sentences` | `(text: str) -> list[str]` | Une entrée par phrase ; décimaux, initiales, points de suspension et l'ensemble bilingue `ABBREVIATIONS` restent entiers. |
 | `iter_frame_optical_flow` | `(frames: Iterator[np.ndarray], *, method="dis", dis_preset="fast", raft_variant="small", device="cpu", clip_flow=None, grayscale=False, output_width=None, output_height=None, wavelet="db2") -> Iterator[np.ndarray]` | Enveloppe n'importe quel itérateur de frames `(H, W, 3)` BGR (sortie d'`extract_frames` ou une source live comme `capture_helper.iter_camera_frames`) et réémet des tableaux `(H, W, 5)` float32 (frame + flux dense `vx`/`vy` vs la frame précédente) ou `(H, W, 3)` avec `grayscale=True` (intensité + flux). `method="dis"`/`"farneback"` sans dépendance supplémentaire ; `method="raft"` et `output_width`/`output_height` (redimensionnement par ondelettes via `resize_flow`) nécessitent l'extra `[flow]`. |
 | `extract_optical_flow` | `(input_video, output_path=None, *, method="dis", dis_preset="fast", raft_variant="small", device="cpu", clip_flow=None, start_instant=None, end_instant=None, frame_step=1, frame_interval=None, fps=None, output_width=None, output_height=None, wavelet="db2", overwrite=True) -> str` | Raccourci niveau fichier : exécute `extract_frames` → `iter_frame_optical_flow` et écrit le résultat. Le type de sortie est déduit de l'extension d'`output_path` : `.npy` (tableau brut `(T, H, W, 2)` float32) ou autre chose (par défaut `.mp4`, une vidéo de visualisation HSV). |
 | `resize_flow` | `(flow: np.ndarray, output_width: int, output_height: int, *, wavelet="db2") -> np.ndarray` | Redimensionne un champ de flux `(H, W, 2)` `vx`/`vy` via décomposition en ondelettes plutôt qu'une simple interpolation bilinéaire/bicubique, évitant d'étaler les discontinuités de mouvement lors du redimensionnement et rééchelonne correctement la *magnitude* du flux par le facteur de redimensionnement spatial. Nécessite l'extra `[flow]` (`PyWavelets`). |

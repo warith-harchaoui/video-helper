@@ -20,10 +20,11 @@ flags with checkboxes.
 
 ### 1. Recipe Canvas *(primary surface)*
 
-- Draggable node graph, left-to-right; nodes are the fourteen verbs
-  (`validate`, `dimensions`, `duration`, `convert`, `chunk`, `black`,
-  `image-loop`, `concat`, `overlay`, `extract-audio`, `mux-audio`,
-  `burn-subs`, `srt2vtt`, `extract-frames`).
+- Draggable node graph, left-to-right; nodes are the eighteen verbs the
+  CLI and the HTTP routes share (`validate`, `dimensions`, `duration`,
+  `convert`, `compress`, `chunk`, `black`, `image-loop`, `concat`,
+  `overlay`, `extract-audio`, `mux-audio`, `burn-subs`, `srt2vtt`,
+  `vtt2srt`, `split-sentences`, `extract-frames`, `extract-flow`).
 - Each node shows a **live 3-frame proxy strip of its output** (first
   frame, middle frame, last frame) updated on parameter change
   (debounced 300 ms). Waveform strip below when audio is present.
@@ -107,7 +108,7 @@ graph.
 | Milestone | What ships | Why first |
 | --- | --- | --- |
 | M0 | Recipe Canvas with 3 nodes: `validate`, `chunk`, `concat`. 3-frame proxy strip. | Prove the canvas metaphor before scaling verbs. |
-| M1 | All 14 verbs. Frame-first comparator. | Feature parity with the CLI. |
+| M1 | All 18 verbs. Frame-first comparator. | Feature parity with the CLI. |
 | M2 | Batch Drop Zone + contact sheet. | Where the GUI passes the CLI in productivity. |
 | M3 | Recipe export/import + node validation graph. | Reproducibility story for pipelines shared across a team. |
 | M4 | Frame-embedding cluster view: drop 100 clips, sample N frames per clip, embed with a CLIP-class model, see them clustered, click a cluster to hear one representative. | The "we can only do this in a GUI" moment: dataset triage for video-model training. |

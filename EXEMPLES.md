@@ -40,6 +40,9 @@ signale à l'endroit où il apparaît.
 - [6. Outils de sous-titrage](#6-outils-de-sous-titrage)
   - [SRT → VTT + CSS](#srt--vtt--css)
   - [Couleurs uniques](#couleurs-uniques)
+  - [Les cues : lire et écrire les deux formats](#les-cues--lire-et-écrire-les-deux-formats)
+  - [VTT → SRT](#vtt--srt)
+  - [Les phrases](#les-phrases)
 - [7. Identité de locuteur ancrée sur le visage](#7-identité-de-locuteur-ancrée-sur-le-visage)
 - [Ligne de commande](#ligne-de-commande)
 - [Dépannage](#dépannage)
@@ -115,7 +118,7 @@ spécifiques pour être lisible.
 ## 2. Convertir & redimensionner
 
 `video_converter` ré-encode une vidéo avec des changements optionnels de
-fréquence d'échantillonnage, de fps et de dimensions. Comportement par
+fps et de dimensions ; il peut aussi retirer la piste audio. Comportement par
 défaut sur le conteneur : les entrées de même conteneur sont copiées en
 flux ; les entrées inter-conteneurs sont transcodées en H.264 / AAC.
 
@@ -819,7 +822,7 @@ toutes les sous-commandes, `--help` sur une sous-commande liste ses options.
 video-helper --help
 video-helper extract-frames --help
 video-helper --version
-# video-helper, version 2.8.0
+# video-helper, version 2.9.1
 ```
 
 Les trois commandes en lecture seule n'écrivent que sur la sortie standard,
@@ -859,6 +862,7 @@ video-helper extract-audio --input clip.mp4 --output track.wav
 video-helper mux-audio --input title.mp4 --audio track.wav --output narrated.mp4 --shortest
 video-helper burn-subs --input clip.mp4 --subs subs.srt --output captioned.mp4
 video-helper srt2vtt   --input subs.srt --output subs.vtt --css subs.css
+video-helper vtt2srt   --input subs.vtt --output subs.srt
 ```
 
 `concat` est la seule commande dont l'option est au **pluriel**, parce qu'elle
@@ -901,6 +905,15 @@ d'autre pour la vidéo de visualisation HSV.
 video-helper extract-flow --input clip.mp4 --output flow.npy --method dis \
       --start 0 --end 1 --output-width 160 --output-height 90
 # flow.npy
+```
+
+`split-sentences` lit `--text`, ou l'entrée standard s'il est omis, puis écrit
+une phrase par ligne selon la même règle que [Les phrases](#les-phrases) :
+
+```bash
+$ echo "Dr. Smith left. He came back." | video-helper split-sentences
+Dr. Smith left.
+He came back.
 ```
 
 ## Dépannage

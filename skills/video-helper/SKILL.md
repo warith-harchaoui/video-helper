@@ -120,7 +120,11 @@ exhaustive trigger list, read `references/triggers.md`.
 - **Subtitles: burn only when they must be pixels.** `srt2vtt` keeps them as a
   selectable track, which is better for the web; `burn-subs` is for platforms
   that strip tracks.
-- **Hardware encoders are opt-in via `hw_vcodec`** — the default path is
-  deterministic software encoding, which is what reproducible output needs.
+- **Hardware encoding is opt-in, with one exception.** `compress` stays on
+  software `libx265` unless a library call passes `vcodec="hevc_videotoolbox"`
+  (the CLI's `--vcodec` offers `libx265`, `libx264`, `copy`); `hw_vcodec`
+  picks an encoder for your own calls. The
+  exception: `convert` changing only the container re-encodes on VideoToolbox
+  H.264 on macOS when ffmpeg lists it, retrying on `libx264` if that fails.
 - **After running, report the output path plus the new size or duration** —
   do not re-run to confirm.

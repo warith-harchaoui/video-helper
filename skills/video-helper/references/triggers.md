@@ -8,10 +8,11 @@ catalogue it mirrors.
 
 
 `video-helper` transforms video **files** (and reads/burns subtitle files). It
-is local-first and ffmpeg-backed. It does **not** transcribe, download, colour-
-grade, or run models on frames.
+is local-first and ffmpeg-backed. It does **not** transcribe, download or
+colour-grade, and the only models it runs on frames are its own optical flow
+(RAFT, `[flow]`) and face-anchored speaker identity (`[faces]`).
 
-## The fifteen operations → how to invoke
+## The operations → how to invoke
 
 | Intent | CLI | Library | API |
 |--------|-----|---------|-----------|
@@ -29,7 +30,13 @@ grade, or run models on frames.
 | Mux a new audio track on | `video-helper mux-audio` | `mux_audio_video` | `POST /mux-audio` |
 | Burn subtitles into frames | `video-helper burn-subs` | `burn_subtitles` | `POST /burn-subs` |
 | SRT → WebVTT (+ CSS) | `video-helper srt2vtt` | `srt2vtt` | `POST /srt2vtt` |
+| WebVTT → SRT | `video-helper vtt2srt` | `vtt2srt` | `POST /vtt2srt` |
+| Write cues as WebVTT or SRT | — | `write` / `write_vtt` / `write_srt` | — |
+| Read a WebVTT or SRT into cues | — | `parse` | — |
+| Split prose into sentences | `video-helper split-sentences` | `split_sentences` | `POST /split-sentences` |
 | Extract frames as images | `video-helper extract-frames` | `extract_frames` | `POST /extract-frames` |
+| Dense optical flow (video or `.npy`) | `video-helper extract-flow` | `extract_optical_flow` / `iter_frame_optical_flow` | `POST /extract-flow` |
+| Match a diarized voice to an on-screen face | — | `video_helper.faces.active_speaker_map` | — |
 
 Every operation is also reachable through the browser GUI at `GET /gui`.
 
@@ -45,8 +52,14 @@ Every operation is also reachable through the browser GUI at `GET /gui`.
 - **Concat**: "merge / join / stitch these clips", "combine into one".
 - **Overlay**: "watermark a logo", "add a badge in the corner".
 - **Extract-audio / mux-audio**: "rip the audio", "attach / replace the audio track".
-- **Burn-subs / srt2vtt**: "hardcode the subtitles", "SRT to WebVTT".
+- **Burn-subs / srt2vtt / vtt2srt**: "hardcode the subtitles", "SRT to
+  WebVTT", "WebVTT to SRT", "convert the captions", "YouTube wants an SRT".
+- **Subtitle authoring**: "write a caption file", "write these cues as SRT",
+  "read this VTT", "split this into sentences", "one sentence per caption".
 - **Extract-frames**: "sample frames as images", "one frame every N", "keyframes".
+- **Extract-flow**: "optical flow", "motion between frames", "flow field as .npy".
+- **Faces**: "which face is speaking", "active speaker detection", "match the
+  diarized voices to the faces on screen".
 - **Probe**: "how long is this", "what resolution / fps", "is this a valid video".
 - **Surfaces**: "run the video API server", "open the video GUI", "install
   video-helper".
@@ -54,8 +67,10 @@ Every operation is also reachable through the browser GUI at `GET /gui`.
 ## File types it accepts
 
 - **Video**: `.mp4 .mkv .mov .webm .avi .m4v .mpeg .mpg .ts .3gp .ogv .flv …`
-  (and `http(s)://` URLs for `validate` / `dimensions` / `extract-frames`).
-- **Subtitles**: `.srt .vtt .ass .ssa` (for `burn-subs` / `srt2vtt`).
+  (and `http(s)://` URLs for `validate` / `dimensions` / `extract-frames` /
+  `extract-flow`).
+- **Subtitles**: `.srt .vtt` for `srt2vtt` / `vtt2srt` / `parse`; `.srt .vtt .ass .ssa`
+  for `burn-subs`.
 - **Stills**: `.png .jpg .jpeg .webp` (for `image-loop` / `overlay`).
 
 ## When NOT to use video-helper (SKIP)
@@ -64,8 +79,8 @@ Every operation is also reachable through the browser GUI at `GET /gui`.
   `vocal-helper` / a whisper skill (video-helper burns/converts subtitle FILES).
 - Downloading a video from YouTube or a URL → use `youtube-helper`.
 - NLE / DAW timeline editing, colour grading, keyframed effects, motion graphics.
-- Deep-learning inference on frames (classify / detect / track): video-helper
-  extracts frames, it does not run models on them.
+- Deep-learning inference on frames (classify / detect / track objects):
+  video-helper extracts the frames, it does not run such models.
 - Audio-only editing with no video in play → use `audio-helper`.
 
 ## See also

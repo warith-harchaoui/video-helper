@@ -57,10 +57,11 @@ against `ffmpeg@4`.
 Where the ratings come from, in a sentence each: multi-format I/O
 leans on ffmpeg-native probing and muxing; frame extraction is a
 dispatcher over VidGear / PyAV / ffmpeg-pipe with sparse, windowed and
-streaming modes and a keyframe seek; subtitles cover libass burn-in
-plus SRT→VTT conversion with CSS; GPU decode auto-detects the platform's
-hwaccel (VideoToolbox on macOS, CUDA/NVDEC or Quick Sync on Linux/Windows)
-through PyAV / ffmpeg-pipe; and multi-destination returns numpy by
+streaming modes and a keyframe seek; subtitles cover libass burn-in,
+SRT→VTT conversion with CSS, VTT→SRT and a WebVTT / SubRip cue reader and
+writer; GPU decode is opt-in, and `hwaccel="auto"` resolves to the platform's
+decoder (VideoToolbox on macOS, CUDA/NVDEC or Quick Sync elsewhere) through
+PyAV / ffmpeg-pipe, switching itself on only for a torch destination on a GPU; and multi-destination returns numpy by
 default with torch and PIL available on request.
 
 ## When to pick what

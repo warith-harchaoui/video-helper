@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- README / LISEZMOI named `v2.8.0` as the current release, left `vtt2srt`, the
+  timed-text layer (`Cue`, `parse`, `write`, …) and `hw_vcodec` out of the API
+  reference, listed four of the eight extras, said nothing of the environment
+  variables the package reads, and described `is_valid_video_file` without its
+  URL short-circuit. All fixed; the variables now have a table.
+- TRIGGERS.md had no row for `extract-flow` or the face stack and claimed the
+  package runs no model on frames; its skill mirror had also fallen behind on
+  `vtt2srt`, `split-sentences` and cue authoring.
+- The skill said hardware encoding was always opt-in. `convert` changing only
+  the container already encodes on VideoToolbox on macOS.
+- EXAMPLES / EXEMPLES: the table of contents missed the three newest subtitle
+  sections, `video_converter` was credited with a sample-rate option it does
+  not have, the CLI section showed `2.8.0` and skipped `vtt2srt` and
+  `split-sentences`. LANDSCAPE / PAYSAGE said GPU decode was auto-detected;
+  it is opt-in. GUI.md still counted fourteen verbs.
+
 ## [2.9.1] - 2026-11-04
 
 ### Fixed

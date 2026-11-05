@@ -60,10 +60,12 @@ D'où viennent les notes, en une phrase chacune : les E/S multi-formats
 reposent sur le sondage et le multiplexage natifs ffmpeg ; l'extraction
 d'images est un répartiteur au-dessus de VidGear / PyAV / ffmpeg-pipe, avec
 des modes épars, fenêtrés et en flux ainsi qu'une recherche par image-clé ;
-les sous-titres couvrent l'incrustation libass et la conversion SRT→VTT avec
-CSS ; le décodage GPU détecte automatiquement l'accélération matérielle de
-la plateforme (VideoToolbox sur macOS, CUDA/NVDEC ou Quick Sync sur
-Linux/Windows) via PyAV / ffmpeg-pipe ; et la multi-destination renvoie du
+les sous-titres couvrent l'incrustation libass, la conversion SRT→VTT avec
+CSS, VTT→SRT ainsi qu'un lecteur et rédacteur de cues WebVTT / SubRip ; le
+décodage GPU se demande explicitement : `hwaccel="auto"` choisit le décodeur
+de la plateforme (VideoToolbox sur macOS, CUDA/NVDEC ou Quick Sync ailleurs)
+via PyAV / ffmpeg-pipe, et ne s'active de lui-même que pour une destination
+torch sur GPU ; et la multi-destination renvoie du
 numpy par défaut, avec torch et PIL disponibles sur demande.
 
 ## Quand choisir quoi

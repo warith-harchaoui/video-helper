@@ -39,6 +39,9 @@ appears.
 - [6. Subtitle Tools](#6-subtitle-tools)
   - [SRT → VTT + CSS](#srt--vtt--css)
   - [Unique Colors](#unique-colors)
+  - [Cues: reading and writing both formats](#cues-reading-and-writing-both-formats)
+  - [VTT → SRT](#vtt--srt)
+  - [Sentences](#sentences)
 - [7. Face-Anchored Speaker Identity](#7-face-anchored-speaker-identity)
 - [Command line](#command-line)
 - [Troubleshooting](#troubleshooting)
@@ -110,8 +113,8 @@ needs specific headers to be readable at all.
 
 ## 2. Convert & Resize
 
-`video_converter` re-encodes a video with optional sample-rate, fps,
-and dimension changes. Default container behaviour: same-container
+`video_converter` re-encodes a video with optional fps and dimension
+changes, and can drop the audio stream. Default container behaviour: same-container
 inputs are stream-copied; cross-container inputs are transcoded to
 H.264 / AAC.
 
@@ -776,7 +779,7 @@ any sub-command lists its options.
 video-helper --help
 video-helper extract-frames --help
 video-helper --version
-# video-helper, version 2.8.0
+# video-helper, version 2.9.1
 ```
 
 The three read-only commands print to stdout and nothing else, so they pipe:
@@ -815,6 +818,7 @@ video-helper extract-audio --input clip.mp4 --output track.wav
 video-helper mux-audio --input title.mp4 --audio track.wav --output narrated.mp4 --shortest
 video-helper burn-subs --input clip.mp4 --subs subs.srt --output captioned.mp4
 video-helper srt2vtt   --input subs.srt --output subs.vtt --css subs.css
+video-helper vtt2srt   --input subs.vtt --output subs.srt
 ```
 
 `concat` is the one command whose option is **plural**, because it takes a list.
@@ -856,6 +860,15 @@ visualization video.
 video-helper extract-flow --input clip.mp4 --output flow.npy --method dis \
       --start 0 --end 1 --output-width 160 --output-height 90
 # flow.npy
+```
+
+`split-sentences` reads `--text`, or stdin when it is omitted, and prints one
+sentence per line, the same rule as [Sentences](#sentences):
+
+```bash
+$ echo "Dr. Smith left. He came back." | video-helper split-sentences
+Dr. Smith left.
+He came back.
 ```
 
 ## Troubleshooting

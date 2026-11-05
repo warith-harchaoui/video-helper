@@ -20,7 +20,7 @@ Video Helper is a Python library that provides utility functions for processing 
 
 video-helper follows the same discipline as the rest of the suite.
 
-Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.8.0`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
+Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.1`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
 
 It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. In the other direction, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) depends on video-helper directly for every clip it hands off for processing.
 
@@ -41,7 +41,7 @@ This is meant to be built on, not experimented with.
 - **Optical flow**: a per-pixel estimate of motion between two frames (`vx`/`vy`, how far each pixel shifted sideways and vertically). `iter_frame_optical_flow` wraps any BGR frame iterator with dense `vx`/`vy`, color or `grayscale=True` (DIS/Farneback free, RAFT via the `[flow]` extra), `extract_optical_flow` is the video-file convenience wrapper (`.mp4` visualization or raw `.npy`), and `resize_flow` is a wavelet-based, discontinuity-preserving flow resize.
 - **Temporal crop**: `extract_video_chunk`, `video_duration`.
 - **Pipeline primitives**: `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
-- **Subtitles**: `srt2vtt` (with companion CSS), `extract_unique_colors`.
+- **Subtitles**: `srt2vtt` (with companion CSS), `vtt2srt`, `extract_unique_colors`, and the timed-text layer: `Cue`, `parse` (reads WebVTT or SubRip), `write` / `write_vtt` / `write_srt`, `format_timestamp`, `from_centiseconds`, `split_sentences`. That layer imports neither OpenCV nor ffmpeg-python.
 - **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra). Audio-only diarization tells you a voice cluster exists, but not which on-screen face it belongs to.
 
   This submodule answers that: it detects faces (YuNet), tracks them across frames, then scores which tracked face's lip motion lines up with a given speaker's audio activity. The technique has a name — **active-speaker detection** (ASD): catching who is actually talking on screen, not just whose voice is on the track.
@@ -78,6 +78,10 @@ pip install video-helper
 pip install "video-helper[pyav]"      # PyAV frame backend
 pip install "video-helper[api]"       # FastAPI HTTP surface
 pip install "video-helper[faces]"     # face-anchored speaker identity (YuNet / SFace / Light-ASD)
+pip install "video-helper[flow]"      # RAFT optical flow + wavelet flow resize
+pip install "video-helper[torch]"     # destination="torch"
+pip install "video-helper[pil]"       # destination="pil"
+pip install "video-helper[mcp]"       # MCP tools (pulls [api])
 ```
 
 ### From source (no PyPI)
@@ -225,11 +229,25 @@ skill**, so an agent can reach for it on your behalf. See
 `scripts/check_triggers.py` keeps the skill's description in sync with it, and
 the test suite fails if a capability stops being named.
 
+## Environment variables
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` | `127.0.0.1` / `8000` | Where `video-helper-mcp` binds. |
+| `VIDEO_HELPER_MAX_THREADS` | `4` | ffmpeg's `-threads` on the heavy encodes, so several conversions at once do not oversubscribe the cores. |
+| `VIDEO_HELPER_FFMPEG_LOCK` | `/tmp/video_helper_ffmpeg_encode.lock` | File lock that serializes heavy encodes across processes. Every process on the machine must use the same path. |
+| `VIDEO_HELPER_RW_TIMEOUT` | `60` (seconds) | How long an ffmpeg socket read may stall on a URL before giving up; `0` turns the timeout off. |
+| `VIDEO_HELPER_MODEL_DIR` | `~/.cache/ai-helpers/models` | Where `video_helper.faces` caches its weights. |
+| `AI_HELPERS_MODEL_BASE_URL` | the suite's mirror | First source tried for the face weights, before the upstreams. |
+| `NH_ASD_DEVICE` | `auto` | Light-ASD device: `cpu`, `cuda`, `mps` or `auto` (CUDA, then MPS, then CPU). |
+| `NH_FACES_MAX_HEIGHT` | `720` | Frames are downscaled to this height before face detection. |
+| `PYTORCH_ENABLE_MPS_FALLBACK` | set to `1` on import | Lets the few PyTorch ops without an MPS kernel run on CPU; an explicit `0` still wins. |
+
 ## API Reference
 
 | Function | Signature | Description |
 | --- | --- | --- |
-| `is_valid_video_file` | `(video_file: str) -> bool` | True iff the file exists, has a known video extension, and `ffmpeg.probe` finds a video stream. |
+| `is_valid_video_file` | `(video_file: str) -> bool` | True iff the file exists, has a known video extension, and `ffmpeg.probe` finds a video stream. An HTTP(S) URL returns `True` without being fetched; a bad URL fails later, in ffmpeg. |
 | `video_dimensions` | `(video_file: str, http_headers: dict \| None = None) -> dict` | Returns `{width, height, duration, frame_rate, has_sound}` via `ffmpeg.probe`. `video_file` accepts a URL; `http_headers` forwards to ffprobe for URLs that need them. |
 | `video_duration` | `(input_video: str) -> float` | Duration in seconds (thin wrapper over `video_dimensions`). |
 | `video_converter` | `(input_video, output_video=None, frame_rate=None, width=None, height=None, without_sound=False)` | Re-encode with optional fps, resize (aspect-preserving black padding when both width and height are given), and audio stripping. |
@@ -246,6 +264,15 @@ the test suite fails if a capability stops being named.
 | `burn_subtitles` | `(input_video, subtitles_file, output_video, force_style=None)` | Burn `.srt` / `.vtt` / `.ass` / `.ssa` into the video frames (requires ffmpeg built with libass). |
 | `srt2vtt` | `(srt_file_path, vtt_file_path=None, css_file_path=None)` | Convert SRT → WebVTT, lifting `<font color>` tags into a sidecar CSS file. |
 | `extract_unique_colors` | `(srt_file_path: str) -> Set[str]` | Set of unique hex colors found in `<font color>` tags of an SRT. |
+| `hw_vcodec` | `(software: str, hardware: str) -> str` | Returns `hardware` (e.g. `"hevc_videotoolbox"`) on macOS when `ffmpeg -encoders` lists it, else `software`. A failed probe falls back to `software` instead of raising. |
+| `vtt2srt` | `(vtt_file_path, srt_file_path=None) -> str` | Convert WebVTT → SubRip; a `<v Name>` voice tag becomes a `Name:` prefix. Returns the path written (default: `<stem>.srt` beside the input). |
+| `Cue` | `(start, end, text, speaker=None, identifier=None)` | One timed caption. Newlines in `text` are kept: they are where a renderer breaks lines. |
+| `parse` | `(text: str) -> list[Cue]` | Read a WebVTT or SubRip document into cues, in time order. |
+| `write` | `(cues, output_path=None, *, subtitle_format="", voices=True) -> str` | Render cues as WebVTT or SubRip, the output extension picking the format (`subtitle_format="vtt"`/`"srt"` when there is no path), and write them when a path is given. |
+| `write_vtt` / `write_srt` | `(cues, *, voices=True) -> str` / `(cues) -> str` | Render one format to a string. `voices=False` drops the `<v Name>` tags, for a translated subtitle track. |
+| `format_timestamp` | `(seconds: float, *, srt=False) -> str` | `HH:MM:SS.mmm` (WebVTT) or `HH:MM:SS,mmm` (SubRip); negative input clamps to zero. |
+| `from_centiseconds` | `(value: int) -> float` | whisper.cpp timestamp (10 ms units) → seconds. |
+| `split_sentences` | `(text: str) -> list[str]` | One entry per sentence; decimals, initials, ellipses and the bilingual `ABBREVIATIONS` set stay whole. |
 | `iter_frame_optical_flow` | `(frames: Iterator[np.ndarray], *, method="dis", dis_preset="fast", raft_variant="small", device="cpu", clip_flow=None, grayscale=False, output_width=None, output_height=None, wavelet="db2") -> Iterator[np.ndarray]` | Wraps any `(H, W, 3)` BGR frame iterator (`extract_frames` output, or a live source like `capture_helper.iter_camera_frames`) and re-yields `(H, W, 5)` float32 arrays (frame + `vx`/`vy` dense flow vs. the previous frame), or `(H, W, 3)` with `grayscale=True` (intensity + flow). `method="dis"`/`"farneback"` need no extra dep; `method="raft"` and `output_width`/`output_height` (wavelet resize via `resize_flow`) need the `[flow]` extra. |
 | `extract_optical_flow` | `(input_video, output_path=None, *, method="dis", dis_preset="fast", raft_variant="small", device="cpu", clip_flow=None, start_instant=None, end_instant=None, frame_step=1, frame_interval=None, fps=None, output_width=None, output_height=None, wavelet="db2", overwrite=True) -> str` | File-level convenience wrapper: runs `extract_frames` → `iter_frame_optical_flow` and writes the result. Output kind inferred from `output_path`'s extension: `.npy` (raw `(T, H, W, 2)` float32 flow array) or anything else (default `.mp4`, an HSV-color-wheel visualization video). |
 | `resize_flow` | `(flow: np.ndarray, output_width: int, output_height: int, *, wavelet="db2") -> np.ndarray` | Resizes a `(H, W, 2)` `vx`/`vy` flow field via wavelet decomposition instead of plain bilinear/bicubic, avoiding smearing motion discontinuities across the resize, and correctly rescales flow *magnitude* by the spatial resize factor. Needs the `[flow]` extra (`PyWavelets`). |

@@ -93,7 +93,7 @@ Releases live in [`CHANGELOG.md`](CHANGELOG.md) following the
 release is tagged `vX.Y.Z` in git and published as a GitHub release.
 
 Every sibling helper is on PyPI. Cross-helper dependency pins in
-`pyproject.toml` (e.g. `os-helper>=2.0.0,<3`) are version ranges, not
+`pyproject.toml` (e.g. `os-helper>=2.6.0,<5`) are version ranges, not
 git-tag pins.
 
 ## CI
