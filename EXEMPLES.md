@@ -682,7 +682,7 @@ de Python et change d'une exécution à l'autre.
 ### Les cues : lire et écrire les deux formats
 
 `video_helper.subtitles` est la couche du texte minuté : un lecteur, deux
-écrivains, et l'extension qui décide lequel tourne. Bibliothèque standard
+écrivains, puis l'extension qui décide lequel tourne. Bibliothèque standard
 plus `os-helper`, donc importer un écrivain de sous-titres ne coûte rien :
 les imports lourds restent dans `main`.
 
@@ -722,11 +722,11 @@ Ce n'est pas le miroir de `srt2vtt` : celui-là fait aussi remonter les
 couleurs de police en classes de cue et écrit la feuille de style, ce qui n'a
 pas d'équivalent dans ce sens puisque SubRip porte ses couleurs en ligne. Il
 existe parce que toutes les plateformes qui acceptent un dépôt de sous-titres
-acceptent le SubRip, et que beaucoup refusent encore le WebVTT.
+acceptent le SubRip alors que beaucoup refusent encore le WebVTT.
 
 ### Les phrases
 
-Un sous-titre se casse à une largeur de ligne, et une ligne se taille dans
+Un sous-titre se casse à une largeur de ligne ; une ligne se taille dans
 une phrase.
 
 ```python
@@ -907,7 +907,7 @@ video-helper extract-flow --input clip.mp4 --output flow.npy --method dis \
 # flow.npy
 ```
 
-`split-sentences` lit `--text`, ou l'entrée standard s'il est omis, puis écrit
+`split-sentences` lit `--text` (l'entrée standard s'il est omis), puis écrit
 une phrase par ligne selon la même règle que [Les phrases](#les-phrases) :
 
 ```bash

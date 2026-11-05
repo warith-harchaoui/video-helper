@@ -64,7 +64,7 @@ les sous-titres couvrent l'incrustation libass, la conversion SRT→VTT avec
 CSS, VTT→SRT ainsi qu'un lecteur et rédacteur de cues WebVTT / SubRip ; le
 décodage GPU se demande explicitement : `hwaccel="auto"` choisit le décodeur
 de la plateforme (VideoToolbox sur macOS, CUDA/NVDEC ou Quick Sync ailleurs)
-via PyAV / ffmpeg-pipe, et ne s'active de lui-même que pour une destination
+via PyAV / ffmpeg-pipe ; il ne s'active de lui-même que pour une destination
 torch sur GPU ; et la multi-destination renvoie du
 numpy par défaut, avec torch et PIL disponibles sur demande.
 
