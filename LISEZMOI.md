@@ -20,7 +20,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 video-helper suit la même discipline que le reste de la suite.
 
-Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.2`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
+Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.3`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
 
 La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
 
