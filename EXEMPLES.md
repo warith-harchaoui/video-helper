@@ -822,7 +822,7 @@ toutes les sous-commandes, `--help` sur une sous-commande liste ses options.
 video-helper --help
 video-helper extract-frames --help
 video-helper --version
-# video-helper, version 2.9.1
+# video-helper, version 2.9.2
 ```
 
 Les trois commandes en lecture seule n'écrivent que sur la sortie standard,

@@ -20,7 +20,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 video-helper suit la même discipline que le reste de la suite.
 
-Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.1`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
+Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.2`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
 
 La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
 
@@ -238,7 +238,7 @@ nommée.
 | --- | --- | --- |
 | `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` | `127.0.0.1` / `8000` | Adresse d'écoute de `video-helper-mcp`. |
 | `VIDEO_HELPER_MAX_THREADS` | `4` | `-threads` de ffmpeg sur les encodages lourds, pour que plusieurs conversions simultanées ne saturent pas les cœurs. |
-| `VIDEO_HELPER_FFMPEG_LOCK` | `/tmp/video_helper_ffmpeg_encode.lock` | Verrou de fichier qui sérialise les encodages lourds entre processus. Tous les processus de la machine doivent utiliser le même chemin. |
+| `VIDEO_HELPER_FFMPEG_LOCK` | `video_helper_ffmpeg_encode.lock` dans le dossier temporaire du système (`tempfile.gettempdir()`) | Verrou de fichier qui sérialise les encodages lourds entre processus. Tous les processus de la machine doivent utiliser le même chemin. |
 | `VIDEO_HELPER_RW_TIMEOUT` | `60` (secondes) | Durée pendant laquelle une lecture réseau de ffmpeg peut rester bloquée sur une URL avant d'abandonner ; `0` désactive la limite. |
 | `VIDEO_HELPER_MODEL_DIR` | `~/.cache/ai-helpers/models` | Cache des poids de `video_helper.faces`. |
 | `AI_HELPERS_MODEL_BASE_URL` | le miroir de la suite | Première source essayée pour les poids des visages, avant les sources amont. |

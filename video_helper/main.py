@@ -39,6 +39,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING
 
@@ -450,9 +451,11 @@ _MAX_THREADS = int(os.environ.get("VIDEO_HELPER_MAX_THREADS", "4"))
 # processes (a download-orchestrator process plus one `notes-helper build` subprocess per item),
 # so the lock has to be a real OS-level file lock, not in-memory. Overridable via
 # VIDEO_HELPER_FFMPEG_LOCK (path) — same path must be used by every process for the lock to mean
-# anything, so change it only if every caller on the machine is updated together.
-_FFMPEG_LOCK_PATH = os.environ.get(
-    "VIDEO_HELPER_FFMPEG_LOCK", "/tmp/video_helper_ffmpeg_encode.lock"
+# anything, so change it only if every caller on the machine is updated together. The default
+# sits in the OS temporary directory (``tempfile.gettempdir()``), shared by every process of
+# the same user, rather than a path written in the code.
+_FFMPEG_LOCK_PATH = os.environ.get("VIDEO_HELPER_FFMPEG_LOCK") or os.path.join(
+    tempfile.gettempdir(), "video_helper_ffmpeg_encode.lock"
 )
 
 

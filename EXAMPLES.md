@@ -779,7 +779,7 @@ any sub-command lists its options.
 video-helper --help
 video-helper extract-frames --help
 video-helper --version
-# video-helper, version 2.9.1
+# video-helper, version 2.9.2
 ```
 
 The three read-only commands print to stdout and nothing else, so they pipe:

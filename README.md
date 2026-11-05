@@ -20,7 +20,7 @@ Video Helper is a Python library that provides utility functions for processing 
 
 video-helper follows the same discipline as the rest of the suite.
 
-Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.1`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
+Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.2`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
 
 It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. In the other direction, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) depends on video-helper directly for every clip it hands off for processing.
 
@@ -235,7 +235,7 @@ the test suite fails if a capability stops being named.
 | --- | --- | --- |
 | `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` | `127.0.0.1` / `8000` | Where `video-helper-mcp` binds. |
 | `VIDEO_HELPER_MAX_THREADS` | `4` | ffmpeg's `-threads` on the heavy encodes, so several conversions at once do not oversubscribe the cores. |
-| `VIDEO_HELPER_FFMPEG_LOCK` | `/tmp/video_helper_ffmpeg_encode.lock` | File lock that serializes heavy encodes across processes. Every process on the machine must use the same path. |
+| `VIDEO_HELPER_FFMPEG_LOCK` | `video_helper_ffmpeg_encode.lock` in the OS temporary directory (`tempfile.gettempdir()`) | File lock that serializes heavy encodes across processes. Every process on the machine must use the same path. |
 | `VIDEO_HELPER_RW_TIMEOUT` | `60` (seconds) | How long an ffmpeg socket read may stall on a URL before giving up; `0` turns the timeout off. |
 | `VIDEO_HELPER_MODEL_DIR` | `~/.cache/ai-helpers/models` | Where `video_helper.faces` caches its weights. |
 | `AI_HELPERS_MODEL_BASE_URL` | the suite's mirror | First source tried for the face weights, before the upstreams. |

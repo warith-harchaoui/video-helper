@@ -37,7 +37,7 @@ def test_is_valid_video_file_trusts_any_http_or_https_url() -> None:
 
 def test_is_valid_video_file_rejects_missing_local_file() -> None:
     """Local-file negative path still works exactly as before."""
-    assert is_valid_video_file("/tmp/definitely_not_a_real_file_xyz.mp4") is False
+    assert is_valid_video_file("/path/to/definitely_not_a_real_file_xyz.mp4") is False
 
 
 # ---------------------------------------------------------------------------
@@ -64,4 +64,4 @@ def test_video_dimensions_local_file_no_headers_required() -> None:
     # confirm the call path fails; the concrete exception type is intentionally
     # broad here (it is pinned in a dedicated test elsewhere), hence the noqa.
     with pytest.raises(Exception):  # noqa: B017 — type is asserted in a focused test
-        video_dimensions("/tmp/nonexistent_video_xyz.mp4")
+        video_dimensions("/path/to/nonexistent_video_xyz.mp4")

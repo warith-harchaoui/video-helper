@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.2] - 2026-11-05
+
+### Fixed
+
+- **The ffmpeg encode lock no longer lives at a path written in the code.**
+  Without `VIDEO_HELPER_FFMPEG_LOCK`, the lock file was the literal
+  `/tmp/video_helper_ffmpeg_encode.lock`. It is now
+  `video_helper_ffmpeg_encode.lock` in the directory the OS names for
+  temporary files (`tempfile.gettempdir()`), shared by every process of the
+  same user; an empty variable falls back to that default too.
+
+### Tests
+
+- `tests/test_no_personal_paths.py` fails on any tracked path that names a
+  machine or an account, and on any absolute path hard-coded in the code. The
+  tests' own fictitious paths now read `/path/to/...`.
+
 ### Documentation
 
 - README / LISEZMOI named `v2.8.0` as the current release, left `vtt2srt`, the

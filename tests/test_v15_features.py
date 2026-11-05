@@ -213,7 +213,7 @@ def test_extract_frames_rejects_invalid_output_options_e2e() -> None:
 def test_network_sources_are_recognised() -> None:
     assert _is_network_source("https://example.com/a.mp4")
     assert _is_network_source("HTTP://EXAMPLE.COM/a.mp4")
-    assert not _is_network_source("/tmp/local.mp4")
+    assert not _is_network_source("/path/to/local.mp4")
     assert not _is_network_source("relative/clip.mkv")
 
 
