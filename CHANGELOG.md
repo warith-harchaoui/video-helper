@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`video-helper-mcp --help` started the server instead of answering.** The entry
+  point read its bind from `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` and ignored its
+  arguments, so `--help` (or any flag) launched uvicorn and never returned. It
+  is now a click command: `--help` prints the options and exits, `--host` /
+  `--port` set the bind, and with no flag the same environment variables and
+  the same `127.0.0.1:8000` default apply as before. A test runs every console
+  script with `--help` under a timeout.
+- **`TRIGGERS.md` and the skill's `references/triggers.md` had drifted
+  apart.** They are one catalogue again, identical at both paths, and
+  `scripts/check_triggers.py` (run by the test suite) fails when they differ.
+  The catalogue no longer claims every operation is in the
+  `/gui` bench (`vtt2srt` and `split-sentences` are not) and names
+  `video-helper-mcp` with its extras.
+
 ## [2.9.2] - 2026-11-05
 
 ### Fixed

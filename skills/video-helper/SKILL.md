@@ -27,8 +27,8 @@ metadata:
 `video-helper` transforms video **files** and reads or burns subtitle files.
 It is local-first and ffmpeg-backed: nothing is uploaded, there is no
 telemetry, no account. It does **not** transcribe, download, or colour-grade.
-The same operations are reachable five ways (library, CLI, HTTP API, MCP,
-browser GUI).
+Most operations are reachable five ways (library, CLI, HTTP API, MCP,
+browser GUI); `references/triggers.md` names the ones a surface lacks.
 
 ## Before anything: verify it is installed
 

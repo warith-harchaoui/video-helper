@@ -1,11 +1,12 @@
-# video-helper skill — exhaustive trigger catalogue
+# video-helper — trigger catalogue
 
-Auditable superset of the phrasings that should fire this skill. The
-`description:` in `SKILL.md` is what a host model actually sees and is capped at
-1024 characters; this file carries the full list. Keep the two in sync — and
-keep this file in sync with the repo-root `TRIGGERS.md`, the user-facing
-catalogue it mirrors.
-
+The exhaustive catalogue of what `video-helper` can do and the natural-language
+phrasings, commands, functions and file types that should invoke it. It exists
+twice, identical: `TRIGGERS.md` at the repo root for people,
+`skills/video-helper/references/triggers.md` for agents;
+`scripts/check_triggers.py` fails when the two drift apart. The `description:`
+in the skill's `SKILL.md` is what a host model actually sees and is capped at
+1024 characters; this file carries the full list.
 
 `video-helper` transforms video **files** (and reads/burns subtitle files). It
 is local-first and ffmpeg-backed. It does **not** transcribe, download or
@@ -15,7 +16,7 @@ colour-grade, and the only models it runs on frames are its own optical flow
 ## The operations → how to invoke
 
 | Intent | CLI | Library | API |
-|--------|-----|---------|-----------|
+|--------|-----|---------|-----|
 | Validate a video (ext + ffprobe) | `video-helper validate` | `is_valid_video_file` | `POST /validate` |
 | Probe dimensions / duration / fps | `video-helper dimensions` | `video_dimensions` | `POST /dimensions` |
 | Duration in seconds | `video-helper duration` | `video_duration` | `POST /duration` |
@@ -38,7 +39,12 @@ colour-grade, and the only models it runs on frames are its own optical flow
 | Dense optical flow (video or `.npy`) | `video-helper extract-flow` | `extract_optical_flow` / `iter_frame_optical_flow` | `POST /extract-flow` |
 | Match a diarized voice to an on-screen face | — | `video_helper.faces.active_speaker_map` | — |
 
-Every operation is also reachable through the browser GUI at `GET /gui`.
+Every operation above with an HTTP route, except `vtt2srt` and
+`split-sentences`, is also reachable through the browser GUI at `GET /gui`. The
+HTTP API and the GUI need the `[api]` extra; `video-helper-mcp` (the `[mcp]`
+extra) serves the same app with the MCP endpoint at `/mcp`, bound to `--host` /
+`--port` or `VIDEO_HELPER_HOST` / `VIDEO_HELPER_PORT` (default
+`127.0.0.1:8000`).
 
 ## Natural-language phrasings that should fire
 
@@ -61,8 +67,8 @@ Every operation is also reachable through the browser GUI at `GET /gui`.
 - **Faces**: "which face is speaking", "active speaker detection", "match the
   diarized voices to the faces on screen".
 - **Probe**: "how long is this", "what resolution / fps", "is this a valid video".
-- **Surfaces**: "run the video API server", "open the video GUI", "install
-  video-helper".
+- **Surfaces**: "run the video API server", "expose video-helper over MCP",
+  "open the video GUI", "install video-helper".
 
 ## File types it accepts
 

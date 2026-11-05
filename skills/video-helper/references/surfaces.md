@@ -50,6 +50,10 @@ pip install 'video-helper[mcp]'
 video-helper-mcp                    # same app, MCP mounted at /mcp
 ```
 
+`video-helper-mcp` binds `--host` / `--port`, read from `VIDEO_HELPER_HOST`
+(default `127.0.0.1`) and `VIDEO_HELPER_PORT` (default `8000`) when the flags
+are absent. `video-helper-mcp --help` prints the options and exits.
+
 `video_helper.mcp` takes the FastAPI app from `video_helper.api` and mounts
 `FastApiMCP` on it. Every MCP tool *is* an HTTP route, so the two surfaces
 cannot drift and one process serves both doors.
