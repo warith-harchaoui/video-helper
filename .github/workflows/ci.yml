@@ -45,11 +45,14 @@ jobs:
           # The tag is pinned, so the toolchain under the gate only moves when a
           # human moves it; re-pin from github.com/BtbN/FFmpeg-Builds/releases
           # (tag and build name must move together: they name the same commit).
+          # Pin a month-end build only: BtbN prunes its daily builds after about
+          # two weeks and keeps the last one of each month (the 2026-10-26 pin
+          # vanished on 2026-11-12 and turned seven workflows red at once).
           # The stall detector is the part that matters: --speed-time abandons a
           # transfer that has gone quiet instead of sitting on it until the job
           # timeout, which is precisely how apt failed.
-          tag=autobuild-2026-10-26-14-25
-          build=ffmpeg-n8.1.3-24-g92611900bb-linux64-gpl-shared-8.1
+          tag=autobuild-2026-09-30-13-08
+          build=ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-shared-8.1
           mkdir -p "$HOME/ffmpeg"
           curl -fsSL --retry 5 --retry-all-errors \
                --speed-limit 100000 --speed-time 30 --max-time 300 \
