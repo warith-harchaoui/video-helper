@@ -2,7 +2,7 @@
 
 [🇫🇷](https://github.com/warith-harchaoui/video-helper/blob/main/LISEZMOI.md) · [🇬🇧](https://github.com/warith-harchaoui/video-helper/blob/main/README.md)
 
-[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
+[![CI](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/video-helper/actions/workflows/ci.yml) [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/warith-harchaoui/video-helper/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](#) [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
 
 `Video Helper` belongs to a collection of libraries called `AI Helpers` developed for building Artificial Intelligence.
 
@@ -20,7 +20,7 @@ Video Helper is a Python library that provides utility functions for processing 
 
 video-helper follows the same discipline as the rest of the suite.
 
-Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.3`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
+Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.4`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
 
 It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. In the other direction, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) depends on video-helper directly for every clip it hands off for processing.
 
@@ -60,7 +60,7 @@ This is meant to be built on, not experimented with.
 
 ## Installation
 
-**Prerequisites:** **Python 3.10–3.13** and **git**, **ffmpeg**, cross-platform:
+**Prerequisites:** **Python 3.10 or later** and **git**, **ffmpeg**, cross-platform:
 
 - 🍎 **macOS** ([Homebrew](https://brew.sh)): `brew install python git ffmpeg`
 - 🐧 **Ubuntu/Debian**: `sudo apt update && sudo apt install -y python3 python3-pip git ffmpeg`
