@@ -47,6 +47,7 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 from __future__ import annotations
 
 import io
+import json
 import shutil
 import tempfile
 import zipfile
@@ -84,6 +85,7 @@ from . import (
     is_valid_video_file,
     mux_audio_video,
     overlay_image,
+    shrink_video,
     split_sentences,
     srt2vtt,
     video_converter,
@@ -468,6 +470,58 @@ def compress(
         )
     background.add_task(_cleanup, tmp)
     return FileResponse(str(dst), filename=dst.name, media_type="application/octet-stream")
+
+
+@app.post("/shrink", tags=["actions"], response_model=None)
+def shrink(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    vcodec: str = Form("auto"),
+    min_vmaf: float = Form(95.0),
+    min_vmaf_p1: float = Form(90.0),
+    max_ratio: float = Form(0.85),
+    quality: int | None = Form(None),
+    vmaf_windows: int = Form(4),
+    vmaf_window_seconds: float = Form(8.0),
+    threads: int = Form(1),
+) -> FileResponse | JSONResponse:
+    """Re-encode the upload to HEVC only if lighter and faithful (VMAF-gated).
+
+    Answers with the HEVC file when it passed every gate, and with the JSON
+    report alone when the original is kept (``decision: "kept"`` and a
+    ``reason``). Either way the report rides in the ``X-Shrink-Report`` header.
+    """
+    if vcodec not in ("auto", "hevc_videotoolbox", "libx265"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"vcodec must be 'auto', 'hevc_videotoolbox', or 'libx265', got {vcodec!r}",
+        )
+    tmp = _new_tmpdir()
+    with _cleanup_on_error(tmp):
+        src = _spool(file, tmp)
+        dst = tmp / "shrunk.mp4"
+        report = shrink_video(
+            input_video=str(src),
+            output_video=str(dst),
+            vcodec=vcodec,
+            min_vmaf=min_vmaf,
+            min_vmaf_p1=min_vmaf_p1,
+            max_ratio=max_ratio,
+            quality=quality,
+            vmaf_windows=vmaf_windows,
+            vmaf_window_seconds=vmaf_window_seconds,
+            threads=threads,
+            overwrite=True,
+        )
+    # The server's temp path means nothing to the client.
+    report = {k: v for k, v in report.items() if k != "output"}
+    header = {"X-Shrink-Report": json.dumps(report)}
+    background.add_task(_cleanup, tmp)
+    if report["decision"] != "shrunk":
+        return JSONResponse(report, headers=header)
+    return FileResponse(
+        str(dst), filename=dst.name, media_type="application/octet-stream", headers=header
+    )
 
 
 @app.post("/chunk", tags=["actions"])

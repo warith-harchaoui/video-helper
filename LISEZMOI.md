@@ -20,7 +20,7 @@ Video Helper est une bibliothèque Python qui fournit des fonctions utilitaires 
 
 video-helper suit la même discipline que le reste de la suite.
 
-Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.9.4`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
+Chaque changement passe par l'intégration continue avant d'atteindre `main` ; celle-ci reste au vert, jamais rouge sur `main`. Chaque publication porte une version sémantique (actuellement [`v2.10.0`](https://github.com/warith-harchaoui/video-helper/releases)), puis c'est exactement cette version qui part sur [PyPI](https://pypi.org/project/video-helper/) — ce que vous installez avec `pip` correspond donc à ce qui a été testé.
 
 La bibliothèque s'appuie sur [os-helper](https://github.com/warith-harchaoui/os-helper), le socle commun de la suite pour la journalisation et la gestion de fichiers. Dans l'autre sens, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) dépend directement de video-helper pour chaque extrait qu'il traite.
 
@@ -40,7 +40,7 @@ Une bibliothèque faite pour être construite dessus, pas pour être essayée.
 - **Accès aux frames** : `extract_frames` (générateur avec plage temps/index, stabilisation, échantillonnage) et `dump_frames` (liste → vidéo).
 - **Flux optique** : une estimation, pixel par pixel, du mouvement entre deux images (`vx`/`vy`, le déplacement horizontal et vertical de chaque pixel). `iter_frame_optical_flow` enveloppe n'importe quel itérateur de frames BGR avec un flux dense `vx`/`vy`, couleur ou `grayscale=True` (DIS/Farneback gratuits, RAFT via l'extra `[flow]`) ; `extract_optical_flow` est le raccourci fichier vidéo (visualisation `.mp4` ou `.npy` brut) ; `resize_flow` redimensionne le flux par ondelettes, en préservant les discontinuités.
 - **Coupe temporelle** : `extract_video_chunk`, `video_duration`.
-- **Primitives de pipeline** : `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Primitives de pipeline** : `black_video`, `compress_video`, `shrink_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Sous-titres** : `srt2vtt` (avec CSS compagnon), `vtt2srt`, `extract_unique_colors` ainsi que la couche de texte minuté : `Cue`, `parse` (lit WebVTT comme SubRip), `write` / `write_vtt` / `write_srt`, `format_timestamp`, `from_centiseconds`, `split_sentences`. Cette couche n'importe ni OpenCV ni ffmpeg-python.
 - **Identité de locuteur ancrée sur le visage** (`video_helper.faces`, nécessite l'extra `[faces]`). La diarisation audio seule — segmenter un enregistrement en « qui parle quand » à partir du son — dit qu'une grappe de voix existe, mais pas à quel visage à l'écran elle correspond.
 
@@ -168,8 +168,8 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Exposition multi-surface
 
-Chaque opération est accessible depuis quatre surfaces : les dix-huit
-sous-commandes de la CLI répondent une à une aux dix-huit routes HTTP, dont les
+Chaque opération est accessible depuis quatre surfaces : les dix-neuf
+sous-commandes de la CLI répondent une à une aux dix-neuf routes HTTP, dont les
 outils MCP sont l'exact reflet. Les briques de plus bas niveau restent réservées
 à la bibliothèque : `dump_frames`, `iter_frame_optical_flow`, `resize_flow`,
 `extract_unique_colors`, `hw_vcodec`, la couche de sous-titres `Cue` ainsi que
@@ -259,6 +259,7 @@ nommée.
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video, *, copy=False)` | Coupe temporelle de `sample_start` à `sample_end` (secondes). `copy=True` copie le flux au lieu de ré-encoder : rapide et sans perte, mais l'exactitude à la frame près exige que chaque frame de l'entrée soit déjà une image clé. |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Génère une vidéo noire silencieuse. Les dimensions impaires sont arrondies au pair inférieur. |
 | `compress_video` | `(input_video, output_video=None, *, target_size_mb=97.0, audio_bitrate="128k", vcodec="libx265", min_video_bitrate_kbps=200, overwrite=True) -> str` | Encodage ffmpeg en deux passes qui résout le bitrate vidéo nécessaire pour atteindre `target_size_mb` étant donné la durée de la source, puis encode à ce bitrate. Par défaut HEVC (`libx265`) tagué `hvc1` (le tag `hev1` par défaut de ffmpeg n'est pas reconnu par QuickTime/les lecteurs Apple) avec `+faststart`. Conçu pour "le fichier compressé intégré dans un lecteur vidéo web", pas pour un master d'archive. Passez `vcodec="hevc_videotoolbox"` sur macOS pour un gain de vitesse important (HEVC matériel en une passe) au prix d'un léger coût qualité/bit ou `vcodec="copy"` pour ne pas ré-encoder et simplement remuxer (plus `+faststart`) quand la source est déjà assez petite. |
+| `shrink_video` | `(input_video, output_video=None, *, vcodec="auto", min_vmaf=95.0, min_vmaf_p1=90.0, max_ratio=0.85, quality=None, vmaf_windows=4, vmaf_window_seconds=8.0, threads=1, overwrite=True) -> dict` | Le contrat inverse de `compress_video` : la qualité est fixée, pas la taille. Ré-encode en HEVC (`hvc1`, `+faststart`) et n'écrit la sortie que si elle pèse au plus `max_ratio` de l'original, obtient un VMAF ≥ `min_vmaf` (moyenne) et ≥ `min_vmaf_p1` (image du 1er centile) face à lui, et garde la durée et les pistes audio. Le réglage de qualité s'adapte à chaque fichier. `vcodec="auto"` prend `hevc_videotoolbox` sur macOS (rapide, ~0,1 cœur), sinon `libx265`. Renvoie un rapport : `decision` vaut `"shrunk"` ou `"kept"` (avec une `reason` : déjà en HEVC, gain trop faible, fidélité insuffisante…). Demande un ffmpeg avec `libvmaf` ; `vmaf_score` et `has_libvmaf` sont exportées aussi. |
 | `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Boucle une image fixe en vidéo silencieuse ; letterboxing optionnel. |
 | `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatène des clips bout-à-bout via le demuxer concat de ffmpeg. |
 | `overlay_image` | `(input_video, image, output_video, x="0", y="0", scale_width=None)` | Superpose un PNG/JPG (alpha supporté) ; `x` / `y` acceptent des expressions ffmpeg pour un mouvement temporel. |

@@ -20,7 +20,7 @@ Video Helper is a Python library that provides utility functions for processing 
 
 video-helper follows the same discipline as the rest of the suite.
 
-Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.9.4`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
+Every change runs through continuous integration before it reaches `main`; CI stays green, never red on `main`. Each release is tagged with semantic versioning (currently [`v2.10.0`](https://github.com/warith-harchaoui/video-helper/releases)), and that exact tag is what gets published on [PyPI](https://pypi.org/project/video-helper/) — so what you `pip install` matches what was tested.
 
 It builds on [os-helper](https://github.com/warith-harchaoui/os-helper), the suite's shared foundation for logging and file handling. In the other direction, [youtube-helper](https://github.com/warith-harchaoui/youtube-helper) depends on video-helper directly for every clip it hands off for processing.
 
@@ -40,7 +40,7 @@ This is meant to be built on, not experimented with.
 - **Frame access**: `extract_frames` (generator with time/index range, stabilization, sampling) and `dump_frames` (list → video).
 - **Optical flow**: a per-pixel estimate of motion between two frames (`vx`/`vy`, how far each pixel shifted sideways and vertically). `iter_frame_optical_flow` wraps any BGR frame iterator with dense `vx`/`vy`, color or `grayscale=True` (DIS/Farneback free, RAFT via the `[flow]` extra), `extract_optical_flow` is the video-file convenience wrapper (`.mp4` visualization or raw `.npy`), and `resize_flow` is a wavelet-based, discontinuity-preserving flow resize.
 - **Temporal crop**: `extract_video_chunk`, `video_duration`.
-- **Pipeline primitives**: `black_video`, `compress_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
+- **Pipeline primitives**: `black_video`, `compress_video`, `shrink_video`, `image_loop_to_video`, `concat_videos`, `overlay_image`, `extract_audio_track`, `mux_audio_video`, `burn_subtitles`.
 - **Subtitles**: `srt2vtt` (with companion CSS), `vtt2srt`, `extract_unique_colors`, and the timed-text layer: `Cue`, `parse` (reads WebVTT or SubRip), `write` / `write_vtt` / `write_srt`, `format_timestamp`, `from_centiseconds`, `split_sentences`. That layer imports neither OpenCV nor ffmpeg-python.
 - **Face-anchored speaker identity** (`video_helper.faces`, needs the `[faces]` extra). Audio-only diarization tells you a voice cluster exists, but not which on-screen face it belongs to.
 
@@ -167,8 +167,8 @@ vh.srt2vtt(srt_file, vtt_file, css_file)
 
 ## Multi-surface exposure
 
-Every operation is reachable from four surfaces: the eighteen CLI
-subcommands and the eighteen HTTP routes mirror each other one-to-one, and the
+Every operation is reachable from four surfaces: the nineteen CLI
+subcommands and the nineteen HTTP routes mirror each other one-to-one, and the
 MCP tools are those routes. The lower-level building blocks stay library-only:
 `dump_frames`, `iter_frame_optical_flow`, `resize_flow`,
 `extract_unique_colors`, `hw_vcodec`, the subtitle `Cue` layer and
@@ -256,6 +256,7 @@ the test suite fails if a capability stops being named.
 | `extract_video_chunk` | `(input_video, sample_start, sample_end, output_video, *, copy=False)` | Temporal crop from `sample_start` to `sample_end` (seconds). `copy=True` stream-copies instead of re-encoding: fast and lossless, but only frame-accurate when every frame of the input is a keyframe. |
 | `black_video` | `(duration, width, height, output_video, frame_rate=30)` | Generate a silent solid-black video. Odd dimensions are rounded down. |
 | `compress_video` | `(input_video, output_video=None, *, target_size_mb=97.0, audio_bitrate="128k", vcodec="libx265", min_video_bitrate_kbps=200, overwrite=True) -> str` | Two-pass ffmpeg encode that solves for the video bitrate needed to hit `target_size_mb` given the source duration, then encodes at that bitrate. Defaults to HEVC (`libx265`) tagged `hvc1` (ffmpeg's default `hev1` tag is not recognized by QuickTime/Apple players) with `+faststart`. Built for "the compressed file that gets embedded in a web video player", not an archival master. Pass `vcodec="hevc_videotoolbox"` on macOS for a large speed win (single-pass hardware HEVC) at a small quality-per-bit cost, or `vcodec="copy"` to skip re-encoding and just remux (plus `+faststart`) when the source is already small enough. |
+| `shrink_video` | `(input_video, output_video=None, *, vcodec="auto", min_vmaf=95.0, min_vmaf_p1=90.0, max_ratio=0.85, quality=None, vmaf_windows=4, vmaf_window_seconds=8.0, threads=1, overwrite=True) -> dict` | The opposite contract of `compress_video`: it fixes the quality, not the size. Re-encodes to HEVC (`hvc1`, `+faststart`) and writes the output only when it is at most `max_ratio` of the original's size, scores VMAF ≥ `min_vmaf` (mean) and ≥ `min_vmaf_p1` (1st-percentile frame) against it, and keeps the duration and audio tracks. The quality knob adapts per file. `vcodec="auto"` picks `hevc_videotoolbox` on macOS (fast, ~0.1 core) else `libx265`. Returns a report: `decision` is `"shrunk"` or `"kept"` (with a `reason`: already HEVC, gain too small, fidelity below threshold…). Needs an ffmpeg with `libvmaf`; `vmaf_score` and `has_libvmaf` are exported too. |
 | `image_loop_to_video` | `(image, duration, output_video, frame_rate=30, width=None, height=None)` | Loop a still image into a silent video; optional letterboxing. |
 | `concat_videos` | `(input_videos, output_video, reencode=True, frame_rate=None)` | Concatenate clips end-to-end via the ffmpeg concat demuxer. |
 | `overlay_image` | `(input_video, image, output_video, x="0", y="0", scale_width=None)` | Overlay a PNG/JPG (alpha supported); `x` / `y` accept ffmpeg expressions for time-varying motion. |

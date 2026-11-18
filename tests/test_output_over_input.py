@@ -94,6 +94,7 @@ def test_no_writer_destroys_a_file_it_was_reading(tmp_path: Path) -> None:
             [str(second), str(first)], str(first)
         ),
         "compress_video": lambda: vh.compress_video(str(first), str(first), target_size_mb=0.02),
+        "shrink_video": lambda: vh.shrink_video(str(first), str(first)),
         "extract_audio_track": lambda: vh.extract_audio_track(str(first), str(first)),
         "mux_audio_video": lambda: vh.mux_audio_video(str(first), str(second), str(first)),
         "overlay_image": lambda: vh.overlay_image(str(first), str(second), str(first)),

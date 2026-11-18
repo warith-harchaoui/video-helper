@@ -163,7 +163,7 @@ def test_no_user_visible_text_is_hard_coded_in_the_template() -> None:
     The regex skips any run containing a brace, which is exactly what a
     translated site looks like now — so what it finds is text that bypassed
     the catalogue. The exceptions are names and machine tokens: `width`,
-    `height`, `method` and `vcodec` each name the form field the request
+    `height`, `method`, `vcodec` and `threads` each name the form field the request
     actually carries, so the wire's spelling is what makes an input checkable
     against the API docs, and codec values are identifiers rather than words.
     """
@@ -175,8 +175,11 @@ def test_no_user_visible_text_is_hard_coded_in_the_template() -> None:
         "height",
         "method",
         "vcodec",
+        "threads",
         "libx265 (HEVC)",
         "libx264",
+        "libx265",
+        "auto",
     }
     literals = {
         text.strip()

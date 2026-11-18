@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-18
+
+### Added
+
+- **`shrink_video`: smaller at constant quality, or nothing.** Where
+  `compress_video` fixes the size, this fixes the quality: it re-encodes to
+  HEVC (`hvc1`, `+faststart`) and writes the output only if it is at most
+  `max_ratio` (0.85) of the original, scores VMAF ≥ 95 on average and ≥ 90 on
+  the worst 1 % of frames against it, and keeps the duration and the audio
+  tracks. The encoder's quality setting adapts per file (one try smaller after
+  a pass, one step better after a fail). Light audio is copied, heavy audio
+  re-encoded at 96 kbit/s per channel. `vcodec="auto"` takes VideoToolbox on
+  macOS, else `libx265`. It returns a report (`"shrunk"` or `"kept"` with a
+  `reason`) rather than raising when the gain is not there. Ported from a
+  media catalogue where it reclaimed 161.6 GiB over 964 videos.
+- **`vmaf_score` and `has_libvmaf`.** VMAF over a few windows spread across the
+  file, frames paired by rank: pairing by timestamp slipped one frame after
+  a single irregular source timestamp and scored a sound encode near 3.
+- **`threads=1` by default** for the VMAF pass, decoding and x265, so a shared
+  machine keeps its other cores.
+- **`shrink` on every surface**: `video-helper shrink` (prints the report as
+  JSON), `POST /shrink` (the video with an `X-Shrink-Report` header, or the
+  JSON report alone when the original is kept), its MCP tool, and the `/gui`
+  bench. Nineteen operations per surface.
+
 ## [2.9.4] - 2026-11-15
 
 ### Changed

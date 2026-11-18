@@ -36,6 +36,7 @@ appears.
   - [Extract / Mux Audio](#extract--mux-audio)
   - [Burn Subtitles](#burn-subtitles)
   - [Compress to a Target Size](#compress-to-a-target-size)
+  - [Shrink at Constant Quality](#shrink-at-constant-quality)
 - [6. Subtitle Tools](#6-subtitle-tools)
   - [SRT → VTT + CSS](#srt--vtt--css)
   - [Unique Colors](#unique-colors)
@@ -618,6 +619,30 @@ compress_video: target 0.3 MB over 12 sec would need 76 kbps for video —
 below the 200 kbps floor. Using the floor instead; the output will exceed 0.3 MB.
 ```
 
+### Shrink at Constant Quality
+
+`shrink_video` answers the other question: not "fit in N MB" but "smaller,
+without visible loss, or not at all". It re-encodes to HEVC and writes the
+output only if the file is at most `max_ratio` (0.85) of the original, VMAF
+against the original stays ≥ 95 on average and ≥ 90 on the worst 1 % of
+frames, and the duration and audio tracks are unchanged.
+
+```python
+# A 3 s 640x360 H.264 clip encoded at CRF 4 (over-encoded on purpose).
+report = vh.shrink_video("over.mp4", "over-hevc.mp4", vcodec="libx265")
+print(report["decision"], report["ratio"], report["vmaf"], report["vmaf_p1"])
+# shrunk 0.346 96.77 94.52
+
+report = vh.shrink_video("over-hevc.mp4", "again.mp4")
+print(report["decision"], report["reason"])
+# kept already hevc
+```
+
+`vcodec="auto"` uses VideoToolbox on macOS: about 7× realtime on a tenth of a
+core, but it only beats H.264 on over-encoded sources, so `"kept"` with
+`reason="gain too small"` is a normal answer on a well-compressed file.
+`threads=1` (the default) keeps the VMAF check on one core.
+
 ## 6. Subtitle Tools
 
 ### SRT → VTT + CSS
@@ -809,6 +834,7 @@ video-helper convert   --input clip.mp4 --output small.mp4 \
                        --width 640 --height 360 --frame-rate 15 --without-sound
 video-helper chunk     --input clip.mp4 --start 6 --end 9 --output highlight.mp4
 video-helper compress  --input big.mp4  --output web.mp4 --target-size-mb 1
+video-helper shrink    --input over.mp4 --output over-hevc.mp4 --vcodec libx265
 video-helper black     --duration 0.5 --width 1280 --height 720 --output black.mp4
 video-helper image-loop --image title.png --duration 2 --output title.mp4 \
                        --width 1280 --height 720

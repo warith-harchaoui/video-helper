@@ -87,14 +87,19 @@ def _has_encoder(name: str) -> bool:
 
     try:
         listed = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False,
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout
     except Exception:
         return False
     return name in listed
 
 
-@pytest.mark.skipif(not _has_encoder("hevc_videotoolbox"), reason="no VideoToolbox HEVC encoder on this machine")
+@pytest.mark.skipif(
+    not _has_encoder("hevc_videotoolbox"), reason="no VideoToolbox HEVC encoder on this machine"
+)
 def test_compress_video_hardware_path_is_valid_hevc_hvc1(short_clip, tmp_path) -> None:
     """vcodec='hevc_videotoolbox' takes the single-pass hardware branch: valid HEVC/hvc1
     output, roughly the requested size (looser band than the software 2-pass test — a

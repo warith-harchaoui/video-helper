@@ -51,6 +51,7 @@ EXPECTED_SUBCOMMANDS = {
     "chunk",
     "black",
     "compress",
+    "shrink",
     "image-loop",
     "concat",
     "overlay",

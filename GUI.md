@@ -20,9 +20,9 @@ flags with checkboxes.
 
 ### 1. Recipe Canvas *(primary surface)*
 
-- Draggable node graph, left-to-right; nodes are the eighteen verbs the
+- Draggable node graph, left-to-right; nodes are the nineteen verbs the
   CLI and the HTTP routes share (`validate`, `dimensions`, `duration`,
-  `convert`, `compress`, `chunk`, `black`, `image-loop`, `concat`,
+  `convert`, `compress`, `shrink`, `chunk`, `black`, `image-loop`, `concat`,
   `overlay`, `extract-audio`, `mux-audio`, `burn-subs`, `srt2vtt`,
   `vtt2srt`, `split-sentences`, `extract-frames`, `extract-flow`).
 - Each node shows a **live 3-frame proxy strip of its output** (first

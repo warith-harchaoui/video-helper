@@ -39,7 +39,7 @@ What the page does
 ------------------
 - Drop / pick a local video (kept entirely client-side until "Run").
 - Choose one operation (validate / dimensions / duration / convert / chunk /
-  black / compress / image-loop / concat / overlay / extract-audio /
+  black / compress / shrink / image-loop / concat / overlay / extract-audio /
   mux-audio / burn-subs / srt2vtt / extract-frames / extract-flow).
 - Reveal only the fields (and any extra file inputs) that operation needs.
 - POST a ``multipart/form-data`` request to the SAME FastAPI endpoints the
@@ -122,6 +122,7 @@ _JS_NAME_TO_SOURCE: dict[str, str] = {
     "zipNote": "Multiple files bundled as a .zip.",
     "npyNote": "Raw flow array (.npy) — download only, no inline preview.",
     "requestFailed": "Request failed: {error}",
+    "shrinkKept": "Original kept: no lighter and faithful HEVC version (see the report).",
 }
 
 
@@ -189,6 +190,7 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
         <option value="chunk">{{_("chunk — extract a [start, end] slice")}}</option>
         <option value="black">{{_("black — synthesize a solid-black clip")}}</option>
         <option value="compress">{{_("compress — two-pass compress to a target file size")}}</option>
+        <option value="shrink">{{_("shrink — HEVC only if lighter and faithful (VMAF)")}}</option>
         <option value="image-loop">{{_("image-loop — loop a still image into a clip")}}</option>
         <option value="concat">{{_("concat — join multiple clips head-to-tail")}}</option>
         <option value="overlay">{{_("overlay — burn a still image onto the video")}}</option>
@@ -304,6 +306,29 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
       <div data-ops="compress">
         <label class="block text-xs font-medium mb-1">min_video_bitrate_kbps</label>
         <input id="min_video_bitrate_kbps" type="number" value="200"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="shrink">
+        <label class="block text-xs font-medium mb-1">vcodec</label>
+        <select id="shrink_vcodec" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="auto" selected>auto</option>
+          <option value="hevc_videotoolbox">hevc_videotoolbox</option>
+          <option value="libx265">libx265</option>
+        </select>
+      </div>
+      <div data-ops="shrink">
+        <label class="block text-xs font-medium mb-1">min_vmaf</label>
+        <input id="min_vmaf" type="number" step="0.5" value="95"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="shrink">
+        <label class="block text-xs font-medium mb-1">max_ratio</label>
+        <input id="max_ratio" type="number" step="0.05" value="0.85"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div data-ops="shrink">
+        <label class="block text-xs font-medium mb-1">threads</label>
+        <input id="shrink_threads" type="number" min="1" value="1"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       <!-- Secondary file inputs, revealed per operation. -->
@@ -424,6 +449,7 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
     const URL_FOR = {
       "validate": "/validate", "dimensions": "/dimensions", "duration": "/duration",
       "convert": "/convert", "chunk": "/chunk", "black": "/black", "compress": "/compress",
+      "shrink": "/shrink",
       "image-loop": "/image-loop", "concat": "/concat", "overlay": "/overlay",
       "extract-audio": "/extract-audio", "mux-audio": "/mux-audio",
       "burn-subs": "/burn-subs", "srt2vtt": "/srt2vtt", "extract-frames": "/extract-frames",
@@ -487,6 +513,12 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
         fd.append("audio_bitrate", $("compress_audio_bitrate").value || "128k");
         fd.append("vcodec", $("vcodec").value);
         fd.append("min_video_bitrate_kbps", $("min_video_bitrate_kbps").value || "200");
+      } else if (op === "shrink") {
+        fd.append("file", inputFile);
+        fd.append("vcodec", $("shrink_vcodec").value);
+        fd.append("min_vmaf", $("min_vmaf").value || "95");
+        fd.append("max_ratio", $("max_ratio").value || "0.85");
+        fd.append("threads", $("shrink_threads").value || "1");
       } else if (op === "image-loop") {
         fd.append("image", inputFile);
         fd.append("duration", $("duration").value);
@@ -546,6 +578,15 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
           status(T.errorPrefix + res.status + ": " + txt.slice(0, 200));
           return;
         }
+        // shrink answers with JSON alone when it keeps the original.
+        const isJson = (res.headers.get("content-type") || "").includes("application/json");
+        if (op === "shrink" && isJson) {
+          const j = await res.json();
+          $("out-json").textContent = JSON.stringify(j, null, 2);
+          $("out-json").hidden = false;
+          status(T.shrinkKept);
+          return;
+        }
         if (JSON_OPS.has(op)) {
           const j = await res.json();
           $("out-json").textContent = JSON.stringify(j, null, 2);
@@ -568,6 +609,10 @@ _GUI_TEMPLATE: str = r"""<!doctype html>
         } else if (op === "compress") {
           dl.download = "compressed.mp4";
           $("out-video").src = objUrl; $("out-video").hidden = false;
+        } else if (op === "shrink") {
+          dl.download = "shrunk.mp4";
+          $("out-video").src = objUrl; $("out-video").hidden = false;
+          $("out-extra").textContent = res.headers.get("x-shrink-report") || "";
         } else if (op === "extract-flow" && $("flow_output_format").value === "npy") {
           // Raw array output: no inline player, download-only (like the zip ops).
           dl.download = "flow.npy";

@@ -78,6 +78,7 @@ def test_openapi_lists_expected_endpoints(client) -> None:
         "/chunk",
         "/black",
         "/compress",
+        "/shrink",
         "/image-loop",
         "/concat",
         "/overlay",

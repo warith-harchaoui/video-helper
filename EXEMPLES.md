@@ -37,6 +37,7 @@ signale à l'endroit où il apparaît.
   - [Extraire / muxer l'audio](#extraire--muxer-laudio)
   - [Incruster des sous-titres](#incruster-des-sous-titres)
   - [Compresser vers une taille cible](#compresser-vers-une-taille-cible)
+  - [Alléger à qualité constante](#alléger-à-qualité-constante)
 - [6. Outils de sous-titrage](#6-outils-de-sous-titrage)
   - [SRT → VTT + CSS](#srt--vtt--css)
   - [Couleurs uniques](#couleurs-uniques)
@@ -651,6 +652,31 @@ compress_video: target 0.3 MB over 12 sec would need 76 kbps for video —
 below the 200 kbps floor. Using the floor instead; the output will exceed 0.3 MB.
 ```
 
+### Alléger à qualité constante
+
+`shrink_video` répond à l'autre question : non pas « tenir dans N Mo », mais
+« plus léger sans perte visible, ou rien ». Il ré-encode en HEVC et n'écrit la
+sortie que si le fichier pèse au plus `max_ratio` (0,85) de l'original, si le
+VMAF face à l'original reste ≥ 95 en moyenne et ≥ 90 sur le 1 % d'images le
+plus bas, et si la durée et les pistes audio sont inchangées.
+
+```python
+# Un extrait H.264 640x360 de 3 s encodé en CRF 4 (sur-encodé exprès).
+report = vh.shrink_video("over.mp4", "over-hevc.mp4", vcodec="libx265")
+print(report["decision"], report["ratio"], report["vmaf"], report["vmaf_p1"])
+# shrunk 0.346 96.77 94.52
+
+report = vh.shrink_video("over-hevc.mp4", "again.mp4")
+print(report["decision"], report["reason"])
+# kept already hevc
+```
+
+`vcodec="auto"` prend VideoToolbox sur macOS : environ 7 fois le temps réel
+sur un dixième de cœur, mais il ne bat le H.264 que sur les sources
+sur-encodées. Un `"kept"` avec `reason="gain too small"` est donc une réponse
+normale sur un fichier déjà bien compressé. `threads=1` (par défaut) garde le
+contrôle VMAF sur un seul cœur.
+
 ## 6. Outils de sous-titrage
 
 ### SRT → VTT + CSS
@@ -853,6 +879,7 @@ video-helper convert   --input clip.mp4 --output small.mp4 \
                        --width 640 --height 360 --frame-rate 15 --without-sound
 video-helper chunk     --input clip.mp4 --start 6 --end 9 --output highlight.mp4
 video-helper compress  --input big.mp4  --output web.mp4 --target-size-mb 1
+video-helper shrink    --input over.mp4 --output over-hevc.mp4 --vcodec libx265
 video-helper black     --duration 0.5 --width 1280 --height 720 --output black.mp4
 video-helper image-loop --image title.png --duration 2 --output title.mp4 \
                        --width 1280 --height 720

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import os
 import platform
 import re
@@ -2383,6 +2384,579 @@ def compress_video(
     assert is_valid_video_file(output_video), f"Failed to compress video file:\n\t{output_video}"
     osh.info(f"Video file compressed successfully:\n\t{output_video}")
     return output_video
+
+
+# ---------------------------------------------------------------------------
+# shrink_video: quality-gated HEVC re-encode (VMAF), the opposite contract of
+# compress_video. compress_video fixes the SIZE and accepts whatever quality
+# fits in it; shrink_video fixes the QUALITY and accepts whatever size it
+# reaches, or keeps the original when that size is not worth a second
+# generation. Ported from media_pipeline's catalogue shrinker, where it reclaimed
+# 161.6 GiB over 964 videos (402 replaced) on 2026-11-15 to 2026-11-17.
+# ---------------------------------------------------------------------------
+
+# Encoders shrink_video knows how to drive. Each one has its own quality knob,
+# its own direction ("better" = higher q for VideoToolbox, lower CRF for x265),
+# a step, a start, and a bound past which climbing is pointless.
+_SHRINK_ENCODERS: dict[str, dict] = {
+    # Calibrated on six extracts (480p to 2160p) on 2026-11-15: q65 reaches
+    # VMAF 95 at 1080p and above, smaller pictures need a higher q (a 480p file
+    # passed at q74 only), hence the per-height offsets.
+    "hevc_videotoolbox": {
+        "knob": "q:v",
+        "start": 65,
+        "step": 3,
+        "better": +1,
+        "limit": 80,
+        "offsets": ((576, 6), (720, 3)),
+    },
+    # x265 medium CRF 22 gave 0.56x the size at VMAF 97.3 on the same extracts;
+    # starting at 24 leaves room for the "one try at a smaller file" step.
+    "libx265": {
+        "knob": "crf",
+        "start": 24,
+        "step": 2,
+        "better": -1,
+        "limit": 14,
+        "offsets": (),
+    },
+}
+# Already in a codec at least as efficient as HEVC: re-encoding only adds loss.
+_SHRINK_MODERN_CODECS = {"hevc", "av1", "vp9"}
+# Light audio is stream-copied (no generation loss); heavier audio is
+# re-encoded at a rate that is transparent for AAC.
+_SHRINK_AUDIO_COPYABLE = {"aac", "mp3"}
+_SHRINK_AUDIO_KEEP_KBPS_PER_CH = 112
+_SHRINK_AUDIO_TARGET_KBPS_PER_CH = 96
+# A 1st-percentile frame this low means the two pictures do not correspond
+# (misalignment, broken decode), not a quality any encoder setting could reach.
+_VMAF_INCOHERENT = 50.0
+
+
+def has_libvmaf() -> bool:
+    """Whether the local ffmpeg build ships the ``libvmaf`` filter.
+
+    :func:`shrink_video` and :func:`vmaf_score` need it. Homebrew's ffmpeg and
+    the BtbN static GPL builds have it; some distribution packages do not.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``ffmpeg -filters`` lists ``libvmaf``.
+
+    Examples
+    --------
+    >>> isinstance(has_libvmaf(), bool)
+    True
+    """
+    if shutil.which("ffmpeg") is None:
+        return False
+    try:
+        listed = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout
+    except Exception:
+        return False
+    return re.search(r"\blibvmaf\b", listed) is not None
+
+
+def _vmaf_windows(
+    duration: float, windows: int, window_seconds: float
+) -> list[tuple[float, float]]:
+    """``(start, length)`` of the VMAF windows, spread evenly over *duration*.
+
+    Scoring a whole file costs about twice its duration in CPU; a few windows
+    see the beginning, the middle and the end for a fraction of that. A short
+    file is scored whole.
+
+    Parameters
+    ----------
+    duration : float
+        Length of the video, in seconds.
+    windows : int
+        Number of windows; ``0`` or less scores the whole file.
+    window_seconds : float
+        Length of each window, in seconds.
+
+    Returns
+    -------
+    list of (float, float)
+        Start and length of each window, in seconds.
+
+    Examples
+    --------
+    >>> _vmaf_windows(20.0, 4, 8.0)
+    [(0.0, 20.0)]
+    >>> [round(s) for s, _ in _vmaf_windows(800.0, 4, 8.0)]
+    [96, 296, 496, 696]
+    """
+    if windows <= 0 or duration <= windows * window_seconds * 1.25:
+        return [(0.0, duration)]
+    step = duration / windows
+    return [(step * (i + 0.5) - window_seconds / 2, window_seconds) for i in range(windows)]
+
+
+def vmaf_score(
+    distorted_video: str,
+    reference_video: str,
+    *,
+    windows: int = 4,
+    window_seconds: float = 8.0,
+    threads: int = 1,
+) -> dict:
+    """VMAF of *distorted_video* against *reference_video*, over a few windows.
+
+    Both sides are seeked to the same instant, then frames are paired by
+    **rank**, not by timestamp: timestamp pairing slips by one frame after a
+    single irregular source timestamp and scores a sound encode near 3 (seen
+    on a real catalogue file, 97.6 once paired by rank). This assumes the
+    distorted file keeps every frame of the reference one for one, which is
+    what a re-encode with ``fps_mode=passthrough`` does. Above 1080p both
+    sides are scaled to 1080p, the viewing condition the default VMAF model
+    was trained for.
+
+    Parameters
+    ----------
+    distorted_video : str
+        The re-encoded file.
+    reference_video : str
+        The original it is judged against.
+    windows : int, optional
+        Number of windows spread over the file (default 4); ``0`` scores the
+        whole file.
+    window_seconds : float, optional
+        Length of each window, in seconds (default 8).
+    threads : int, optional
+        CPU threads for decoding, filtering and libvmaf (default 1: VMAF is
+        the only CPU-heavy step of a hardware re-encode, and a shared machine
+        should not lose all its cores to it).
+
+    Returns
+    -------
+    dict
+        ``vmaf`` (mean over the scored frames), ``vmaf_p1`` (1st-percentile
+        frame, which catches one scene that fell apart while the mean stays
+        high) and ``frames`` (how many frames were scored).
+
+    Raises
+    ------
+    ValueError
+        If both paths name the same file.
+    RuntimeError
+        If ffmpeg has no ``libvmaf`` filter, or scored no frame.
+    ffmpeg.Error
+        If the scoring pass fails.
+
+    Examples
+    --------
+    >>> vmaf_score("small.mp4", "original.mp4")  # doctest: +SKIP
+    {'vmaf': 96.25, 'vmaf_p1': 90.78, 'frames': 800}
+    """
+    if osh.relative2absolute_path(distorted_video) == osh.relative2absolute_path(reference_video):
+        # Also a hard limit of ffmpeg-python: two identical input nodes collapse
+        # into one, and the graph then fails with an opaque "split" error.
+        raise ValueError(f"{distorted_video} is compared with itself; VMAF needs two files")
+    if not has_libvmaf():
+        raise RuntimeError("this ffmpeg build has no libvmaf filter; VMAF cannot be computed")
+    info = video_dimensions(reference_video)
+    duration = float(info["duration"])
+    # VideoToolbox decode only: it hands frames back to system memory on its own,
+    # where a CUDA / QSV decode would need an explicit download in the graph.
+    hwaccel = "videotoolbox" if _resolve_hwaccel("auto") == "videotoolbox" else None
+    quiet = osh.verbosity() <= 0
+
+    def _prepared(path: str, start: float, length: float) -> ffmpeg.nodes.FilterableStream:
+        """One side of the comparison: seeked, scaled to 1080p at most, timestamped by rank."""
+        kwargs = {"ss": f"{start:.3f}", "t": f"{length:.3f}", "threads": threads}
+        if hwaccel:
+            kwargs["hwaccel"] = hwaccel
+        v = ffmpeg.input(path, **kwargs).video
+        if int(info["height"]) > 1080:
+            v = v.filter("scale", -2, 1080, flags="bicubic")
+        # settb + setpts=N*...: synthetic, strictly increasing timestamps from
+        # the frame rank, identical on both sides.
+        return v.filter("format", "yuv420p").filter("settb", "AVTB").filter("setpts", "N*40000")
+
+    scores: list[float] = []
+    with osh.temporary_folder(prefix="video_helper-vmaf-") as tmp:
+        log = osh.join(tmp, "vmaf.json")
+        for start, length in _vmaf_windows(duration, windows, window_seconds):
+            osh.remove_files([log])
+            (
+                ffmpeg.filter(
+                    [
+                        _prepared(distorted_video, start, length),
+                        _prepared(reference_video, start, length),
+                    ],
+                    "libvmaf",
+                    n_threads=threads,
+                    log_fmt="json",
+                    log_path=log,
+                )
+                .output("-", f="null")
+                .global_args("-filter_threads", str(threads))
+                .run(quiet=quiet)
+            )
+            with open(log, encoding="utf-8") as fh:
+                scores += [f["metrics"]["vmaf"] for f in json.load(fh)["frames"]]
+    if not scores:
+        raise RuntimeError(f"VMAF scored no frame:\n\t{distorted_video}")
+    scores.sort()
+    return {
+        "vmaf": round(sum(scores) / len(scores), 2),
+        "vmaf_p1": round(scores[len(scores) // 100], 2),
+        "frames": len(scores),
+    }
+
+
+def _shrink_probe(path: str) -> dict:
+    """The facts :func:`shrink_video` decides on, from one ``ffmpeg.probe``.
+
+    Parameters
+    ----------
+    path : str
+        Video file.
+
+    Returns
+    -------
+    dict
+        ``size`` (bytes), ``duration`` (s), ``vcodec``, ``width``, ``height``
+        and ``audio``, a list of ``(codec, channels, kbps)``. An embedded cover
+        picture is not taken for the video stream.
+    """
+    probe = ffmpeg.probe(path)
+    streams = probe.get("streams") or []
+    video = next(
+        s
+        for s in streams
+        if s.get("codec_type") == "video" and not (s.get("disposition") or {}).get("attached_pic")
+    )
+    fmt = probe.get("format") or {}
+    return {
+        "size": os.path.getsize(path),
+        "duration": float(fmt.get("duration") or video.get("duration") or 0.0),
+        "vcodec": video.get("codec_name"),
+        "width": int(video.get("width") or 0),
+        "height": int(video.get("height") or 0),
+        "audio": [
+            (s.get("codec_name"), int(s.get("channels") or 2), int(s.get("bit_rate") or 0) // 1000)
+            for s in streams
+            if s.get("codec_type") == "audio"
+        ],
+    }
+
+
+def _shrink_audio_kwargs(audio: list[tuple[str, int, int]], aac_encoder: str) -> dict:
+    """Per-track audio options: copy when already light, else AAC at a transparent rate.
+
+    Parameters
+    ----------
+    audio : list of (str, int, int)
+        Codec, channel count and kbps of each audio track, from :func:`_shrink_probe`.
+    aac_encoder : str
+        ``"aac_at"`` (Apple's encoder) when available, else ``"aac"``.
+
+    Returns
+    -------
+    dict
+        ffmpeg-python output kwargs (``c:a:N``, and ``b:a:N`` when re-encoding).
+
+    Examples
+    --------
+    >>> _shrink_audio_kwargs([("aac", 2, 128)], "aac")
+    {'c:a:0': 'copy'}
+    >>> _shrink_audio_kwargs([("aac", 2, 480)], "aac")
+    {'c:a:0': 'aac', 'b:a:0': '192k'}
+    """
+    kwargs: dict[str, str] = {}
+    for i, (codec, channels, kbps) in enumerate(audio):
+        if codec in _SHRINK_AUDIO_COPYABLE and kbps <= _SHRINK_AUDIO_KEEP_KBPS_PER_CH * channels:
+            kwargs[f"c:a:{i}"] = "copy"
+        else:
+            kwargs[f"c:a:{i}"] = aac_encoder
+            kwargs[f"b:a:{i}"] = f"{_SHRINK_AUDIO_TARGET_KBPS_PER_CH * min(channels, 6)}k"
+    return kwargs
+
+
+def _shrink_start(vcodec: str, quality: int | None, height: int) -> int:
+    """Starting value of the encoder's quality knob for a picture *height* pixels high.
+
+    Parameters
+    ----------
+    vcodec : str
+        A key of :data:`_SHRINK_ENCODERS`.
+    quality : int or None
+        Caller's starting value; ``None`` uses the calibrated default.
+    height : int
+        The picture's short side, in pixels.
+
+    Returns
+    -------
+    int
+        The knob value to try first.
+
+    Examples
+    --------
+    >>> [_shrink_start("hevc_videotoolbox", None, h) for h in (480, 720, 1080)]
+    [71, 68, 65]
+    >>> _shrink_start("libx265", None, 480)
+    24
+    """
+    spec = _SHRINK_ENCODERS[vcodec]
+    base = spec["start"] if quality is None else quality
+    for limit, offset in spec["offsets"]:
+        if height <= limit:
+            return base + offset
+    return base
+
+
+def _shrink_encode(
+    input_video: str,
+    output_video: str,
+    info: dict,
+    vcodec: str,
+    value: int,
+    threads: int,
+) -> None:
+    """One HEVC encode of *input_video* at knob *value*, every frame and audio track kept.
+
+    VideoToolbox decodes on the media engine too, frames staying on it all the
+    way to the encoder (measured 7.3x realtime at 1080p on about 0.1 core); if
+    the hardware decoder refuses the source, the encode is retried with a
+    software decode. Output is 8-bit Main, tagged ``hvc1`` (the only HEVC tag
+    Safari and QuickTime accept), with ``+faststart``.
+
+    Raises
+    ------
+    ffmpeg.Error
+        If the encode fails.
+    """
+    spec = _SHRINK_ENCODERS[vcodec]
+    out_kwargs = {
+        "map_metadata": 0,
+        # Timestamps untouched (variable frame rate kept), one output frame per
+        # input frame: vmaf_score pairs frames by rank and relies on it.
+        "fps_mode": "passthrough",
+        "c:v": vcodec,
+        spec["knob"]: value,
+        "profile:v": "main",
+        "tag:v": "hvc1",
+        "movflags": "+faststart",
+        **_shrink_audio_kwargs(info["audio"], hw_vcodec("aac", "aac_at")),
+    }
+    if vcodec == "libx265":
+        out_kwargs.update({"preset": "medium", "x265-params": f"pools={threads}:log-level=error"})
+    quiet = osh.verbosity() <= 0
+
+    def _run(in_kwargs: dict, extra: dict) -> None:
+        """Map the picture and every audio track, then encode under the system-wide lock."""
+        src = ffmpeg.input(input_video, threads=threads, **in_kwargs)
+        # The real picture only ("V": an embedded cover is also a video stream).
+        streams = [src["V:0"]] + ([src["a"]] if info["audio"] else [])
+        with _ffmpeg_serialize():
+            ffmpeg.output(*streams, output_video, **out_kwargs, **extra).run(
+                overwrite_output=True, quiet=quiet
+            )
+
+    if vcodec == "hevc_videotoolbox":
+        try:
+            _run({"hwaccel": "videotoolbox", "hwaccel_output_format": "videotoolbox_vld"}, {})
+            return
+        except ffmpeg.Error:
+            osh.info("shrink_video: hardware decode refused, retrying with a software decode")
+            osh.remove_files([output_video])
+            _run({}, {"pix_fmt": "nv12"})
+            return
+    _run({}, {"pix_fmt": "yuv420p"})
+
+
+def shrink_video(
+    input_video: str,
+    output_video: str | None = None,
+    *,
+    vcodec: str = "auto",
+    min_vmaf: float = 95.0,
+    min_vmaf_p1: float = 90.0,
+    max_ratio: float = 0.85,
+    quality: int | None = None,
+    vmaf_windows: int = 4,
+    vmaf_window_seconds: float = 8.0,
+    threads: int = 1,
+    overwrite: bool = True,
+) -> dict:
+    """Re-encode a video to HEVC only if the result is both lighter and faithful.
+
+    Where :func:`compress_video` fixes the size and takes whatever quality fits
+    in it, this fixes the quality and keeps the original when the gain is not
+    worth a second lossy generation. Every attempt passes three gates:
+
+    1. **Fidelity**: VMAF against the original (:func:`vmaf_score`), mean
+       ``>= min_vmaf`` and 1st-percentile frame ``>= min_vmaf_p1``.
+    2. **Gain**: output at most ``max_ratio`` of the original's size.
+    3. **Integrity**: readable, same duration (within 0.5 s), same number of
+       audio tracks.
+
+    The encoder's quality knob adapts per file: after a first-try pass it
+    makes one try at a smaller file, after a failure it climbs one step at a
+    time until fidelity holds, the gain is gone, or the knob's bound. Hardware
+    encoders only beat H.264 on over-encoded sources (sources at 0.02-0.12
+    bit/pixel came out 0.9-2x their size at VMAF 95), so ``"kept"`` is a
+    normal answer, not a failure.
+
+    The output is written only when every gate passes. Replacing the original
+    in place is left to the caller (write next to it, then ``os.replace``):
+    like every writer here, this refuses an output that is also the input.
+
+    Parameters
+    ----------
+    input_video : str
+        Path to the source video.
+    output_video : str, optional
+        Where to write the result (``.mp4``, ``.m4v`` or ``.mov``: the ``hvc1``
+        tag needs an ISO-BMFF container). Defaults to ``<input>-shrunk.mp4``.
+    vcodec : str, optional
+        ``"auto"`` (default): ``hevc_videotoolbox`` on macOS when available
+        (about 7x realtime on 0.1 core), else ``libx265`` (smaller files at the
+        same VMAF, but CPU-bound: 0.05x realtime on a loaded machine).
+    min_vmaf : float, optional
+        Minimum mean VMAF (default 95).
+    min_vmaf_p1 : float, optional
+        Minimum 1st-percentile frame VMAF (default 90).
+    max_ratio : float, optional
+        Maximum output/original size ratio (default 0.85).
+    quality : int, optional
+        Starting value of the quality knob (``q:v`` for VideoToolbox, higher is
+        better; ``crf`` for x265, lower is better). Default: calibrated per
+        encoder and picture height.
+    vmaf_windows : int, optional
+        Windows scored per attempt (default 4); ``0`` scores the whole file,
+        about twice its duration in CPU.
+    vmaf_window_seconds : float, optional
+        Length of each window, in seconds (default 8).
+    threads : int, optional
+        CPU threads per ffmpeg call (default 1). The hardware encode barely
+        uses the CPU; this bounds the VMAF pass, decoding and x265.
+    overwrite : bool, optional
+        When False and ``output_video`` exists, return at once with decision
+        ``"exists"`` (default True).
+
+    Returns
+    -------
+    dict
+        ``decision``: ``"shrunk"`` (output written), ``"kept"`` (nothing
+        written; ``reason`` says why) or ``"exists"``. Also ``output`` (path
+        or None), ``vcodec``, ``old_size``, and for the attempt that decided:
+        ``new_size``, ``ratio``, ``vmaf``, ``vmaf_p1``, ``quality``.
+
+    Raises
+    ------
+    AssertionError
+        If ``input_video`` is not a valid video file.
+    ValueError
+        If ``output_video`` is the input or not an ISO-BMFF container, or
+        ``vcodec`` is unknown.
+    RuntimeError
+        If the local ffmpeg has no ``libvmaf`` filter.
+
+    Examples
+    --------
+    >>> report = shrink_video("talk.mp4", "talk-hevc.mp4")  # doctest: +SKIP
+    >>> report["decision"], report["ratio"], report["vmaf"]  # doctest: +SKIP
+    ('shrunk', 0.146, 96.25)
+    """
+    _refuse_output_over_input(output_video, [input_video])
+    assert is_valid_video_file(input_video), f"Input video file not okay:\n\t{input_video}"
+    if vcodec == "auto":
+        vcodec = hw_vcodec("libx265", "hevc_videotoolbox")
+    if vcodec not in _SHRINK_ENCODERS:
+        raise ValueError(
+            f"vcodec must be 'auto' or one of {sorted(_SHRINK_ENCODERS)}, got {vcodec!r}"
+        )
+    if not has_libvmaf():
+        raise RuntimeError("this ffmpeg build has no libvmaf filter; shrink_video needs it")
+
+    fi, bi, _ = osh.folder_name_ext(input_video)
+    if osh.emptystring(output_video):
+        output_video = osh.join(fi, bi + "-shrunk.mp4")
+    _, _, output_ext = osh.folder_name_ext(output_video)
+    if output_ext.lower().lstrip(".") not in ("mp4", "m4v", "mov"):
+        raise ValueError(f"shrink_video writes .mp4, .m4v or .mov, got {output_video!r}")
+    _refuse_output_over_input(output_video, [input_video])
+
+    info = _shrink_probe(input_video)
+    report: dict = {"output": None, "vcodec": vcodec, "old_size": info["size"]}
+    if not overwrite and osh.file_exists(output_video):
+        return {**report, "decision": "exists", "output": output_video}
+    if info["vcodec"] in _SHRINK_MODERN_CODECS:
+        return {**report, "decision": "kept", "reason": f"already {info['vcodec']}"}
+
+    osh.info(f"Shrinking video file ({vcodec}, VMAF >= {min_vmaf}):\n\t{input_video}")
+    spec = _SHRINK_ENCODERS[vcodec]
+    better, step = spec["better"], spec["step"]
+    value = _shrink_start(vcodec, quality, min(info["width"], info["height"]))
+    direction = 0  # 0: first try, -1: trying smaller after a pass, +1: climbing after a fail
+    kept: dict | None = None
+    last: dict = {}
+    with osh.temporary_folder(prefix="video_helper-shrink-") as tmp:
+        attempt_path = osh.join(tmp, "attempt.mp4")
+        best_path = osh.join(tmp, "best.mp4")
+        while (value - spec["limit"]) * better <= 0 and value > 0:
+            osh.remove_files([attempt_path])
+            try:
+                _shrink_encode(input_video, attempt_path, info, vcodec, value, threads)
+            except ffmpeg.Error:
+                last = {"reason": "encode failed", "quality": value}
+                break
+            new = _shrink_probe(attempt_path)
+            if abs(new["duration"] - info["duration"]) > 0.5 or len(new["audio"]) != len(
+                info["audio"]
+            ):
+                last = {"reason": "output failed integrity check", "quality": value}
+                break
+            ratio = round(new["size"] / info["size"], 3)
+            if ratio > max_ratio:
+                # A better setting would only be bigger: stop climbing.
+                last = {"reason": "gain too small", "quality": value, "ratio": ratio}
+                break
+            score = vmaf_score(
+                attempt_path,
+                input_video,
+                windows=vmaf_windows,
+                window_seconds=vmaf_window_seconds,
+                threads=threads,
+            )
+            attempt = {
+                "quality": value,
+                "new_size": new["size"],
+                "ratio": ratio,
+                "vmaf": score["vmaf"],
+                "vmaf_p1": score["vmaf_p1"],
+            }
+            if score["vmaf_p1"] < _VMAF_INCOHERENT:
+                # Not a quality any setting could reach: the frames do not correspond.
+                last = {"reason": "VMAF incoherent", **attempt}
+                break
+            if score["vmaf"] >= min_vmaf and score["vmaf_p1"] >= min_vmaf_p1:
+                os.replace(attempt_path, best_path)
+                kept = attempt
+                if direction == 0:
+                    value, direction = value - better * step, -1  # one try at a smaller file
+                    continue
+                break
+            last = {"reason": "fidelity below threshold", **attempt}
+            if direction == -1:
+                break  # the smaller try failed: keep the one that passed
+            value, direction = value + better * step, +1
+        if kept is None:
+            osh.info(f"shrink_video kept the original ({last.get('reason')}):\n\t{input_video}")
+            return {**report, "decision": "kept", **last}
+        os.makedirs(osh.folder_name_ext(osh.relative2absolute_path(output_video))[0], exist_ok=True)
+        shutil.move(best_path, output_video)
+    osh.info(f"Video file shrunk to {kept['ratio']:.0%} at VMAF {kept['vmaf']}:\n\t{output_video}")
+    return {**report, "decision": "shrunk", "output": output_video, **kept}
 
 
 def black_video(

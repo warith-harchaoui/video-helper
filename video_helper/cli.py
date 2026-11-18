@@ -15,6 +15,7 @@ Subcommands
 - ``chunk``         — extract a ``[start, end]`` slice
 - ``black``         — synthesize a silent solid-black clip
 - ``compress``      — two-pass compress to a target file size
+- ``shrink``        — HEVC re-encode kept only if lighter and faithful (VMAF)
 - ``image-loop``    — loop a still image into a silent clip
 - ``concat``        — concatenate several videos head-to-tail
 - ``overlay``       — overlay a still image on a video (watermark / cursor)
@@ -79,6 +80,7 @@ from . import (
     is_valid_video_file,
     mux_audio_video,
     overlay_image,
+    shrink_video,
     split_sentences,
     srt2vtt,
     video_converter,
@@ -308,6 +310,88 @@ def compress(
         overwrite=not no_overwrite,
     )
     click.echo(result)
+
+
+# ---------------------------------------------------------------------------
+# shrink
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--input", "input_", required=True, type=click.Path(exists=True))
+@click.option("--output", default=None, type=click.Path())
+@click.option(
+    "--vcodec",
+    default="auto",
+    type=click.Choice(["auto", "hevc_videotoolbox", "libx265"]),
+    show_default=True,
+    help="'auto': VideoToolbox on macOS when available, else libx265.",
+)
+@click.option("--min-vmaf", "min_vmaf", type=float, default=95.0, show_default=True)
+@click.option("--min-vmaf-p1", "min_vmaf_p1", type=float, default=90.0, show_default=True)
+@click.option(
+    "--max-ratio",
+    "max_ratio",
+    type=float,
+    default=0.85,
+    show_default=True,
+    help="Keep the original unless the output is at most this fraction of its size.",
+)
+@click.option(
+    "--quality",
+    type=int,
+    default=None,
+    help="Starting q:v (VideoToolbox) or CRF (x265). Default: calibrated per encoder and height.",
+)
+@click.option(
+    "--vmaf-windows",
+    "vmaf_windows",
+    type=int,
+    default=4,
+    show_default=True,
+    help="Windows scored per attempt; 0 scores the whole file.",
+)
+@click.option(
+    "--vmaf-window-seconds", "vmaf_window_seconds", type=float, default=8.0, show_default=True
+)
+@click.option(
+    "--threads", type=int, default=1, show_default=True, help="CPU threads per ffmpeg call."
+)
+@click.option(
+    "--no-overwrite",
+    "no_overwrite",
+    is_flag=True,
+    default=False,
+    help="Do nothing if the output already exists.",
+)
+def shrink(
+    input_: str,
+    output: str | None,
+    vcodec: str,
+    min_vmaf: float,
+    min_vmaf_p1: float,
+    max_ratio: float,
+    quality: int | None,
+    vmaf_windows: int,
+    vmaf_window_seconds: float,
+    threads: int,
+    no_overwrite: bool,
+) -> None:
+    """Re-encode to HEVC only if lighter and faithful (VMAF-gated); print the report as JSON."""
+    report = shrink_video(
+        input_video=input_,
+        output_video=output,
+        vcodec=vcodec,
+        min_vmaf=min_vmaf,
+        min_vmaf_p1=min_vmaf_p1,
+        max_ratio=max_ratio,
+        quality=quality,
+        vmaf_windows=vmaf_windows,
+        vmaf_window_seconds=vmaf_window_seconds,
+        threads=threads,
+        overwrite=not no_overwrite,
+    )
+    click.echo(json.dumps(report, indent=2))
 
 
 # ---------------------------------------------------------------------------

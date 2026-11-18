@@ -3,12 +3,13 @@ name: video-helper
 description: >-
   Transform video files locally with ffmpeg and OpenCV. Validate, probe
   dimensions / fps / duration, re-encode and resize, cut a [start, end] slice,
-  two-pass compress to a target file size, synthesize a black clip, loop a
+  two-pass compress to a target file size, shrink to HEVC under a VMAF
+  quality gate, synthesize a black clip, loop a
   still image into a clip, concatenate, overlay a watermark, rip or mux an
   audio track, burn subtitles, convert SRT to WebVTT, extract frames as arrays
   or images, and compute optical flow. Use when the user says "convert this mov
   to mp4", "resize to 720p", "trim from 10s to 20s", "get it under 100 MB",
-  "shrink this video", "merge these clips", "watermark a logo", "rip the
+  "shrink this video", "without losing quality", "merge these clips", "watermark a logo", "rip the
   audio", "replace the audio track", "burn in subtitles", "srt to vtt", "give
   me the frames", "how long / how big is this video", "optical flow", or names
   `video-helper`, `video-helper-mcp`, `import video_helper as vh`. Do NOT use to transcribe speech (vocal-helper),
@@ -64,6 +65,7 @@ install ffmpeg`, Windows 🪟 `winget install Gyan.FFmpeg`.
 | Re-encode / resize / drop audio | `video-helper convert` | `video_converter` |
 | Cut a `[start, end]` slice | `video-helper chunk` | `extract_video_chunk` |
 | Compress to a target size | `video-helper compress` | `compress_video` |
+| Smaller at the same quality | `video-helper shrink` | `shrink_video` |
 | Solid-black filler clip | `video-helper black` | `black_video` |
 | Still image → clip | `video-helper image-loop` | `image_loop_to_video` |
 | Concatenate clips | `video-helper concat` | `concat_videos` |
@@ -112,6 +114,10 @@ exhaustive trigger list, read `references/triggers.md`.
 - **`compress` is two-pass and size-targeted.** Ask for a file size
   (`--target-size-mb`), not a bitrate — that is the question users actually
   have ("get it under 100 MB for email").
+- **`shrink` is quality-targeted.** It answers "smaller without losing
+  quality": the HEVC output is written only if VMAF holds and the gain is
+  real, otherwise the report says `"kept"` and why. That is a normal outcome
+  on files that are already well compressed, not an error to retry.
 - **Extracting the audio track is video-helper's job; transforming the result
   is audio-helper's.** Chain them rather than reaching for raw ffmpeg.
 - **Frames come out BGR uint8** by default, matching OpenCV and

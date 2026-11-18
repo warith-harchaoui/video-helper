@@ -24,6 +24,7 @@ colour-grade, and the only models it runs on frames are its own optical flow
 | Extract a `[start, end]` slice | `video-helper chunk` | `extract_video_chunk` | `POST /chunk` |
 | Synthesize a solid-black clip | `video-helper black` | `black_video` | `POST /black` |
 | Two-pass compress to a target file size | `video-helper compress` | `compress_video` | `POST /compress` |
+| HEVC re-encode kept only if lighter and faithful (VMAF) | `video-helper shrink` | `shrink_video` | `POST /shrink` |
 | Loop a still image into a clip | `video-helper image-loop` | `image_loop_to_video` | `POST /image-loop` |
 | Concatenate clips head-to-tail | `video-helper concat` | `concat_videos` | `POST /concat` |
 | Overlay a still image (watermark) | `video-helper overlay` | `overlay_image` | `POST /overlay` |
@@ -54,6 +55,9 @@ extra) serves the same app with the MCP endpoint at `/mcp`, bound to `--host` /
 - **Black**: "make a black / blank clip", "generate a filler / spacer video".
 - **Compress**: "shrink this video", "get it under 100 MB", "compress for
   upload / attachment / embedding", "reduce file size".
+- **Shrink**: "make it smaller without losing quality", "re-encode to HEVC /
+  H.265 if it is worth it", "free disk space on my video library", "VMAF",
+  "is this file over-encoded".
 - **Image-loop**: "turn this image into a video", "loop this still", "title card".
 - **Concat**: "merge / join / stitch these clips", "combine into one".
 - **Overlay**: "watermark a logo", "add a badge in the corner".

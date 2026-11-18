@@ -56,9 +56,19 @@ def test_a_real_video_still_probes(tmp_path: Path) -> None:
     """
     clip = tmp_path / "clip.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-         "-i", "testsrc=size=160x120:rate=10:duration=1", str(clip)],
-        check=True, capture_output=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=160x120:rate=10:duration=1",
+            str(clip),
+        ],
+        check=True,
+        capture_output=True,
     )
     dims = vh.video_dimensions(str(clip))
     assert (dims["width"], dims["height"]) == (160, 120)

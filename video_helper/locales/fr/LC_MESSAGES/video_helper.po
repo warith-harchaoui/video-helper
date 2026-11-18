@@ -157,3 +157,9 @@ msgstr "validate — est-ce une vidéo valide ? (JSON)"
 
 msgid "video — HSV-visualization mp4"
 msgstr "video — mp4 de visualisation HSV"
+
+msgid "shrink — HEVC only if lighter and faithful (VMAF)"
+msgstr "shrink — HEVC seulement si plus léger et fidèle (VMAF)"
+
+msgid "Original kept: no lighter and faithful HEVC version (see the report)."
+msgstr "Original conservé : aucune version HEVC à la fois plus légère et fidèle (voir le rapport)."

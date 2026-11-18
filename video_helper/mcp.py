@@ -36,14 +36,15 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 from video_helper.api import app
 
 # Publish the HTTP endpoints (validate / dimensions / duration / convert /
-# chunk / black / image-loop / concat / overlay / extract-audio / mux-audio /
+# chunk / black / compress / shrink / image-loop / concat / overlay / extract-audio / mux-audio /
 # burn-subs / srt2vtt / extract-frames / extract-flow) as MCP tools.
 mcp = FastApiMCP(
     app,
     name="video-helper",
     description=(
         "Video Helper MCP tools: validate, inspect (dimensions/duration), "
-        "convert, chunk, and compose video — black-video/image-loop "
+        "convert, chunk, compress, shrink (VMAF-gated HEVC), and compose "
+        "video — black-video/image-loop "
         "generation, concat, overlay, audio mux/extraction, subtitle "
         "burn/conversion, frame extraction, and dense optical flow — "
         "entirely on the local machine."
