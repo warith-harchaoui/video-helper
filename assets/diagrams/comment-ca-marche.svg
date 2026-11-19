@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1594 432" width="1594" height="432" role="img" aria-labelledby="vh-title vh-desc" font-family="Roboto, 'Helvetica Neue', Arial, sans-serif">
   <title id="vh-title">Comment video-helper fonctionne : une vidéo en entrée, des images et du mouvement en sortie, sans quitter votre machine</title>
-  <desc id="vh-desc">Une plaque de gauche à droite. Entrée : un fichier vidéo ou une URL HTTP. Le travail, en quatre étapes numérotées : valider le fichier par un aller-retour ffmpeg probe ; convertir, en rééchantillonnant les images par seconde et en redimensionnant à rapport d'aspect préservé ; lire les images via un moteur VidGear, PyAV ou ffmpeg-pipe et estimer le flot optique dense avec DIS, Farneback ou RAFT ; puis assembler, en multiplexant l'audio, en concaténant, en incrustant et en gravant les sous-titres. Sortie : des images en tableaux numpy, des champs de mouvement par pixel et des extraits finis. Dessous, l'objet central atteint par les quatre surfaces que chaque membre expose.</desc>
+  <desc id="vh-desc">Une plaque de gauche à droite. Entrée : un fichier vidéo ou une URL HTTP. Le travail, en quatre étapes numérotées : valider le fichier par un aller-retour ffmpeg probe ; convertir, en rééchantillonnant les images par seconde et en redimensionnant à rapport d'aspect préservé, ou alléger, en réencodant en HEVC pour ne garder le résultat que s'il pèse au moins 15 % de moins et tient un VMAF de 95 ; lire les images via un moteur VidGear, PyAV ou ffmpeg-pipe et estimer le flot optique dense avec DIS, Farneback ou RAFT ; puis assembler, en multiplexant l'audio, en concaténant, en incrustant et en gravant les sous-titres. Sortie : des images en tableaux numpy, des champs de mouvement par pixel et des extraits finis. Dessous, l'objet central atteint par les quatre surfaces que chaque membre expose.</desc>
   <style>
     .panel      { fill: #ffffff; stroke: #d6d6d6; stroke-width: 1.5; }
     .panel-label{ fill: #6b6b6b; font-size: 13px; font-weight: 600; letter-spacing: .08em; }
@@ -48,8 +48,8 @@
   <text class="step" x="248" y="110">1</text>
   <path class="flow" d="M439 133 H455" marker-end="url(#ah-arrow)"/>
   <rect class="stage" x="461" y="94" width="217" height="78" rx="10"/>
-  <text class="n-title" x="569" y="127" text-anchor="middle">convertir</text>
-  <text class="n-sub" x="569" y="146" text-anchor="middle">fps, taille, aspect préservé</text>
+  <text class="n-title" x="569" y="127" text-anchor="middle">convertir + alléger</text>
+  <text class="n-sub" x="569" y="146" text-anchor="middle">fps, taille ; HEVC à VMAF ≥ 95</text>
   <text class="step" x="472" y="110">2</text>
   <path class="flow" d="M682 133 H698" marker-end="url(#ah-arrow)"/>
   <rect class="stage" x="704" y="94" width="221" height="78" rx="10"/>
@@ -83,5 +83,5 @@
   <path class="tie" d="M1061 314 V332"/>
   <rect class="surface" x="986" y="332" width="150" height="46" rx="9"/>
   <text class="surf-label" x="1061" y="360" text-anchor="middle">skill d'agent</text>
-  <text class="caption" x="797" y="412" text-anchor="middle">ffmpeg décode sur votre machine ; rien n'est téléversé. Le flot optique RAFT est le seul extra optionnel qui tire des poids de modèle.</text>
+  <text class="caption" x="797" y="412" text-anchor="middle">ffmpeg travaille sur votre machine ; rien n'est téléversé. RAFT est le seul extra qui tire des poids ; l'allègement ne garde un fichier que si le VMAF tient.</text>
 </svg>
