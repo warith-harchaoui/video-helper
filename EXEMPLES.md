@@ -655,10 +655,10 @@ below the 200 kbps floor. Using the floor instead; the output will exceed 0.3 MB
 ### Alléger à qualité constante
 
 `shrink_video` répond à l'autre question : non pas « tenir dans N Mo », mais
-« plus léger sans perte visible, ou rien ». Il ré-encode en HEVC et n'écrit la
+« plus léger sans perte visible, sinon rien ». Il ré-encode en HEVC et n'écrit la
 sortie que si le fichier pèse au plus `max_ratio` (0,85) de l'original, si le
 VMAF face à l'original reste ≥ 95 en moyenne et ≥ 90 sur le 1 % d'images le
-plus bas, et si la durée et les pistes audio sont inchangées.
+plus bas ; il faut enfin que la durée et les pistes audio soient inchangées.
 
 ```python
 # Un extrait H.264 640x360 de 3 s encodé en CRF 4 (sur-encodé exprès).
